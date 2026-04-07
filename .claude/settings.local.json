@@ -1,0 +1,32 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npx tsc:*)",
+      "Bash(npx next:*)",
+      "Bash(node -e \"const pkg = require\\(''./node_modules/@types/react/package.json''\\); console.log\\(pkg.version\\)\")",
+      "Bash(ls -1 /home/user/studio/src/app/*/)",
+      "Bash(ls *.pdf)",
+      "Bash(npx --no next build)",
+      "Bash(./node_modules/.bin/next build:*)",
+      "Bash(ls -la /c/Users/salma/Downloads/studio-trae-solo-agent-DyF5ml/studio-trae-solo-agent-DyF5ml/*.*)",
+      "Bash(grep -E '\\\\.\\(mjs|js|yaml|yml|rules\\)$')",
+      "Bash(npx firebase:*)",
+      "Bash(npx firebase-tools:*)",
+      "Bash(npx supabase:*)",
+      "Bash(node scripts/test-supabase.mjs)",
+      "Bash(cp \"/c/Program Files/PostgreSQL/18/data/pg_hba.conf\" \"/c/Program Files/PostgreSQL/18/data/pg_hba.conf.bak\")",
+      "Bash(sed -i 's/scram-sha-256/trust/g' \"/c/Program Files/PostgreSQL/18/data/pg_hba.conf\")",
+      "Bash(net stop:*)",
+      "Bash(net start:*)",
+      "Bash(PGPASSWORD=\"postgres123\" \"/c/Program Files/PostgreSQL/18/bin/psql\" -U postgres -h 127.0.0.1)",
+      "Bash(echo \"Done: $?\")",
+      "Bash(node -e \"console.log\\(require\\('./node_modules/postgres/package.json'\\).version\\)\")",
+      "Bash(curl -s -X POST http://localhost:9002/api/auth/login -H \"Content-Type: application/json\" -d '{\"email\":\"j.tuhmaz@gmail.com\",\"password\":\"Admin@2026\"}')",
+      "Bash(PGPASSWORD=hausmeister2026 \"/c/Program Files/PostgreSQL/18/bin/psql.exe\" -h 127.0.0.1 -U hausmeister -d hausmeister_dev -c \"\\\\d public.job_sites\")",
+      "Bash(sc query:*)",
+      "Bash(pg_ctl --version)",
+      "Bash(psql --version)",
+      "Bash(docker --version)"
+    ]
+  }
+}

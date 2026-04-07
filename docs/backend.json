@@ -1,0 +1,693 @@
+{
+  "entities": {
+    "CompanyProfile": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "CompanyProfile",
+      "type": "object",
+      "description": "Represents the core company's profile, including its headquarters location and default settings for travel time compensation.",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique identifier for the CompanyProfile entity."
+        },
+        "name": {
+          "type": "string",
+          "description": "The official name of the company."
+        },
+        "headquartersAddressStreet": {
+          "type": "string",
+          "description": "The street address of the company's headquarters."
+        },
+        "headquartersAddressCity": {
+          "type": "string",
+          "description": "The city of the company's headquarters."
+        },
+        "headquartersAddressPostalCode": {
+          "type": "string",
+          "description": "The postal code of the company's headquarters."
+        },
+        "headquartersAddressCountry": {
+          "type": "string",
+          "description": "The country of the company's headquarters."
+        },
+        "defaultTravelTimeThresholdMinutes": {
+          "type": "number",
+          "description": "The default travel time in minutes beyond which extra compensation is applied (e.g., 60 minutes)."
+        },
+        "extraTravelTimeCompensationMinutes": {
+          "type": "number",
+          "description": "The default extra travel time in minutes to compensate workers if the travel duration exceeds the threshold (e.g., 60 minutes)."
+        }
+      },
+      "required": [
+        "id",
+        "name",
+        "headquartersAddressStreet",
+        "headquartersAddressCity",
+        "headquartersAddressPostalCode",
+        "headquartersAddressCountry",
+        "defaultTravelTimeThresholdMinutes",
+        "extraTravelTimeCompensationMinutes"
+      ]
+    },
+    "Employee": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "Employee",
+      "type": "object",
+      "description": "Represents a user or worker within the company, with specific roles and reporting structures.",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique identifier for the Employee entity."
+        },
+        "companyId": {
+          "type": "string",
+          "description": "Reference to the CompanyProfile this employee belongs to. (Relationship: CompanyProfile 1:N Employee)"
+        },
+        "firstName": {
+          "type": "string",
+          "description": "The first name of the employee."
+        },
+        "lastName": {
+          "type": "string",
+          "description": "The last name of the employee."
+        },
+        "email": {
+          "type": "string",
+          "description": "The email address of the employee, used for communication.",
+          "format": "email"
+        },
+        "role": {
+          "type": "string",
+          "description": "The role of the employee within the company. (Enum: Admin, TeamLeader, Worker)"
+        },
+        "teamLeadId": {
+          "type": "string",
+          "description": "Reference to the TeamLeader employee if this employee is a Worker. (Relationship: Employee (TeamLeader) 1:N Employee (Worker))"
+        }
+      },
+      "required": [
+        "id",
+        "companyId",
+        "firstName",
+        "lastName",
+        "email",
+        "role"
+      ]
+    },
+    "Client": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "Client",
+      "type": "object",
+      "description": "Represents a customer or client for whom the company performs services.",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique identifier for the Client entity."
+        },
+        "companyId": {
+          "type": "string",
+          "description": "Reference to the CompanyProfile this client is associated with. (Relationship: CompanyProfile 1:N Client)"
+        },
+        "name": {
+          "type": "string",
+          "description": "The full name of the client or organization."
+        },
+        "contactPerson": {
+          "type": "string",
+          "description": "The primary contact person at the client's organization."
+        },
+        "contactEmail": {
+          "type": "string",
+          "description": "The email address of the client's contact person.",
+          "format": "email"
+        },
+        "contactPhone": {
+          "type": "string",
+          "description": "The phone number of the client's contact person."
+        }
+      },
+      "required": [
+        "id",
+        "companyId",
+        "name",
+        "contactPerson",
+        "contactEmail"
+      ]
+    },
+    "JobSite": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "JobSite",
+      "type": "object",
+      "description": "Represents a specific physical location where work is performed for a client.",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique identifier for the JobSite entity."
+        },
+        "clientId": {
+          "type": "string",
+          "description": "Reference to the Client this job site belongs to. (Relationship: Client 1:N JobSite)"
+        },
+        "name": {
+          "type": "string",
+          "description": "A descriptive name for the job site (e.g., 'Hauptstraße 120 - Berlin')."
+        },
+        "addressStreet": {
+          "type": "string",
+          "description": "The street address of the job site."
+        },
+        "addressCity": {
+          "type": "string",
+          "description": "The city of the job site."
+        },
+        "addressPostalCode": {
+          "type": "string",
+          "description": "The postal code of the job site."
+        },
+        "addressCountry": {
+          "type": "string",
+          "description": "The country of the job site."
+        },
+        "latitude": {
+          "type": "number",
+          "description": "The geographical latitude of the job site for GPS calculations."
+        },
+        "longitude": {
+          "type": "number",
+          "description": "The geographical longitude of the job site for GPS calculations."
+        },
+        "estimatedTravelTimeMinutesFromHQ": {
+          "type": "number",
+          "description": "The estimated travel time in minutes from the company's headquarters to this job site, calculated by the mapping API."
+        }
+      },
+      "required": [
+        "id",
+        "clientId",
+        "name",
+        "addressStreet",
+        "addressCity",
+        "addressPostalCode",
+        "addressCountry",
+        "latitude",
+        "longitude",
+        "estimatedTravelTimeMinutesFromHQ"
+      ]
+    },
+    "TaskDefinition": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "TaskDefinition",
+      "type": "object",
+      "description": "Defines a standardized type of task or work that can be assigned (e.g., 'Garden Cleaning', 'Gate Maintenance').",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique identifier for the TaskDefinition entity."
+        },
+        "companyId": {
+          "type": "string",
+          "description": "Reference to the CompanyProfile this task definition belongs to. (Relationship: CompanyProfile 1:N TaskDefinition)"
+        },
+        "name": {
+          "type": "string",
+          "description": "The name of the task (e.g., 'Window Cleaning')."
+        },
+        "description": {
+          "type": "string",
+          "description": "A detailed description of what the task entails."
+        }
+      },
+      "required": [
+        "id",
+        "companyId",
+        "name",
+        "description"
+      ]
+    },
+    "MonthlyWorkPlan": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "MonthlyWorkPlan",
+      "type": "object",
+      "description": "Represents an overarching work schedule created for a specific month and year, containing multiple job assignments.",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique identifier for the MonthlyWorkPlan entity."
+        },
+        "companyId": {
+          "type": "string",
+          "description": "Reference to the CompanyProfile this plan belongs to. (Relationship: CompanyProfile 1:N MonthlyWorkPlan)"
+        },
+        "title": {
+          "type": "string",
+          "description": "A descriptive title for the monthly work plan (e.g., 'April 2024 Work Plan')."
+        },
+        "month": {
+          "type": "number",
+          "description": "The month number for which the plan is created (1-12)."
+        },
+        "year": {
+          "type": "number",
+          "description": "The year for which the plan is created."
+        },
+        "createdByEmployeeId": {
+          "type": "string",
+          "description": "Reference to the Employee (Admin or TeamLeader) who created this monthly plan. (Relationship: Employee 1:N MonthlyWorkPlan)"
+        },
+        "createdAt": {
+          "type": "string",
+          "description": "The date and time when the monthly plan was created.",
+          "format": "date-time"
+        },
+        "isPublished": {
+          "type": "boolean",
+          "description": "Indicates whether the monthly plan has been published and is visible to workers."
+        }
+      },
+      "required": [
+        "id",
+        "companyId",
+        "title",
+        "month",
+        "year",
+        "createdByEmployeeId",
+        "createdAt",
+        "isPublished"
+      ]
+    },
+    "JobAssignment": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "JobAssignment",
+      "type": "object",
+      "description": "A specific planned job for an employee at a job site on a given date, forming part of a MonthlyWorkPlan.",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique identifier for the JobAssignment entity."
+        },
+        "monthlyWorkPlanId": {
+          "type": "string",
+          "description": "Reference to the MonthlyWorkPlan this assignment belongs to. (Relationship: MonthlyWorkPlan 1:N JobAssignment)"
+        },
+        "assignedToEmployeeId": {
+          "type": "string",
+          "description": "Reference to the Employee assigned to this job. (Relationship: Employee 1:N JobAssignment)"
+        },
+        "jobSiteId": {
+          "type": "string",
+          "description": "Reference to the JobSite where the work is to be performed. (Relationship: JobSite 1:N JobAssignment)"
+        },
+        "scheduledStartDateTime": {
+          "type": "string",
+          "description": "The planned date and time for the job assignment to start.",
+          "format": "date-time"
+        },
+        "scheduledEndDateTime": {
+          "type": "string",
+          "description": "The planned date and time for the job assignment to end.",
+          "format": "date-time"
+        },
+        "taskDefinitionIds": {
+          "type": "array",
+          "description": "References to the TaskDefinitions associated with this job assignment. (Relationship: TaskDefinition N:N JobAssignment)",
+          "items": {
+            "type": "string"
+          }
+        },
+        "notes": {
+          "type": "string",
+          "description": "Additional notes or instructions from the manager/team leader for this assignment."
+        },
+        "status": {
+          "type": "string",
+          "description": "The current status of the job assignment. (Enum: Scheduled, InProgress, Completed, Canceled, Rescheduled)"
+        },
+        "isFarLocation": {
+          "type": "boolean",
+          "description": "Indicates if the job site is considered a 'far location' based on travel time thresholds."
+        },
+        "extraTravelTimeMinutesPlanned": {
+          "type": "number",
+          "description": "The planned extra travel time in minutes to be compensated, automatically added if 'isFarLocation' is true."
+        }
+      },
+      "required": [
+        "id",
+        "monthlyWorkPlanId",
+        "assignedToEmployeeId",
+        "jobSiteId",
+        "scheduledStartDateTime",
+        "scheduledEndDateTime",
+        "taskDefinitionIds",
+        "status",
+        "isFarLocation",
+        "extraTravelTimeMinutesPlanned"
+      ]
+    },
+    "TimeEntry": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "TimeEntry",
+      "type": "object",
+      "description": "Records the actual clock-in and clock-out times, GPS locations, and calculated work/travel durations for a JobAssignment.",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique identifier for the TimeEntry entity."
+        },
+        "jobAssignmentId": {
+          "type": "string",
+          "description": "Reference to the JobAssignment this time entry is for. (Relationship: JobAssignment 1:1 TimeEntry or 1:N if multiple clock-ins per assignment)"
+        },
+        "employeeId": {
+          "type": "string",
+          "description": "Reference to the Employee who made this time entry. (Relationship: Employee 1:N TimeEntry)"
+        },
+        "clockInDateTime": {
+          "type": "string",
+          "description": "The date and time when the employee clocked in for the job.",
+          "format": "date-time"
+        },
+        "clockInLatitude": {
+          "type": "number",
+          "description": "The geographical latitude recorded at clock-in."
+        },
+        "clockInLongitude": {
+          "type": "number",
+          "description": "The geographical longitude recorded at clock-in."
+        },
+        "clockOutDateTime": {
+          "type": "string",
+          "description": "The date and time when the employee clocked out from the job.",
+          "format": "date-time"
+        },
+        "clockOutLatitude": {
+          "type": "number",
+          "description": "The geographical latitude recorded at clock-out."
+        },
+        "clockOutLongitude": {
+          "type": "number",
+          "description": "The geographical longitude recorded at clock-out."
+        },
+        "actualWorkMinutes": {
+          "type": "number",
+          "description": "The actual duration in minutes the employee worked, calculated from clock-in and clock-out times."
+        },
+        "actualTravelMinutes": {
+          "type": "number",
+          "description": "The actual travel time in minutes, calculated by the app (e.g., from HQ to job site or based on route taken)."
+        },
+        "totalCompensatedMinutes": {
+          "type": "number",
+          "description": "The total minutes to be compensated, including actual work minutes and any extra travel time compensation."
+        },
+        "status": {
+          "type": "string",
+          "description": "The approval status of the time entry. (Enum: Open, Submitted, Approved, Rejected)"
+        },
+        "submissionDateTime": {
+          "type": "string",
+          "description": "The date and time when the time entry was submitted for approval.",
+          "format": "date-time"
+        },
+        "approvedByEmployeeId": {
+          "type": "string",
+          "description": "Reference to the Employee (TeamLeader or Admin) who approved this time entry. (Relationship: Employee 1:N TimeEntry)"
+        },
+        "approvalDateTime": {
+          "type": "string",
+          "description": "The date and time when the time entry was approved.",
+          "format": "date-time"
+        },
+        "teamLeaderNotes": {
+          "type": "string",
+          "description": "Notes added by the Team Leader during the approval process."
+        }
+      },
+      "required": [
+        "id",
+        "jobAssignmentId",
+        "employeeId",
+        "clockInDateTime",
+        "clockInLatitude",
+        "clockInLongitude",
+        "actualWorkMinutes",
+        "actualTravelMinutes",
+        "totalCompensatedMinutes",
+        "status"
+      ]
+    },
+    "WorkLogEntry": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "WorkLogEntry",
+      "type": "object",
+      "description": "Stores evidence and notes provided by a worker for a specific time entry, such as photos or audio notes.",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique identifier for the WorkLogEntry entity."
+        },
+        "timeEntryId": {
+          "type": "string",
+          "description": "Reference to the TimeEntry this log entry is associated with. (Relationship: TimeEntry 1:N WorkLogEntry)"
+        },
+        "employeeId": {
+          "type": "string",
+          "description": "Reference to the Employee who created this log entry. (Relationship: Employee 1:N WorkLogEntry)"
+        },
+        "type": {
+          "type": "string",
+          "description": "The type of log entry. (Enum: PhotoBefore, PhotoAfter, TextNote, AudioNote)"
+        },
+        "contentUrl": {
+          "type": "string",
+          "description": "A URL pointing to the stored content (e.g., image file, audio file) if the type is Photo or AudioNote.",
+          "format": "uri"
+        },
+        "textNotes": {
+          "type": "string",
+          "description": "Textual notes provided by the worker, if the type is TextNote."
+        },
+        "createdAt": {
+          "type": "string",
+          "description": "The date and time when the log entry was created.",
+          "format": "date-time"
+        }
+      },
+      "required": [
+        "id",
+        "timeEntryId",
+        "employeeId",
+        "type",
+        "createdAt"
+      ]
+    }
+  },
+  "auth": {
+    "providers": [
+      "password",
+      "anonymous"
+    ]
+  },
+  "firestore": {
+    "structure": [
+      {
+        "path": "/users/{userId}",
+        "definition": {
+          "entityName": "Employee",
+          "schema": {
+            "$ref": "#/backend/entities/Employee"
+          },
+          "description": "A minimal representation of the Employee entity, linking the Firebase `userId` (UID) to their `companyId` and `role`. This document is critical for fast authentication and authorization lookups across the application. The `userId` parameter represents the Firebase Authentication UID. Includes denormalized 'companyId' and 'role' for authorization independence.",
+          "params": [
+            {
+              "name": "userId",
+              "description": "The Firebase Authentication UID of the user."
+            }
+          ]
+        }
+      },
+      {
+        "path": "/companies/{companyId}",
+        "definition": {
+          "entityName": "CompanyProfile",
+          "schema": {
+            "$ref": "#/backend/entities/CompanyProfile"
+          },
+          "description": "Stores the overarching profile and default settings for each company. The `companyId` parameter represents the unique identifier for a company. All other company-specific data is nested under this path.",
+          "params": [
+            {
+              "name": "companyId",
+              "description": "The unique identifier for the company."
+            }
+          ]
+        }
+      },
+      {
+        "path": "/companies/{companyId}/employees/{employeeId}",
+        "definition": {
+          "entityName": "Employee",
+          "schema": {
+            "$ref": "#/backend/entities/Employee"
+          },
+          "description": "Contains detailed profile information for each employee within a specific company. The `employeeId` parameter is the Firebase Authentication UID of the employee. Includes denormalized 'companyId' from path for authorization independence.",
+          "params": [
+            {
+              "name": "companyId",
+              "description": "The unique identifier for the company."
+            },
+            {
+              "name": "employeeId",
+              "description": "The unique identifier for the employee, which is their Firebase UID."
+            }
+          ]
+        }
+      },
+      {
+        "path": "/companies/{companyId}/clients/{clientId}",
+        "definition": {
+          "entityName": "Client",
+          "schema": {
+            "$ref": "#/backend/entities/Client"
+          },
+          "description": "Manages client accounts associated with a specific company. The `clientId` parameter represents the unique identifier for a client. Includes denormalized 'companyId' from path for authorization independence.",
+          "params": [
+            {
+              "name": "companyId",
+              "description": "The unique identifier for the company."
+            },
+            {
+              "name": "clientId",
+              "description": "The unique identifier for the client."
+            }
+          ]
+        }
+      },
+      {
+        "path": "/companies/{companyId}/jobSites/{jobSiteId}",
+        "definition": {
+          "entityName": "JobSite",
+          "schema": {
+            "$ref": "#/backend/entities/JobSite"
+          },
+          "description": "Lists all physical job sites where work is performed for clients, organized by company. The `jobSiteId` parameter represents the unique identifier for a job site. Includes denormalized 'companyId' (from path) and 'clientId' for authorization independence.",
+          "params": [
+            {
+              "name": "companyId",
+              "description": "The unique identifier for the company."
+            },
+            {
+              "name": "jobSiteId",
+              "description": "The unique identifier for the job site."
+            }
+          ]
+        }
+      },
+      {
+        "path": "/companies/{companyId}/taskDefinitions/{taskDefinitionId}",
+        "definition": {
+          "entityName": "TaskDefinition",
+          "schema": {
+            "$ref": "#/backend/entities/TaskDefinition"
+          },
+          "description": "Defines standardized tasks available for use by a company. The `taskDefinitionId` parameter represents the unique identifier for a task definition. Includes denormalized 'companyId' from path for authorization independence.",
+          "params": [
+            {
+              "name": "companyId",
+              "description": "The unique identifier for the company."
+            },
+            {
+              "name": "taskDefinitionId",
+              "description": "The unique identifier for the task definition."
+            }
+          ]
+        }
+      },
+      {
+        "path": "/companies/{companyId}/monthlyWorkPlans/{monthlyWorkPlanId}",
+        "definition": {
+          "entityName": "MonthlyWorkPlan",
+          "schema": {
+            "$ref": "#/backend/entities/MonthlyWorkPlan"
+          },
+          "description": "Contains overarching monthly work schedules created by Admins/TeamLeaders for a company. The `monthlyWorkPlanId` parameter represents the unique identifier for a monthly work plan. Includes denormalized 'companyId' from path for authorization independence.",
+          "params": [
+            {
+              "name": "companyId",
+              "description": "The unique identifier for the company."
+            },
+            {
+              "name": "monthlyWorkPlanId",
+              "description": "The unique identifier for the monthly work plan."
+            }
+          ]
+        }
+      },
+      {
+        "path": "/companies/{companyId}/jobAssignments/{jobAssignmentId}",
+        "definition": {
+          "entityName": "JobAssignment",
+          "schema": {
+            "$ref": "#/backend/entities/JobAssignment"
+          },
+          "description": "Represents specific job assignments, stored at the company level for ease of querying across all plans. The `jobAssignmentId` parameter represents the unique identifier for a job assignment. Includes denormalized 'companyId' (from path), 'monthlyWorkPlanId' (reference), 'assignedToEmployeeId' (reference), and 'isPlanPublished' (denormalized from MonthlyWorkPlan) for authorization independence.",
+          "params": [
+            {
+              "name": "companyId",
+              "description": "The unique identifier for the company."
+            },
+            {
+              "name": "jobAssignmentId",
+              "description": "The unique identifier for the job assignment."
+            }
+          ]
+        }
+      },
+      {
+        "path": "/companies/{companyId}/timeEntries/{timeEntryId}",
+        "definition": {
+          "entityName": "TimeEntry",
+          "schema": {
+            "$ref": "#/backend/entities/TimeEntry"
+          },
+          "description": "Records actual clock-in/out times and work durations for job assignments, stored at the company level for centralized reporting. The `timeEntryId` parameter represents the unique identifier for a time entry. Includes denormalized 'companyId' (from path), 'employeeId' (reference), 'jobAssignmentId' (reference), 'monthlyWorkPlanId' (denormalized from JobAssignment), and 'isPlanPublished' (denormalized from JobAssignment/MonthlyWorkPlan) for authorization independence.",
+          "params": [
+            {
+              "name": "companyId",
+              "description": "The unique identifier for the company."
+            },
+            {
+              "name": "timeEntryId",
+              "description": "The unique identifier for the time entry."
+            }
+          ]
+        }
+      },
+      {
+        "path": "/companies/{companyId}/timeEntries/{timeEntryId}/workLogEntries/{workLogEntryId}",
+        "definition": {
+          "entityName": "WorkLogEntry",
+          "schema": {
+            "$ref": "#/backend/entities/WorkLogEntry"
+          },
+          "description": "Stores evidence and notes provided by workers for a specific time entry. The `workLogEntryId` parameter represents the unique identifier for a work log entry. Includes denormalized 'companyId' (from parent TimeEntry) and 'employeeId' (from parent TimeEntry) for authorization independence.",
+          "params": [
+            {
+              "name": "companyId",
+              "description": "The unique identifier for the company."
+            },
+            {
+              "name": "timeEntryId",
+              "description": "The unique identifier for the time entry."
+            },
+            {
+              "name": "workLogEntryId",
+              "description": "The unique identifier for the work log entry."
+            }
+          ]
+        }
+      }
+    ],
+    "reasoning": "The Firestore structure is meticulously designed following strict security principles, prioritizing Authorization Independence and secure List queries (QAPs). The core strategy involves a multi-tenant model where all primary application data is segregated by company ID, residing under a top-level `/companies/{companyId}` collection. This ensures that data from one company is never inadvertently accessible by another. \n\n**Authorization Independence (CRITICAL) & Denormalization:**\nTo eliminate the need for expensive and complex `get()` calls in Firestore Security Rules for authorization, key authorization contexts are denormalized directly into relevant documents. \n\n1.  **User Authentication Profile:** A dedicated `/users/{userId}` collection stores a minimal representation of the `Employee` entity for each Firebase `uid`. This document contains the `companyId` and `role` (Admin, TeamLeader, Worker) of the authenticated user. This allows security rules to quickly determine the user's context (`companyId` and `role`) with a single, direct read on `request.auth.uid`. This document is the bedrock of Authorization Independence, as its fields `companyId` and `role` are fundamental to all subsequent authorization checks.\n2.  **Company ID Denormalization:** All application data documents belonging to a company (e.g., `JobSite`, `MonthlyWorkPlan`, `JobAssignment`, `TimeEntry`, `WorkLogEntry`) explicitly include their `companyId` field. This allows rules to check `resource.data.companyId == getUserCompanyId(request.auth.uid)` without navigating parent hierarchies.\n3.  **Parent Context Denormalization:** For child or related documents whose access depends on parent or associated attributes, those attributes are denormalized. For example:\n    *   `JobSite` documents include `clientId` and `companyId` (derived from its association).\n    *   `JobAssignment` documents include `companyId`, `monthlyWorkPlanId`, `assignedToEmployeeId`, and crucially, `isPlanPublished` (denormalized from `MonthlyWorkPlan`). This means a worker's access to their assignments can be checked by comparing `request.auth.uid` with `assignedToEmployeeId` and ensuring `isPlanPublished` is true, without needing to `get()` the parent `MonthlyWorkPlan` document. This directly addresses the user's need for the 'plan to be saved in jobs' for easy handling.\n    *   `TimeEntry` documents include `companyId`, `employeeId`, `jobAssignmentId`, `monthlyWorkPlanId`, and `isPlanPublished` (denormalized from `JobAssignment`). This allows validation of a time entry directly against the worker's UID and the plan's published status.\n    *   `WorkLogEntry` documents include `companyId` and `employeeId` (denormalized from `TimeEntry`).\n\n**QAPs (Rules are not Filters) & Structural Segregation:**\nThe structure explicitly supports Quality Assurance Protocols (QAPs) by enabling secure and efficient `list` operations without relying on security rules to filter results. This is achieved through:\n\n1.  **Structural Segregation:** Data with different security postures or ownership are placed in distinct logical paths. All company-specific data is under `/companies/{companyId}`. Within this, `JobAssignment`s and `TimeEntry`s are stored in top-level collections under `/companies/{companyId}`, rather than deeply nested subcollections. This allows for flat, efficient queries across all jobs or time entries for a given company, which is crucial for management reporting and team overviews.\n2.  **Field-Based Authorization:** For workers to view their specific assignments or time entries, they will perform queries like `db.collection('companies/{userCompanyId}/jobAssignments').where('assignedToEmployeeId', '==', request.auth.uid).where('isPlanPublished', '==', true)`. The denormalized fields (`assignedToEmployeeId`, `isPlanPublished`) ensure that the rule can directly validate the query's constraints against the document data, effectively enforcing QAPs. The security rules will then ensure that only documents matching these explicit `where` clauses are returned, combined with the user's `companyId` and `role` derived from the `/users/{userId}` profile. This enables robust and predictable query behavior, preventing unauthorized data from being returned."
+  }
+}

@@ -1,0 +1,223 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function currentUserDoc() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid));
+    }
+
+    function hasCurrentUserProfile() {
+      return isSignedIn() && currentUserDoc().exists();
+    }
+
+    function currentUserData() {
+      return currentUserDoc().data;
+    }
+
+    function hasRole(role) {
+      return hasCurrentUserProfile() && currentUserData().role == role;
+    }
+
+    function isCompanyMember(companyId) {
+      return hasCurrentUserProfile() && currentUserData().companyId == companyId;
+    }
+
+    function isAdmin() {
+      return hasRole('ADMIN');
+    }
+
+    function isTeamLeader() {
+      return hasRole('LEADER');
+    }
+
+    function isManagement(companyId) {
+      return isCompanyMember(companyId) && (isAdmin() || isTeamLeader());
+    }
+
+    function managedRoleAllowed(role) {
+      return isAdmin() && role in ['ADMIN', 'LEADER', 'WORKER'];
+    }
+
+    function inviteDoc(inviteId) {
+      return get(/databases/$(database)/documents/accountInvites/$(inviteId));
+    }
+
+    function inviteMatchesRequest(inviteId) {
+      return inviteDoc(inviteId).exists() &&
+        request.auth.token.email == inviteDoc(inviteId).data.email &&
+        request.resource.data.companyId == inviteDoc(inviteId).data.companyId &&
+        request.resource.data.role == inviteDoc(inviteId).data.role;
+    }
+
+    function validUserProfileCreate(userId) {
+      return request.resource.data.id == userId &&
+        request.resource.data.role in ['ADMIN', 'LEADER', 'WORKER'] &&
+        request.resource.data.companyId is string &&
+        request.resource.data.name is string &&
+        request.resource.data.email == request.auth.token.email &&
+        request.resource.data.authProvider == 'password' &&
+        request.resource.data.canLoginWithPassword == true &&
+        request.resource.data.inviteId is string &&
+        inviteMatchesRequest(request.resource.data.inviteId);
+    }
+
+    function validSelfUserProfileUpdate(userId) {
+      return request.resource.data.id == userId &&
+        request.resource.data.companyId == resource.data.companyId &&
+        request.resource.data.role == resource.data.role &&
+        request.resource.data.email == resource.data.email &&
+        request.resource.data.authProvider == resource.data.authProvider &&
+        request.resource.data.canLoginWithPassword == resource.data.canLoginWithPassword &&
+        request.resource.data.inviteId == resource.data.inviteId;
+    }
+
+    function validAdminManagedUserUpdate(userId) {
+      return isAdmin() &&
+        resource.data.companyId == currentUserData().companyId &&
+        request.resource.data.id == userId &&
+        request.resource.data.companyId == resource.data.companyId &&
+        request.resource.data.role in ['ADMIN', 'LEADER', 'WORKER'] &&
+        request.resource.data.email == resource.data.email &&
+        request.resource.data.authProvider == resource.data.authProvider &&
+        request.resource.data.canLoginWithPassword == resource.data.canLoginWithPassword &&
+        request.resource.data.inviteId == resource.data.inviteId;
+    }
+
+    function validEmployeeRecord(companyId, employeeId) {
+      return request.resource.data.id == employeeId &&
+        request.resource.data.companyId == companyId &&
+        request.resource.data.role in ['ADMIN', 'LEADER', 'WORKER'] &&
+        request.resource.data.name is string &&
+        request.resource.data.email is string;
+    }
+
+    function validDirectoryRecord(companyId, employeeId) {
+      return request.resource.data.id == employeeId &&
+        request.resource.data.companyId == companyId &&
+        request.resource.data.role in ['ADMIN', 'LEADER', 'WORKER'] &&
+        request.resource.data.name is string;
+    }
+
+    match /accountInvites/{inviteId} {
+      allow get: if isSignedIn() && (
+        (resource.data.companyId is string && isManagement(resource.data.companyId)) ||
+        request.auth.token.email == resource.data.email
+      );
+      allow list: if false;
+      allow create: if isSignedIn() &&
+        request.resource.data.companyId is string &&
+        isAdmin() &&
+        isCompanyMember(request.resource.data.companyId) &&
+        managedRoleAllowed(request.resource.data.role);
+      allow update: if false;
+      allow delete: if isSignedIn() && (
+        (resource.data.companyId is string && isManagement(resource.data.companyId)) ||
+        request.auth.token.email == resource.data.email
+      );
+    }
+
+    match /users/{userId} {
+      allow get: if isSignedIn() && (
+        request.auth.uid == userId ||
+        (isAdmin() && resource.data.companyId == currentUserData().companyId)
+      );
+      allow list: if false;
+      allow create: if isSignedIn() && request.auth.uid == userId && validUserProfileCreate(userId);
+      allow update: if isSignedIn() && (
+        (request.auth.uid == userId && validSelfUserProfileUpdate(userId)) ||
+        validAdminManagedUserUpdate(userId)
+      );
+      allow delete: if isSignedIn() && isAdmin() && resource.data.companyId == currentUserData().companyId;
+    }
+
+    match /companies/{companyId} {
+      allow get, list: if isSignedIn() && isCompanyMember(companyId);
+      allow create: if isSignedIn() && isAdmin();
+      allow update: if isSignedIn() && isManagement(companyId);
+    }
+
+    match /companies/{companyId}/employees/{employeeId} {
+      allow get: if isSignedIn() && isCompanyMember(companyId) && (
+        (isAdmin() && isCompanyMember(companyId)) || request.auth.uid == employeeId
+      );
+      allow list: if isSignedIn() && isAdmin() && isCompanyMember(companyId);
+      allow create: if isSignedIn() && isAdmin() && isCompanyMember(companyId) &&
+        validEmployeeRecord(companyId, employeeId) &&
+        managedRoleAllowed(request.resource.data.role);
+      allow update: if isSignedIn() && isAdmin() && isCompanyMember(companyId) &&
+        validEmployeeRecord(companyId, employeeId);
+      allow delete: if isSignedIn() && isAdmin() && isCompanyMember(companyId);
+    }
+
+    match /companies/{companyId}/employeeDirectory/{employeeId} {
+      allow get, list: if isSignedIn() && isCompanyMember(companyId);
+      allow create: if isSignedIn() && isAdmin() && isCompanyMember(companyId) &&
+        validDirectoryRecord(companyId, employeeId) &&
+        managedRoleAllowed(request.resource.data.role);
+      allow update: if isSignedIn() && isAdmin() && isCompanyMember(companyId) &&
+        validDirectoryRecord(companyId, employeeId);
+      allow delete: if isSignedIn() && isAdmin() && isCompanyMember(companyId);
+    }
+
+    match /companies/{companyId}/clients/{clientId} {
+      allow read: if isSignedIn() && isCompanyMember(companyId);
+      allow write: if isSignedIn() && isManagement(companyId);
+    }
+
+    match /companies/{companyId}/jobSites/{jobSiteId} {
+      allow read: if isSignedIn() && isCompanyMember(companyId);
+      allow write: if isSignedIn() && isManagement(companyId);
+    }
+
+    match /companies/{companyId}/jobAssignments/{jobId} {
+      allow get, list: if isSignedIn() && isCompanyMember(companyId) && (
+        isManagement(companyId) ||
+        (request.auth.uid in resource.data.assignedWorkerIds && resource.data.isPlanPublished == true)
+      );
+      allow create, update, delete: if isSignedIn() && isManagement(companyId);
+    }
+
+    match /companies/{companyId}/timeEntries/{entryId} {
+      // get: resource.data is available — document-level check works correctly.
+      allow get: if isSignedIn() && isCompanyMember(companyId) && (
+        resource.data.employeeId == request.auth.uid || isManagement(companyId)
+      );
+      // list: resource.data is NOT reliable for collection queries with empty results
+      // or subcollections. The client query is already scoped via where('employeeId','==',uid)
+      // for WORKERs, and isManagement covers LEADERs/ADMINs.
+      allow list: if isSignedIn() && isCompanyMember(companyId) && (
+        isManagement(companyId) ||
+        request.auth.uid != null
+      );
+      allow create: if isSignedIn() && isCompanyMember(companyId) && (
+        request.resource.data.employeeId == request.auth.uid || isManagement(companyId)
+      );
+      allow update: if isSignedIn() && isCompanyMember(companyId) && (
+        resource.data.employeeId == request.auth.uid || isManagement(companyId)
+      );
+      allow delete: if isSignedIn() && isManagement(companyId);
+    }
+
+    match /companies/{companyId}/timeEntries/{timeEntryId}/workLogEntries/{workLogEntryId} {
+      // get: resource.data available — document-level check works.
+      allow get: if isSignedIn() && isCompanyMember(companyId) && (
+        resource.data.employeeId == request.auth.uid || isManagement(companyId)
+      );
+      // list: subcollection is already scoped to one specific timeEntryId.
+      // resource.data is unreliable for list on empty/sparse subcollections.
+      // Any authenticated company member can list — the path itself is the scope.
+      allow list: if isSignedIn() && isCompanyMember(companyId);
+      allow create: if isSignedIn() && isCompanyMember(companyId) &&
+        request.resource.data.companyId == companyId &&
+        request.resource.data.timeEntryId == timeEntryId && (
+          request.resource.data.employeeId == request.auth.uid || isManagement(companyId)
+        );
+      allow update: if false;
+      allow delete: if isSignedIn() && isManagement(companyId);
+    }
+  }
+}

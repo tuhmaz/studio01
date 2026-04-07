@@ -1,0 +1,34 @@
+{
+  "placeholderImages": [
+    {
+      "id": "hq",
+      "description": "Company Headquarters",
+      "imageUrl": "https://picsum.photos/seed/hq1/800/600",
+      "imageHint": "office building"
+    },
+    {
+      "id": "job1",
+      "description": "Garden Maintenance Job",
+      "imageUrl": "https://picsum.photos/seed/job1/600/400",
+      "imageHint": "garden maintenance"
+    },
+    {
+      "id": "job2",
+      "description": "Painting Job",
+      "imageUrl": "https://picsum.photos/seed/job2/600/400",
+      "imageHint": "house painting"
+    },
+    {
+      "id": "worker1",
+      "description": "Team Member",
+      "imageUrl": "https://picsum.photos/seed/worker1/200/200",
+      "imageHint": "man working"
+    },
+    {
+      "id": "worker2",
+      "description": "Team Member",
+      "imageUrl": "https://picsum.photos/seed/worker2/200/200",
+      "imageHint": "woman working"
+    }
+  ]
+}
