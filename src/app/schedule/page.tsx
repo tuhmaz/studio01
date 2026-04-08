@@ -187,7 +187,10 @@ export default function SchedulePage() {
     }));
   }, [managementAssignmentsRaw]);
 
-  const assignments = isManagementView ? managementAssignments : (workerAssignments ?? []);
+  const assignments = React.useMemo(
+    () => isManagementView ? managementAssignments : (workerAssignments ?? []),
+    [isManagementView, managementAssignments, workerAssignments],
+  );
   const isAssignmentsLoading = isManagementView ? isManagementAssignmentsLoading : isWorkerAssignmentsLoading;
 
   // Standorte laden — refresh() called after geocoding to pick up new coordinates

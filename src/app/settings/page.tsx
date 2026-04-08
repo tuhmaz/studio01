@@ -128,7 +128,7 @@ export default function SettingsPage() {
       })
       .catch(() => toast({ title: 'Fehler beim Laden', variant: 'destructive' }))
       .finally(() => setLoading(false));
-  }, [companyId]);
+  }, [companyId, toast]);
 
   // ── Save ─────────────────────────────────────────────────────────────────────
   const handleSave = async () => {

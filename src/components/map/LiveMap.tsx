@@ -163,7 +163,7 @@ export default function LiveMap({ sites, onGeocode, isGeocoding = false }: LiveM
             <div className="text-center">
               <p className="text-sm font-black text-foreground/80 uppercase">Keine Koordinaten vorhanden</p>
               {onGeocode && (
-                <p className="text-xs text-muted-foreground mt-1">Klicken Sie auf „Georeferenzieren" oben rechts.</p>
+                <p className="text-xs text-muted-foreground mt-1">Klicken Sie auf &bdquo;Georeferenzieren&ldquo; oben rechts.</p>
               )}
             </div>
           </div>
