@@ -38,6 +38,7 @@ export async function createSession(payload: SessionPayload): Promise<void> {
     sameSite: 'lax',
     maxAge:   EXPIRES_IN,
     path:     '/',
+    domain:   process.env.NODE_ENV === 'production' ? 'mbj.news' : undefined,
   });
 }
 
