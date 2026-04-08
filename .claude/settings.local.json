@@ -26,7 +26,10 @@
       "Bash(sc query:*)",
       "Bash(pg_ctl --version)",
       "Bash(psql --version)",
-      "Bash(docker --version)"
+      "Bash(docker --version)",
+      "Bash(openssl rand:*)",
+      "Bash(node -e \"console.log\\(require\\('crypto'\\).randomBytes\\(64\\).toString\\('base64'\\)\\)\")",
+      "Bash(node -e \"console.log\\(require\\('crypto'\\).randomBytes\\(64\\).toString\\('base64url'\\)\\)\")"
     ]
   }
 }

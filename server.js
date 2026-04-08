@@ -1,13 +1,20 @@
 const { createServer } = require('http');
 const { parse } = require('url');
 const next = require('next');
+const path = require('path');
 const fs = require('fs');
 
-// Load environment variables manually to ensure they are available before Next.js starts
-if (fs.existsSync('.env.production')) {
-  require('dotenv').config({ path: '.env.production' });
-} else if (fs.existsSync('.env')) {
-  require('dotenv').config({ path: '.env' });
+// Load .env before Next.js starts — use absolute path so it works regardless of cwd
+const envProd = path.join(__dirname, '.env.production');
+const envFile = path.join(__dirname, '.env');
+if (fs.existsSync(envProd)) {
+  require('dotenv').config({ path: envProd });
+  console.log('> Loaded env from .env.production');
+} else if (fs.existsSync(envFile)) {
+  require('dotenv').config({ path: envFile });
+  console.log('> Loaded env from .env');
+} else {
+  console.warn('> WARNING: No .env or .env.production file found!');
 }
 
 const dev = process.env.NODE_ENV !== 'production';

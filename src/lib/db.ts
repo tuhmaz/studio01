@@ -12,23 +12,30 @@ declare global {
 }
 
 function createPool() {
+  const host = process.env.DB_HOST;
+  if (!host) {
+    throw new Error(
+      'DB_HOST is not set. Make sure the .env file exists in the project root ' +
+      'and the app is started with "node server.js" (npm start).'
+    );
+  }
   return postgres({
-    host:     process.env.DB_HOST!,
+    host,
     port:     Number(process.env.DB_PORT ?? 5432),
     database: process.env.DB_DATABASE!,
     username: process.env.DB_USERNAME!,
     password: process.env.DB_PASSWORD!,
-    ssl:      false,          // set to { rejectUnauthorized: false } if server requires SSL
-    max:      10,             // connection pool size
+    ssl:      false,
+    max:      10,
     idle_timeout: 30,
     connect_timeout: 10,
     transform: {
-      undefined: null,        // convert JS undefined → SQL NULL
+      undefined: null,
     },
   });
 }
 
-// Singleton in dev to survive hot-reloads
+// Singleton — survives hot-reloads in dev
 const sql: ReturnType<typeof postgres> =
   globalThis.__pgPool ?? (globalThis.__pgPool = createPool());
 
