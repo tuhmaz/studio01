@@ -1,6 +1,14 @@
 const { createServer } = require('http');
 const { parse } = require('url');
 const next = require('next');
+const fs = require('fs');
+
+// Load environment variables manually to ensure they are available before Next.js starts
+if (fs.existsSync('.env.production')) {
+  require('dotenv').config({ path: '.env.production' });
+} else if (fs.existsSync('.env')) {
+  require('dotenv').config({ path: '.env' });
+}
 
 const dev = process.env.NODE_ENV !== 'production';
 const hostname = 'localhost';
