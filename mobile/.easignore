@@ -1,0 +1,7 @@
+node_modules
+.expo
+.git
+android/.gradle
+android/build
+android/app/build
+credentials.json
