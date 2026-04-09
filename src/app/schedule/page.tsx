@@ -92,7 +92,7 @@ export default function SchedulePage() {
   const effectiveRole = (userProfile?.role ?? 'WORKER') as UserRole;
   const effectiveUserName = userProfile?.name ?? 'Benutzer';
   const effectiveCompanyId = companyId;
-  const canDeleteTours = effectiveRole === 'ADMIN';
+  const canDeleteTours = effectiveRole === 'ADMIN' || effectiveRole === 'LEADER';
   const isManagementView = effectiveRole === 'ADMIN' || effectiveRole === 'LEADER';
 
   const formattedDate = date?.toLocaleDateString('de-DE', {
@@ -297,6 +297,17 @@ export default function SchedulePage() {
     if (!canDeleteTours) return;
 
     try {
+      // Delete all time_entries for this assignment first
+      await fetch('/api/data', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'delete',
+          table: 'time_entries',
+          filters: { job_assignment_id: taskId },
+        }),
+      });
+      // Then delete the assignment itself
       const res = await fetch('/api/data', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -310,7 +321,7 @@ export default function SchedulePage() {
       setOpenTaskId(null);
       toast({
         title: 'Tour gelöscht',
-        description: 'Der Einsatz wurde erfolgreich entfernt.',
+        description: 'Einsatz und alle Zeiteinträge wurden entfernt.',
       });
     } catch {
       toast({
@@ -550,7 +561,7 @@ export default function SchedulePage() {
                                       TOUR wirklich löschen?
                                     </AlertDialogTitle>
                                     <AlertDialogDescription className="text-sm font-medium text-muted-foreground">
-                                      Dieser Einsatz für <span className="font-black text-foreground">{site?.name || 'dieses Objekt'}</span> wird dauerhaft aus dem Tourplan entfernt.
+                                      Dieser Einsatz für <span className="font-black text-foreground">{site?.name || task.title || 'dieses Objekt'}</span> wird dauerhaft entfernt — einschließlich aller Zeiteinträge der Mitarbeiter.
                                     </AlertDialogDescription>
                                   </AlertDialogHeader>
                                 </div>

@@ -19,13 +19,14 @@ import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Separator } from '@/components/ui/separator';
 import {
   Clock, Users, TrendingUp, MapPin, Loader2,
-  Timer, ChevronRight, AlertCircle, FileDown, X, FileText, Image as ImageIcon
+  Timer, ChevronRight, AlertCircle, FileDown, X, FileText, Image as ImageIcon, Trash2
 } from 'lucide-react';
 import { simulatePayroll } from '@/lib/payroll';
 import { generateArbeitszeitnachweis, generateLohnzettel, LohnExportEntry, CompanySettings, save } from '@/lib/export-lohn';
 import { User, JobSite } from '@/lib/types';
 import { useAuth } from '@/db/provider';
 import { useQuery } from '@/db/use-query';
+import { useToast } from '@/hooks/use-toast';
 import SiteMediaBrowser from '@/components/tracking/SiteMediaBrowser';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -277,14 +278,17 @@ function toExportEntries(entries: EnrichedEntry[]): LohnExportEntry[] {
 // ─── Worker Detail Dialog ─────────────────────────────────────────────────────
 
 function WorkerDetailDialog({
-  stats, month, year, open, onClose, onShowPdf, company
+  stats, month, year, open, onClose, onShowPdf, company, onVoidEntry
 }: {
   stats: WorkerMonthStats;
   month: number; year: number;
   open: boolean; onClose: () => void;
   onShowPdf: (type: 'stunden' | 'lohn', data: string) => void;
   company?: CompanySettings;
+  onVoidEntry?: (entryId: string) => Promise<void>;
 }) {
+  const [confirmVoidId, setConfirmVoidId] = useState<string | null>(null);
+  const [voidingId, setVoidingId] = useState<string | null>(null);
   const { user, entries, workMinutes, remoteBonusMinutes, overtimeMinutes,
           brutto, visitedSites } = stats;
   const payroll = simulatePayroll(user, brutto);
@@ -397,17 +401,14 @@ function WorkerDetailDialog({
               )}
               {byDate.map(([date, dayEntries]) => {
                 const totalMins = dayEntries.reduce((s, e) => s + (e.entry.actualWorkMinutes ?? 0), 0);
-                const sites = new Set(dayEntries.map(e => e.site?.name || e.site?.city || e.assignment?.title || '').filter(Boolean));
-                const categories = new Set(dayEntries.flatMap(e => e.assignment?.categories || []));
                 const clockIns = dayEntries.map(e => new Date(e.entry.clockInDateTime!).getTime());
-                const clockOuts = dayEntries.map(e => new Date(e.entry.clockOutDateTime || e.entry.clockInDateTime!).getTime());
                 const firstIn = new Date(Math.min(...clockIns)).toISOString();
-                const lastOut = new Date(Math.max(...clockOuts)).toISOString();
                 const hasRemote = dayEntries.some(e => e.site?.isRemote);
                 const dayBonus = dayEntries.reduce((s, e) => s + (e.entry.travelBonusMinutes ?? 0), 0);
 
                 return (
                   <div key={date} className="rounded-2xl bg-gray-50 border border-gray-100 overflow-hidden">
+                    {/* Day header */}
                     <div className="flex items-center justify-between px-4 py-3 bg-gray-100/80">
                       <span className="font-black text-sm">{fmtDate(firstIn)}</span>
                       <div className="flex items-center gap-2">
@@ -419,25 +420,59 @@ function WorkerDetailDialog({
                         <span className="text-xs font-black text-muted-foreground">{fmtMin(totalMins)}</span>
                       </div>
                     </div>
-                    <div className="px-4 py-3 space-y-2">
-                      <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                        <Clock className="w-3 h-3" />
-                        <span>{fmtTime(firstIn)} – {fmtTime(lastOut)}</span>
-                      </div>
-                      {sites.size > 0 && (
-                        <div className="flex flex-wrap gap-1">
-                          {Array.from(sites).map(s => (
-                            <Badge key={s} variant="outline" className="text-[9px] font-bold">{s}</Badge>
-                          ))}
+                    {/* Individual time entries */}
+                    <div className="px-4 py-2 space-y-2">
+                      {dayEntries.map(({ entry, site, assignment }) => (
+                        <div key={entry.id} className="flex items-center gap-2 py-1 border-b border-gray-100 last:border-0">
+                          <div className="flex-1 min-w-0 space-y-0.5">
+                            <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                              <Clock className="w-3 h-3 shrink-0" />
+                              <span>{fmtTime(entry.clockInDateTime!)} – {fmtTime(entry.clockOutDateTime || entry.clockInDateTime!)}</span>
+                              <span className="font-black text-foreground ml-1">{fmtMin(entry.actualWorkMinutes ?? 0)}</span>
+                            </div>
+                            {site && (
+                              <p className="text-[10px] text-muted-foreground truncate pl-5">{site.name || site.city}</p>
+                            )}
+                            {!site && assignment?.title && (
+                              <p className="text-[10px] text-muted-foreground truncate pl-5">{assignment.title}</p>
+                            )}
+                          </div>
+                          {/* Storno button */}
+                          {onVoidEntry && (
+                            confirmVoidId === entry.id ? (
+                              <div className="flex items-center gap-1 shrink-0">
+                                <span className="text-[9px] text-red-600 font-black">Stornieren?</span>
+                                <button
+                                  className="text-[9px] font-black text-white bg-red-500 rounded px-2 py-0.5 hover:bg-red-600"
+                                  disabled={voidingId === entry.id}
+                                  onClick={async () => {
+                                    setVoidingId(entry.id);
+                                    await onVoidEntry(entry.id);
+                                    setVoidingId(null);
+                                    setConfirmVoidId(null);
+                                  }}
+                                >
+                                  {voidingId === entry.id ? '…' : 'JA'}
+                                </button>
+                                <button
+                                  className="text-[9px] font-black text-muted-foreground bg-gray-200 rounded px-2 py-0.5 hover:bg-gray-300"
+                                  onClick={() => setConfirmVoidId(null)}
+                                >
+                                  NEIN
+                                </button>
+                              </div>
+                            ) : (
+                              <button
+                                title="Stunden stornieren"
+                                className="text-muted-foreground hover:text-red-500 transition-colors shrink-0 p-1"
+                                onClick={() => setConfirmVoidId(entry.id)}
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </button>
+                            )
+                          )}
                         </div>
-                      )}
-                      {categories.size > 0 && (
-                        <div className="flex flex-wrap gap-1">
-                          {Array.from(categories).map(c => (
-                            <Badge key={c} className="text-[9px] font-bold bg-primary/10 text-primary border-none">{c}</Badge>
-                          ))}
-                        </div>
-                      )}
+                      ))}
                     </div>
                   </div>
                 );
@@ -516,6 +551,7 @@ export default function ReportsPage() {
   const [pdfUrl, setPdfUrl] = useState<string | null>(null);
   const [pdfTitle, setPdfTitle] = useState('');
 
+  const { toast } = useToast();
   const { userProfile } = useAuth();
 
   const companyId = userProfile?.companyId ?? '';
@@ -537,7 +573,7 @@ export default function ReportsPage() {
     enabled: hasContext,
   });
 
-  const { data: rawTimeEntries, isLoading: isTimeEntriesLoading } = useQuery({
+  const { data: rawTimeEntries, isLoading: isTimeEntriesLoading, refresh: refreshTimeEntries } = useQuery({
     table: 'time_entries',
     filters: { company_id: companyId },
     enabled: hasContext,
@@ -652,6 +688,27 @@ export default function ReportsPage() {
 
   const totalBrutto      = workerStats.reduce((s, w) => s + w.brutto, 0);
   const totalWorkMinutes = workerStats.reduce((s, w) => s + w.workMinutes, 0);
+
+  // ── Void (stornieren) a time entry ────────────────────────────────────────
+
+  const handleVoidEntry = async (entryId: string) => {
+    try {
+      await fetch('/api/data', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'update',
+          table: 'time_entries',
+          filters: { id: entryId },
+          data: { status: 'REJECTED', actual_work_minutes: 0, travel_bonus_minutes: 0 },
+        }),
+      });
+      refreshTimeEntries();
+      toast({ title: 'Stunden storniert', description: 'Der Zeiteintrag wurde auf 0 gesetzt.' });
+    } catch {
+      toast({ variant: 'destructive', title: 'Stornierung fehlgeschlagen' });
+    }
+  };
 
   // ── PDF viewer ─────────────────────────────────────────────────────────────
 
@@ -875,6 +932,7 @@ export default function ReportsPage() {
           onClose={() => setSelectedWorkerStats(null)}
           onShowPdf={handleShowPdf}
           company={company}
+          onVoidEntry={handleVoidEntry}
         />
       )}
 
