@@ -13,7 +13,7 @@ import { apiData } from '@/api/client';
 import { COLORS, CATEGORY_LABELS, GPS_RADIUS_METERS } from '@/utils/constants';
 import { gpsDistance, formatDuration, formatTime, elapsedMinutes, randomId } from '@/utils/helpers';
 
-interface Assignment { id: string; title: string; status: string; scheduled_date: string; job_site_id: string | null; categories: string[]; }
+interface Assignment { id: string; title: string; status: string; scheduled_date: string; job_site_id: string | null; categories: string[]; assigned_worker_ids: string[]; }
 interface JobSite    {
   id: string;
   name: string;
@@ -26,7 +26,7 @@ interface JobSite    {
   travel_time_from_hq?: number | null;
   estimated_travel_time_minutes_from_hq?: number | null;
 }
-interface TimeEntry  { id: string; clock_in_datetime: string; status: string; job_assignment_id: string; }
+interface TimeEntry  { id: string; clock_in_datetime: string; status: string; job_assignment_id: string; employee_id: string; }
 
 function isRemoteSite(site?: JobSite | null) {
   if (!site) return false;
@@ -126,13 +126,39 @@ export default function TrackingScreen() {
         if (!gps.ok) return;
         lat = gps.lat; lng = gps.lng;
       }
-      const entryId = `te-${randomId()}`;
-      await apiData({ action: 'insert', table: 'time_entries', data: {
-        id: entryId, company_id: user.companyId, employee_id: user.id,
-        job_assignment_id: assignment.id, job_site_id: assignment.job_site_id,
-        clock_in_datetime: new Date().toISOString(), status: 'OPEN',
-        gps_verified: !!site, lat, lng, travel_bonus_minutes: 0,
-      }});
+
+      const now = new Date().toISOString();
+
+      // كل العمال المحددين في المهمة — إذا لم يوجد أحد نسجّل المستخدم الحالي فقط
+      const workerIds: string[] = assignment.assigned_worker_ids?.length > 0
+        ? assignment.assigned_worker_ids
+        : [user.id];
+
+      // تحقق من العمال الذين سُجِّلوا مسبقاً
+      const existingRes = await apiData<TimeEntry[]>({
+        action: 'query', table: 'time_entries',
+        filters: { job_assignment_id: assignment.id, status: 'OPEN' },
+      });
+      const alreadyClockedIn = new Set((existingRes.data ?? []).map(e => e.employee_id));
+
+      // أنشئ time_entry لكل عامل غير مسجَّل
+      for (const workerId of workerIds) {
+        if (alreadyClockedIn.has(workerId)) continue;
+        await apiData({ action: 'insert', table: 'time_entries', data: {
+          id: `te-${randomId()}`,
+          company_id: user.companyId,
+          employee_id: workerId,
+          job_assignment_id: assignment.id,
+          job_site_id: assignment.job_site_id,
+          clock_in_datetime: now,
+          status: 'OPEN',
+          gps_verified: workerId === user.id ? !!site : false,
+          lat:  workerId === user.id ? lat : 0,
+          lng:  workerId === user.id ? lng : 0,
+          travel_bonus_minutes: 0,
+        }});
+      }
+
       if (assignment.status === 'PENDING') {
         await apiData({ action: 'update', table: 'job_assignments', filters: { id: assignment.id }, data: { status: 'IN_PROGRESS' } });
       }
@@ -165,36 +191,39 @@ export default function TrackingScreen() {
       if (!foundNearby) travelBonus = -60;
     }
 
-    Alert.alert('Ausstempeln', 'Schicht jetzt beenden?', [
+    Alert.alert('Ausstempeln', 'Schicht für alle Mitarbeiter beenden?', [
       { text: 'Abbrechen', style: 'cancel' },
       { text: 'Ausstempeln', style: 'destructive', onPress: async () => {
         setClocking(true);
         try {
-          const now     = new Date().toISOString();
-          const minutes = elapsedMinutes(activeEntry.clock_in_datetime);
-          await apiData({ action: 'update', table: 'time_entries', filters: { id: activeEntry.id }, data: {
-            clock_out_datetime: now, actual_work_minutes: minutes,
-            travel_bonus_minutes: travelBonus,
-            status: 'SUBMITTED', submission_datetime: now,
-          }});
-          
-          // Check if there are other open entries for this assignment
-          const openEntriesRes = await apiData<TimeEntry[]>({
-            action: 'query',
-            table: 'time_entries',
-            filters: { job_assignment_id: activeEntry.job_assignment_id, status: 'OPEN' }
+          const now = new Date().toISOString();
+
+          // جلب كل الـ time_entries المفتوحة لهذه المهمة (كل العمال)
+          const openRes = await apiData<TimeEntry[]>({
+            action: 'query', table: 'time_entries',
+            filters: { job_assignment_id: activeEntry.job_assignment_id, status: 'OPEN' },
           });
-          const otherOpenEntries = (openEntriesRes.data ?? []).filter(e => e.id !== activeEntry.id);
-          
-          // If no other workers are currently clocked in, mark assignment as COMPLETED
-          if (otherOpenEntries.length === 0) {
-            await apiData({
-              action: 'update',
-              table: 'job_assignments',
-              filters: { id: activeEntry.job_assignment_id },
-              data: { status: 'COMPLETED' }
-            });
+          const openEntries = openRes.data ?? [];
+
+          // إغلاق وقت كل عامل بناءً على وقت دخوله الخاص
+          for (const entry of openEntries) {
+            const minutes = elapsedMinutes(entry.clock_in_datetime);
+            const bonus   = entry.employee_id === user.id ? travelBonus : 0;
+            await apiData({ action: 'update', table: 'time_entries', filters: { id: entry.id }, data: {
+              clock_out_datetime:   now,
+              actual_work_minutes:  minutes,
+              travel_bonus_minutes: bonus,
+              status:               'SUBMITTED',
+              submission_datetime:  now,
+            }});
           }
+
+          // أغلق المهمة
+          await apiData({
+            action: 'update', table: 'job_assignments',
+            filters: { id: activeEntry.job_assignment_id },
+            data: { status: 'COMPLETED' },
+          });
 
           await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
           await load();

@@ -44,8 +44,11 @@ next-env.d.ts
 firebase-debug.log
 firestore-debug.log
 
-# ignore mobile app and unnecessary root files
-/mobile/
+# ignore mobile node_modules only
+/mobile/node_modules/
+/mobile/.expo/
+/mobile/android/
+/mobile/ios/
 *.pdf
 *.xlsx
 *.txt
