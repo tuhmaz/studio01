@@ -47,12 +47,14 @@ export default function TrackingScreen() {
   const [loading,      setLoading]      = useState(true);
   const [clocking,     setClocking]     = useState(false);
   const [refreshing,   setRefreshing]   = useState(false);
+  const [errorMsg,     setErrorMsg]     = useState<string | null>(null);
   const [gpsStatus,    setGpsStatus]    = useState<'idle' | 'checking' | 'ok' | 'far'>('idle');
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const load = useCallback(async (silent = false) => {
     if (!user) return;
     if (!silent) setLoading(true);
+    setErrorMsg(null);
     try {
       const [aRes, sRes, eRes] = await Promise.all([
         apiData<Assignment[]>({ action: 'tracking_assignments', table: 'job_assignments', companyId: user.companyId, today, workerId: user.id }),
@@ -70,6 +72,9 @@ export default function TrackingScreen() {
         const a = (aRes.data ?? []).find(x => x.id === open.job_assignment_id) ?? null;
         setActiveAssign(a);
       }
+    } catch (e: any) {
+      console.warn('Tracking load error', e);
+      setErrorMsg(e.message || 'Ein Fehler ist aufgetreten');
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -252,6 +257,17 @@ export default function TrackingScreen() {
         contentContainerStyle={{ padding: 16, paddingBottom: 40 }}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); load(); }} tintColor={COLORS.primary} />}
       >
+        {errorMsg ? (
+          <View style={{ backgroundColor: '#fee2e2', padding: 16, marginBottom: 16, borderRadius: 8 }}>
+            <Text style={{ color: '#b91c1c', textAlign: 'center', fontWeight: 'bold' }}>
+              Fehler beim Laden: {errorMsg}
+            </Text>
+            <TouchableOpacity onPress={() => load()} style={{ marginTop: 12, backgroundColor: '#b91c1c', padding: 8, borderRadius: 6 }}>
+              <Text style={{ color: 'white', textAlign: 'center' }}>Erneut versuchen</Text>
+            </TouchableOpacity>
+          </View>
+        ) : null}
+
         {/* Active shift card */}
         {activeEntry && activeAssign && (
           <View style={styles.activeCard}>

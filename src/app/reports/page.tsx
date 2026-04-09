@@ -330,7 +330,7 @@ function WorkerDetailDialog({
 
   return (
     <Dialog open={open} onOpenChange={o => !o && onClose()}>
-      <DialogContent className="sm:max-w-3xl rounded-[2rem] border-none shadow-2xl p-0 overflow-hidden max-h-[92vh] flex flex-col">
+      <DialogContent aria-describedby="worker-detail-description" className="sm:max-w-3xl rounded-[2rem] border-none shadow-2xl p-0 overflow-hidden max-h-[92vh] flex flex-col">
 
         {/* Dialog Header */}
         <div className="bg-primary p-8 text-white shrink-0">
@@ -342,8 +342,8 @@ function WorkerDetailDialog({
             </Avatar>
             <div>
               <DialogTitle className="text-2xl font-black uppercase">{user.name}</DialogTitle>
-              <DialogDescription className="text-white/60 font-bold mt-1">
-                {CONTRACT_LABELS[user.contractType ?? ''] ?? 'Mitarbeiter'} &bull; {MONTH_NAMES[month]} {year}
+              <DialogDescription id="worker-detail-description" className="text-white/60 font-bold mt-1">
+                {CONTRACT_LABELS[user.contractType ?? ''] ?? 'Mitarbeiter'} • {MONTH_NAMES[month]} {year}
               </DialogDescription>
             </div>
           </div>
@@ -939,11 +939,11 @@ export default function ReportsPage() {
       {/* PDF preview dialog */}
       {pdfUrl && (
         <Dialog open={!!pdfUrl} onOpenChange={o => !o && closePdfPreview()}>
-          <DialogContent hideClose className="sm:max-w-4xl h-[90vh] flex flex-col rounded-[2rem] border-none shadow-2xl p-0 overflow-hidden">
+          <DialogContent hideClose aria-describedby="pdf-preview-description" className="sm:max-w-4xl h-[90vh] flex flex-col rounded-[2rem] border-none shadow-2xl p-0 overflow-hidden">
             <div className="flex items-center justify-between px-6 py-4 bg-primary text-white shrink-0">
               <div>
                 <DialogTitle className="font-black uppercase tracking-tight">{pdfTitle}</DialogTitle>
-                <DialogDescription className="text-white/60 text-xs font-bold">
+                <DialogDescription id="pdf-preview-description" className="text-white/60 text-xs font-bold">
                   {selectedWorkerStats?.user.name} · {MONTH_NAMES[selectedMonth]} {selectedYear}
                 </DialogDescription>
               </div>

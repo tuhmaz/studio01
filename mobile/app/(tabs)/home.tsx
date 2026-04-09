@@ -91,6 +91,7 @@ export default function HomeScreen() {
   const [workers,     setWorkers]     = useState<Worker[]>([]);
   const [loading,     setLoading]     = useState(true);
   const [refreshing,  setRefreshing]  = useState(false);
+  const [errorMsg,    setErrorMsg]    = useState<string | null>(null);
 
   const resetHomeState = useCallback(() => {
     setAssignments([]);
@@ -98,6 +99,7 @@ export default function HomeScreen() {
     setActiveEntry(null);
     setActiveAssign(null);
     setWorkers([]);
+    setErrorMsg(null);
   }, []);
 
   // ── Load ──
@@ -109,6 +111,7 @@ export default function HomeScreen() {
       return;
     }
     if (!silent) setLoading(true);
+    setErrorMsg(null);
     try {
       if (isManagement) {
         // Compute yesterday (local) for overdue range query
@@ -175,9 +178,10 @@ export default function HomeScreen() {
         const currentAssignments = aRes.data ?? [];
         setActiveAssign(open ? currentAssignments.find(a => a.id === open.job_assignment_id) ?? null : null);
       }
-    } catch (e) {
+    } catch (e: any) {
       resetHomeState();
       console.warn('Home load error', e);
+      setErrorMsg(e.message || 'Ein Fehler ist aufgetreten');
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -274,6 +278,17 @@ export default function HomeScreen() {
           />
         }
       >
+        {errorMsg ? (
+          <View style={{ backgroundColor: '#fee2e2', padding: 16, margin: 16, borderRadius: 8 }}>
+            <Text style={{ color: '#b91c1c', textAlign: 'center', fontWeight: 'bold' }}>
+              Fehler beim Laden: {errorMsg}
+            </Text>
+            <TouchableOpacity onPress={() => load()} style={{ marginTop: 12, backgroundColor: '#b91c1c', padding: 8, borderRadius: 6 }}>
+              <Text style={{ color: 'white', textAlign: 'center' }}>Erneut versuchen</Text>
+            </TouchableOpacity>
+          </View>
+        ) : null}
+
         {loading ? (
           <ActivityIndicator color={COLORS.primary} size="large" style={{ marginTop: 60 }} />
         ) : (

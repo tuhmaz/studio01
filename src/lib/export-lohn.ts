@@ -159,11 +159,28 @@ function drawHeader(
 
   doc.setTextColor(255, 255, 255);
 
-  // ── LEFT block: company identity (x = MARGIN, max width ~100mm) ─────────
+  // ── LOGO (top-left, if provided) ─────────────────────────────────────────
+  const LOGO_W = 20;
+  const LOGO_H = 20;
+  const textStartX = MARGIN;
+  let textOffsetX = 0;
+
+  if (company.logoData) {
+    try {
+      // Determine format from data URL prefix; default to JPEG
+      const fmt = company.logoData.startsWith('data:image/png') ? 'PNG' : 'JPEG';
+      doc.addImage(company.logoData, fmt, MARGIN, 5, LOGO_W, LOGO_H);
+      textOffsetX = LOGO_W + 3;
+    } catch (_e) {
+      // Logo failed to render — continue without it
+    }
+  }
+
+  // ── LEFT block: company identity ─────────────────────────────────────────
   let ly = 10;
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(10.5);
-  doc.text(company.name.toUpperCase(), MARGIN, ly);
+  doc.text(company.name.toUpperCase(), textStartX + textOffsetX, ly);
   ly += 6.5;
 
   const addrLine = [
@@ -174,7 +191,7 @@ function drawHeader(
     doc.setFont('helvetica', 'normal');
     doc.setFontSize(7.5);
     doc.setTextColor(200, 215, 240);
-    doc.text(addrLine, MARGIN, ly);
+    doc.text(addrLine, textStartX + textOffsetX, ly);
     ly += 5;
   }
 
@@ -182,14 +199,14 @@ function drawHeader(
   if (contactLine) {
     doc.setFontSize(7);
     doc.setTextColor(180, 200, 230);
-    doc.text(contactLine, MARGIN, ly);
+    doc.text(contactLine, textStartX + textOffsetX, ly);
     ly += 5;
   }
 
   if (company.taxNumber) {
     doc.setFontSize(7);
     doc.setTextColor(160, 185, 220);
-    doc.text(`St.-Nr.: ${company.taxNumber}`, MARGIN, ly);
+    doc.text(`St.-Nr.: ${company.taxNumber}`, textStartX + textOffsetX, ly);
   }
 
   // ── RIGHT block: document title + month (right-aligned) ─────────────────
@@ -213,18 +230,29 @@ function drawHeader(
 }
 
 function drawFooter(doc: jsPDF, company: CompanySettings, workerName: string, periodLabel: string) {
-  fillRect(doc, 0, 288, W, 10, PRIMARY);
+  // Footer band: 14mm tall, starts at y=283 (ends at y=297, within A4 297mm)
+  const FY = 283;
+  fillRect(doc, 0, FY, W, 14, PRIMARY);
+
+  // Thin separator line between the two footer rows
+  doc.setDrawColor(0, 30, 70);
+  doc.setLineWidth(0.2);
+  doc.line(MARGIN, FY + 7, W - MARGIN, FY + 7);
+
   doc.setTextColor(255, 255, 255);
   doc.setFont('helvetica', 'normal');
-  doc.setFontSize(7.5);
 
+  // ── Row 1: company name + website  |  page number ──
+  doc.setFontSize(7.5);
   const leftText = [company.name, company.website].filter(Boolean).join('  ·  ');
-  doc.text(leftText, MARGIN, 294);
-  doc.text(
-    `Erstellt: ${new Date().toLocaleDateString('de-DE')}  ·  ${workerName}  ·  ${periodLabel}`,
-    W / 2, 294, { align: 'center' }
-  );
-  doc.text('Seite 1', W - MARGIN, 294, { align: 'right' });
+  doc.text(leftText, MARGIN, FY + 5);
+  doc.text('Seite 1', W - MARGIN, FY + 5, { align: 'right' });
+
+  // ── Row 2: creation date · worker · period (centered, slightly dimmed) ──
+  doc.setFontSize(6.5);
+  doc.setTextColor(200, 215, 240);
+  const centerText = `Erstellt: ${new Date().toLocaleDateString('de-DE')}  ·  ${workerName}  ·  ${periodLabel}`;
+  doc.text(centerText, W / 2, FY + 12, { align: 'center' });
 }
 
 // ─── 1. ARBEITSZEITNACHWEIS ───────────────────────────────────────────────────
@@ -432,7 +460,7 @@ export function generateArbeitszeitnachweis(params: LohnExportParams) {
   // ── Summary (hours only, no money) ──
   const finalY = (doc as any).lastAutoTable.finalY as number;
   let sy = finalY + 6;
-  if (sy + 40 > 285) { doc.addPage(); sy = 20; }
+  if (sy + 40 > 283) { doc.addPage(); sy = 20; }
 
   fillRect(doc, MARGIN, sy, CW, 38, LIGHT_BG);
   doc.setDrawColor(...BORDER);
@@ -708,7 +736,7 @@ export function generateLohnzettel(params: LohnExportParams) {
   // ── Pay calculation box ──
   const finalY = (doc as any).lastAutoTable.finalY as number;
   let sy = finalY + 6;
-  if (sy + 110 > 285) { doc.addPage(); sy = 20; }
+  if (sy + 110 > 283) { doc.addPage(); sy = 20; }
 
   fillRect(doc, MARGIN, sy, CW, 100, LIGHT_BG);
   doc.setDrawColor(...BORDER);
@@ -862,7 +890,7 @@ export function generateLohnzettel(params: LohnExportParams) {
 
   // ── Signature strip ──
   sy += 110;
-  if (sy + 20 > 285) { doc.addPage(); sy = 20; }
+  if (sy + 20 > 283) { doc.addPage(); sy = 20; }
 
   fillRect(doc, MARGIN, sy, CW, 18, [252, 252, 255]);
   doc.setDrawColor(...BORDER);
