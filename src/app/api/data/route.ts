@@ -82,7 +82,7 @@ export async function POST(req: NextRequest) {
         `;
 
         if (workerId) {
-          query = sql`${query} AND assigned_worker_ids @> ${sql.array([workerId])}`;
+          query = sql`${query} AND assigned_worker_ids @> ARRAY[${workerId}]::text[]`;
         }
 
         const rows = await query;
