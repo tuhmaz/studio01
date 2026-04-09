@@ -447,7 +447,7 @@ export default function SchedulePage() {
                                 </div>
                                 <div className="space-y-1">
                                   <h3 className="text-xl font-black group-hover:text-primary transition-colors flex items-center gap-2">
-                                    {site?.name || 'Unbekanntes Objekt'}
+                                    {!task.jobSiteId ? (task.title || 'Sonderauftrag') : (site?.name || 'Unbekanntes Objekt')}
                                     <ArrowUpRight className="w-5 h-5 text-primary opacity-50" />
                                   </h3>
                                   <div className="flex flex-wrap gap-2 mt-2">
@@ -556,9 +556,17 @@ export default function SchedulePage() {
                                 </div>
                                 <div className="px-6 py-5 space-y-4">
                                   <div className="rounded-2xl border border-border bg-muted/20 p-4">
-                                    <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Betroffene Tour</p>
-                                    <p className="mt-2 text-base font-black text-foreground">{site?.name || 'Unbekanntes Objekt'}</p>
-                                    <p className="mt-1 text-sm text-muted-foreground">{site?.address}, {site?.city}</p>
+                                    <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">
+                                      {!task.jobSiteId ? 'Sonderauftrag' : 'Betroffene Tour'}
+                                    </p>
+                                    <p className="mt-2 text-base font-black text-foreground">
+                                      {!task.jobSiteId ? (task.title || 'Sonderauftrag') : (site?.name || 'Unbekanntes Objekt')}
+                                    </p>
+                                    {!task.jobSiteId ? (
+                                      <p className="mt-1 text-sm text-muted-foreground">Ohne festen Standort</p>
+                                    ) : (
+                                      <p className="mt-1 text-sm text-muted-foreground">{site?.address}, {site?.city}</p>
+                                    )}
                                   </div>
                                   <AlertDialogFooter className="gap-3 sm:space-x-0">
                                     <AlertDialogCancel className="mt-0 h-12 rounded-2xl font-black">
