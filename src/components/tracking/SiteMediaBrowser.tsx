@@ -26,6 +26,13 @@ interface Site {
   routeCode?: string;
 }
 
+interface SonderItem {
+  id: string;           // job_assignment id
+  title: string;
+  address?: string;
+  scheduledDate: string;
+}
+
 interface MediaEntry {
   id: string;
   type: 'photo' | 'voice' | 'text';
@@ -37,8 +44,6 @@ interface MediaEntry {
   scheduledDate?: string;
   assignmentTitle?: string;
 }
-
-const SONDER_ID = '__sonder__';
 
 interface SiteMediaBrowserProps {
   companyId: string;
@@ -55,6 +60,12 @@ const MONTHS = [
   { value: '09', label: 'September' }, { value: '10', label: 'Oktober' },
   { value: '11', label: 'November' }, { value: '12', label: 'Dezember' },
 ];
+
+// Prefix to distinguish sonder selections from site IDs
+const SONDER_PREFIX = '__sonder__';
+
+function isSonderValue(v: string) { return v.startsWith(SONDER_PREFIX); }
+function sonderAssignmentId(v: string) { return v.slice(SONDER_PREFIX.length); }
 
 function currentYM() {
   const d = new Date();
@@ -78,89 +89,145 @@ function formatDur(s: number) {
 
 export default function SiteMediaBrowser({ companyId, sites }: SiteMediaBrowserProps) {
   const { y, m } = currentYM();
-  const [selectedSiteId, setSelectedSiteId] = useState<string>('');
+  const [selectedValue, setSelectedValue] = useState<string>('');
   const [year, setYear]   = useState(y);
   const [month, setMonth] = useState(m);
   const [search, setSearch]   = useState('');
   const [typeTab, setTypeTab] = useState<'all' | 'photo' | 'voice' | 'text'>('all');
 
-  const [entries, setEntries]     = useState<MediaEntry[]>([]);
-  const [isLoading, setIsLoading] = useState(false);
-  const [lightbox, setLightbox]   = useState<string | null>(null);
+  const [entries,    setEntries]    = useState<MediaEntry[]>([]);
+  const [sonders,    setSonders]    = useState<SonderItem[]>([]);
+  const [isLoading,  setIsLoading]  = useState(false);
+  const [lightbox,   setLightbox]   = useState<string | null>(null);
 
-  const selectedSite = sites.find(s => s.id === selectedSiteId);
-  const isSonder = selectedSiteId === SONDER_ID;
+  const isSonder     = isSonderValue(selectedValue);
+  const selectedSite = isSonder ? null : sites.find(s => s.id === selectedValue);
+  const selectedSonder = isSonder
+    ? sonders.find(s => s.id === sonderAssignmentId(selectedValue))
+    : null;
 
-  // ── Fetch media for the selected site + month ────────────────────────────────
+  // ── Load all Sonderauftrag assignments for the company (once) ─────────────
+  useEffect(() => {
+    if (!companyId) return;
+    fetch('/api/data', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        action: 'query',
+        table: 'job_assignments',
+        filters: { company_id: companyId, job_site_id: null },
+        select: 'id, title, scheduled_date',
+        orderBy: { column: 'scheduled_date', ascending: false },
+      }),
+    })
+      .then(r => r.json())
+      .then(j => {
+        setSonders(
+          (j.data ?? []).map((a: any) => ({
+            id:            a.id,
+            title:         a.title ?? 'Sonderauftrag',
+            address:       a.address ?? undefined,
+            scheduledDate: a.scheduled_date,
+          }))
+        );
+      });
+  }, [companyId]);
+
+  // ── Fetch media for the selected site / sonderauftrag + month ─────────────
 
   const fetchMedia = useCallback(async () => {
-    if (!selectedSiteId || !companyId) return;
+    if (!selectedValue || !companyId) return;
     setIsLoading(true);
     setEntries([]);
     try {
       const monthStart = `${year}-${month}-01`;
-      const lastDay = new Date(Number(year), Number(month), 0).getDate();
-      const monthEnd = `${year}-${month}-${String(lastDay).padStart(2, '0')}`;
+      const lastDay    = new Date(Number(year), Number(month), 0).getDate();
+      const monthEnd   = `${year}-${month}-${String(lastDay).padStart(2, '0')}`;
 
-      const isSonder = selectedSiteId === SONDER_ID;
+      let mediaRows: any[] = [];
 
-      // Fetch work_log_entries — for Sonderauftrag: job_site_id IS NULL
-      const res = await fetch('/api/data', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          action: 'query_range',
-          table: 'work_log_entries',
-          filters: isSonder
-            ? { company_id: companyId, job_site_id: null }
-            : { company_id: companyId, job_site_id: selectedSiteId },
-          rangeFilters: [{ column: 'created_at', gte: monthStart, lte: monthEnd + 'T23:59:59Z' }],
-          orderBy: { column: 'created_at', ascending: false },
-        }),
-      });
-      const json = await res.json();
+      if (isSonder) {
+        // Filter by specific job_assignment_id — no date range needed on work_log_entries
+        const assignId = sonderAssignmentId(selectedValue);
+        const res = await fetch('/api/data', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            action: 'query',
+            table: 'work_log_entries',
+            filters: { company_id: companyId, job_assignment_id: assignId },
+            orderBy: { column: 'created_at', ascending: false },
+          }),
+        });
+        const json = await res.json();
+        mediaRows = json.data ?? [];
 
-      // Fetch job_assignments to get scheduled_date and title
-      const assignRes = await fetch('/api/data', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          action: 'query_range',
-          table: 'job_assignments',
-          filters: isSonder
-            ? { company_id: companyId, job_site_id: null }
-            : { company_id: companyId, job_site_id: selectedSiteId },
-          rangeFilters: isSonder
-            ? [{ column: 'scheduled_date', gte: monthStart, lte: monthEnd }]
-            : [{ column: 'scheduled_date', gte: monthStart, lte: monthEnd }],
-          select: 'id, scheduled_date, title',
-        }),
-      });
-      const assignJson = await assignRes.json();
-      const assignMap: Record<string, { date: string; title: string }> = {};
-      for (const a of assignJson.data ?? []) {
-        assignMap[a.id] = { date: a.scheduled_date, title: a.title ?? 'Sonderauftrag' };
+        const assignment = sonders.find(s => s.id === assignId);
+        setEntries(mediaRows.map((r: any) => ({
+          id:              r.id,
+          type:            r.type,
+          content:         r.content,
+          authorName:      r.author_name,
+          createdAt:       r.created_at,
+          duration:        r.duration ?? undefined,
+          jobAssignmentId: r.job_assignment_id,
+          scheduledDate:   assignment?.scheduledDate,
+          assignmentTitle: assignment?.title,
+        })));
+      } else {
+        // Regular job_site — filter by job_site_id + date range
+        const res = await fetch('/api/data', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            action: 'query_range',
+            table: 'work_log_entries',
+            filters: { company_id: companyId, job_site_id: selectedValue },
+            rangeFilters: [{ column: 'created_at', gte: monthStart, lte: monthEnd + 'T23:59:59Z' }],
+            orderBy: { column: 'created_at', ascending: false },
+          }),
+        });
+        const json = await res.json();
+        mediaRows = json.data ?? [];
+
+        // Fetch assignment dates for this site in the month
+        const assignRes = await fetch('/api/data', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            action: 'query_range',
+            table: 'job_assignments',
+            filters: { company_id: companyId, job_site_id: selectedValue },
+            rangeFilters: [{ column: 'scheduled_date', gte: monthStart, lte: monthEnd }],
+            select: 'id, scheduled_date, title',
+          }),
+        });
+        const assignJson = await assignRes.json();
+        const assignMap: Record<string, { date: string; title: string }> = {};
+        for (const a of assignJson.data ?? []) {
+          assignMap[a.id] = { date: a.scheduled_date, title: a.title ?? '' };
+        }
+
+        setEntries(mediaRows.map((r: any) => ({
+          id:              r.id,
+          type:            r.type,
+          content:         r.content,
+          authorName:      r.author_name,
+          createdAt:       r.created_at,
+          duration:        r.duration ?? undefined,
+          jobAssignmentId: r.job_assignment_id,
+          scheduledDate:   r.job_assignment_id ? assignMap[r.job_assignment_id]?.date : undefined,
+          assignmentTitle: r.job_assignment_id ? assignMap[r.job_assignment_id]?.title : undefined,
+        })));
       }
-
-      setEntries((json.data ?? []).map((r: any) => ({
-        id:              r.id,
-        type:            r.type,
-        content:         r.content,
-        authorName:      r.author_name,
-        createdAt:       r.created_at,
-        duration:        r.duration ?? undefined,
-        jobAssignmentId: r.job_assignment_id,
-        scheduledDate:   r.job_assignment_id ? assignMap[r.job_assignment_id]?.date : undefined,
-        assignmentTitle: r.job_assignment_id ? assignMap[r.job_assignment_id]?.title : undefined,
-      })));
     } finally {
       setIsLoading(false);
     }
-  }, [selectedSiteId, companyId, year, month]);
+  }, [selectedValue, companyId, year, month, isSonder, sonders]);
 
   useEffect(() => { void fetchMedia(); }, [fetchMedia]);
 
-  // ── Filter ───────────────────────────────────────────────────────────────────
+  // ── Filter ────────────────────────────────────────────────────────────────
 
   const filtered = entries.filter(e => {
     if (typeTab !== 'all' && e.type !== typeTab) return false;
@@ -172,7 +239,7 @@ export default function SiteMediaBrowser({ companyId, sites }: SiteMediaBrowserP
   const audios = filtered.filter(e => e.type === 'voice');
   const texts  = filtered.filter(e => e.type === 'text');
 
-  // ── Group by date ─────────────────────────────────────────────────────────────
+  // ── Group by date ─────────────────────────────────────────────────────────
 
   const grouped = React.useMemo(() => {
     const map: Record<string, MediaEntry[]> = {};
@@ -184,92 +251,136 @@ export default function SiteMediaBrowser({ companyId, sites }: SiteMediaBrowserP
     return Object.entries(map).sort(([a], [b]) => b.localeCompare(a));
   }, [filtered]);
 
-  // ── Download all ─────────────────────────────────────────────────────────────
+  // ── Download all ──────────────────────────────────────────────────────────
 
   const handleDownloadAll = () => {
     let delay = 0;
-    const sitSlug = isSonder ? 'sonderauftrag' : (selectedSite?.name.slice(0, 20).replace(/\s+/g, '_') ?? 'site');
+    const slug = isSonder
+      ? (selectedSonder?.title ?? 'sonder').slice(0, 20).replace(/\s+/g, '_')
+      : (selectedSite?.name ?? 'site').slice(0, 20).replace(/\s+/g, '_');
     for (const e of filtered) {
       if (e.type === 'photo') {
-        setTimeout(() => downloadDataUrl(e.content, `foto_${sitSlug}_${e.createdAt.slice(0, 10)}_${e.authorName}.jpg`), delay);
+        setTimeout(() => downloadDataUrl(e.content, `foto_${slug}_${e.createdAt.slice(0, 10)}_${e.authorName}.jpg`), delay);
         delay += 200;
       } else if (e.type === 'voice') {
-        setTimeout(() => downloadDataUrl(e.content, `audio_${sitSlug}_${e.createdAt.slice(0, 10)}_${e.authorName}.webm`), delay);
+        setTimeout(() => downloadDataUrl(e.content, `audio_${slug}_${e.createdAt.slice(0, 10)}_${e.authorName}.webm`), delay);
         delay += 200;
       }
     }
     if (texts.length) {
       const txt = texts.map(e => `[${new Date(e.createdAt).toLocaleString('de-DE')}] ${e.authorName}:\n${e.content}`).join('\n\n---\n\n');
-      setTimeout(() => downloadText(txt, `notizen_${sitSlug}_${year}-${month}.txt`), delay);
+      setTimeout(() => downloadText(txt, `notizen_${slug}_${year}-${month}.txt`), delay);
     }
   };
 
-  // ── Years list ────────────────────────────────────────────────────────────────
-
   const years = Array.from({ length: 3 }, (_, i) => String(new Date().getFullYear() - i));
 
-  // ── Render ────────────────────────────────────────────────────────────────────
+  // Display name for the currently selected item
+  const selectedLabel = isSonder
+    ? selectedSonder?.title ?? 'Sonderauftrag'
+    : selectedSite?.name ?? '';
+
+  // ── Render ────────────────────────────────────────────────────────────────
 
   return (
     <div className="flex flex-col lg:flex-row gap-6 h-full min-h-[600px]">
 
-      {/* ── Left panel: Site selector + filters ── */}
+      {/* ── Left panel ── */}
       <div className="lg:w-72 shrink-0 space-y-4">
 
-        {/* Site search + select */}
+        {/* Selector */}
         <div className="space-y-2">
           <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground flex items-center gap-1.5">
-            <MapPin className="w-3 h-3" /> Standort auswählen
+            <MapPin className="w-3 h-3" /> Standort / Auftrag
           </p>
-          <Select value={selectedSiteId} onValueChange={setSelectedSiteId}>
+          <Select value={selectedValue} onValueChange={setSelectedValue}>
             <SelectTrigger className="h-11 rounded-xl border-primary/20 font-medium text-sm">
-              <SelectValue placeholder="Standort wählen…" />
+              <SelectValue placeholder="Auswählen…" />
             </SelectTrigger>
             <SelectContent>
-              {/* Sonderaufträge (no job_site_id) */}
-              <SelectItem value={SONDER_ID} className="text-sm font-bold text-amber-700">
-                <span className="inline-flex items-center gap-1.5">
-                  <Zap className="w-3 h-3" /> Sonderaufträge
-                </span>
-              </SelectItem>
-              {sites.map(s => (
-                <SelectItem key={s.id} value={s.id} className="text-sm">
-                  <span className="font-black text-primary mr-2">{s.routeCode ?? s.id}</span>
-                  {s.name}
-                </SelectItem>
-              ))}
+              {/* Regular job sites */}
+              {sites.length > 0 && (
+                <>
+                  <div className="px-2 py-1.5">
+                    <p className="text-[9px] font-black uppercase tracking-widest text-muted-foreground flex items-center gap-1">
+                      <MapPin className="w-3 h-3" /> Standorte
+                    </p>
+                  </div>
+                  {sites.map(s => (
+                    <SelectItem key={s.id} value={s.id} className="text-sm">
+                      <span className="font-black text-primary mr-2">{s.routeCode ?? ''}</span>
+                      {s.name}
+                    </SelectItem>
+                  ))}
+                </>
+              )}
+
+              {/* Sonderaufträge — each as individual entry */}
+              {sonders.length > 0 && (
+                <>
+                  <div className="px-2 py-1.5 mt-1 border-t border-gray-100">
+                    <p className="text-[9px] font-black uppercase tracking-widest text-amber-600 flex items-center gap-1">
+                      <Zap className="w-3 h-3" /> Sonderaufträge
+                    </p>
+                  </div>
+                  {sonders.map(s => (
+                    <SelectItem key={s.id} value={`${SONDER_PREFIX}${s.id}`} className="text-sm">
+                      <span className="inline-flex flex-col leading-tight">
+                        <span className="font-black text-amber-700">{s.title}</span>
+                        <span className="text-[9px] text-muted-foreground">{s.scheduledDate}</span>
+                      </span>
+                    </SelectItem>
+                  ))}
+                </>
+              )}
             </SelectContent>
           </Select>
         </div>
 
-        {/* Month / Year */}
-        <div className="space-y-2">
-          <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground flex items-center gap-1.5">
-            <Calendar className="w-3 h-3" /> Zeitraum
-          </p>
-          <div className="grid grid-cols-2 gap-2">
-            <Select value={month} onValueChange={setMonth}>
-              <SelectTrigger className="h-10 rounded-xl border-primary/20 text-xs font-bold">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {MONTHS.map(mo => (
-                  <SelectItem key={mo.value} value={mo.value} className="text-xs">{mo.label}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            <Select value={year} onValueChange={setYear}>
-              <SelectTrigger className="h-10 rounded-xl border-primary/20 text-xs font-bold">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {years.map(yr => (
-                  <SelectItem key={yr} value={yr} className="text-xs">{yr}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+        {/* Month / Year — only for regular sites */}
+        {!isSonder && (
+          <div className="space-y-2">
+            <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground flex items-center gap-1.5">
+              <Calendar className="w-3 h-3" /> Zeitraum
+            </p>
+            <div className="grid grid-cols-2 gap-2">
+              <Select value={month} onValueChange={setMonth}>
+                <SelectTrigger className="h-10 rounded-xl border-primary/20 text-xs font-bold">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {MONTHS.map(mo => (
+                    <SelectItem key={mo.value} value={mo.value} className="text-xs">{mo.label}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <Select value={year} onValueChange={setYear}>
+                <SelectTrigger className="h-10 rounded-xl border-primary/20 text-xs font-bold">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {years.map(yr => (
+                    <SelectItem key={yr} value={yr} className="text-xs">{yr}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
           </div>
-        </div>
+        )}
+
+        {/* Sonderauftrag info card */}
+        {isSonder && selectedSonder && (
+          <div className="bg-amber-50 border border-amber-200 rounded-2xl p-3 space-y-1">
+            <p className="text-[9px] font-black uppercase tracking-widest text-amber-600 flex items-center gap-1">
+              <Zap className="w-3 h-3" /> Sonderauftrag
+            </p>
+            <p className="text-sm font-black text-amber-900">{selectedSonder.title}</p>
+            {selectedSonder.address && (
+              <p className="text-xs text-amber-700">{selectedSonder.address}</p>
+            )}
+            <p className="text-[10px] text-amber-600">{selectedSonder.scheduledDate}</p>
+          </div>
+        )}
 
         {/* Worker filter */}
         <div className="space-y-2">
@@ -285,14 +396,14 @@ export default function SiteMediaBrowser({ companyId, sites }: SiteMediaBrowserP
         </div>
 
         {/* Stats summary */}
-        {selectedSiteId && !isLoading && entries.length > 0 && (
+        {selectedValue && !isLoading && entries.length > 0 && (
           <div className="bg-primary/5 rounded-2xl p-4 space-y-3 border border-primary/10">
             <p className="text-[10px] font-black uppercase tracking-widest text-primary">Übersicht</p>
             <div className="space-y-2">
               {[
-                { icon: ImageIcon, label: 'Fotos',        count: entries.filter(e=>e.type==='photo').length, color: 'text-emerald-600' },
-                { icon: Volume2,   label: 'Sprachnotizen', count: entries.filter(e=>e.type==='voice').length, color: 'text-blue-600' },
-                { icon: FileText,  label: 'Textnotizen',  count: entries.filter(e=>e.type==='text').length,  color: 'text-violet-600' },
+                { icon: ImageIcon, label: 'Fotos',         count: entries.filter(e=>e.type==='photo').length, color: 'text-emerald-600' },
+                { icon: Volume2,   label: 'Sprachnotizen', count: entries.filter(e=>e.type==='voice').length, color: 'text-blue-600'    },
+                { icon: FileText,  label: 'Textnotizen',   count: entries.filter(e=>e.type==='text').length,  color: 'text-violet-600'  },
               ].map(({ icon: Icon, label, count, color }) => (
                 <div key={label} className="flex items-center justify-between">
                   <div className="flex items-center gap-2">
@@ -310,17 +421,17 @@ export default function SiteMediaBrowser({ companyId, sites }: SiteMediaBrowserP
         )}
       </div>
 
-      {/* ── Right panel: Media content ── */}
+      {/* ── Right panel ── */}
       <div className="flex-1 min-w-0 space-y-4">
 
-        {!selectedSiteId ? (
+        {!selectedValue ? (
           <div className="h-full min-h-[400px] flex flex-col items-center justify-center gap-4 bg-gray-50 rounded-2xl border-2 border-dashed border-gray-200">
             <div className="w-16 h-16 bg-white rounded-2xl shadow-sm flex items-center justify-center">
               <FolderOpen className="w-8 h-8 text-muted-foreground/40" />
             </div>
             <div className="text-center">
               <p className="font-black text-foreground/60 uppercase text-sm">Standort auswählen</p>
-              <p className="text-xs text-muted-foreground mt-1">Wählen Sie links einen Standort, um Berichte anzuzeigen</p>
+              <p className="text-xs text-muted-foreground mt-1">Wählen Sie links einen Standort oder Sonderauftrag</p>
             </div>
           </div>
 
@@ -338,15 +449,27 @@ export default function SiteMediaBrowser({ companyId, sites }: SiteMediaBrowserP
             <div className="text-center">
               <p className="font-black text-foreground/60 uppercase text-sm">Keine Berichte</p>
               <p className="text-xs text-muted-foreground mt-1">
-                Für {isSonder ? 'Sonderaufträge' : selectedSite?.name} wurden im {MONTHS.find(mo=>mo.value===month)?.label} {year} keine Medien erfasst.
+                Für <span className="font-bold">{selectedLabel}</span> wurden
+                {!isSonder && ` im ${MONTHS.find(mo=>mo.value===month)?.label} ${year}`} keine Medien erfasst.
               </p>
             </div>
           </div>
 
         ) : (
           <div className="space-y-4">
+            {/* Header with assignment name */}
+            {isSonder && selectedSonder && (
+              <div className="flex items-center gap-2 px-1">
+                <Zap className="w-4 h-4 text-amber-500 shrink-0" />
+                <h3 className="font-black text-base text-amber-700">{selectedSonder.title}</h3>
+                <Badge className="bg-amber-100 text-amber-700 border-amber-200 text-[9px] font-black">
+                  {selectedSonder.scheduledDate}
+                </Badge>
+              </div>
+            )}
+
             {/* Type filter tabs */}
-            <div className="flex items-center justify-between gap-3">
+            <div className="flex items-center gap-3">
               <Tabs value={typeTab} onValueChange={v => setTypeTab(v as any)}>
                 <TabsList className="h-9 bg-muted/40 p-1 rounded-xl">
                   <TabsTrigger value="all"   className="h-7 px-3 rounded-lg text-[10px] font-black uppercase">Alle ({filtered.length})</TabsTrigger>
@@ -363,16 +486,9 @@ export default function SiteMediaBrowser({ companyId, sites }: SiteMediaBrowserP
                 {/* Date header */}
                 <div className="flex items-center gap-3">
                   <div className="h-px flex-1 bg-gray-100" />
-                  <div className="flex flex-col items-center bg-white px-2">
-                    <span className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">
-                      {new Date(date + 'T12:00:00').toLocaleDateString('de-DE', { weekday: 'long', day: '2-digit', month: 'long' })}
-                    </span>
-                    {isSonder && dayEntries[0]?.assignmentTitle && (
-                      <span className="text-[9px] font-bold text-amber-600 flex items-center gap-1">
-                        <Zap className="w-2.5 h-2.5" />{dayEntries[0].assignmentTitle}
-                      </span>
-                    )}
-                  </div>
+                  <span className="text-[10px] font-black uppercase tracking-widest text-muted-foreground bg-white px-2">
+                    {new Date(date + 'T12:00:00').toLocaleDateString('de-DE', { weekday: 'long', day: '2-digit', month: 'long' })}
+                  </span>
                   <div className="h-px flex-1 bg-gray-100" />
                 </div>
 
@@ -380,8 +496,10 @@ export default function SiteMediaBrowser({ companyId, sites }: SiteMediaBrowserP
                 {dayEntries.filter(e=>e.type==='photo').length > 0 && (
                   <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
                     {dayEntries.filter(e=>e.type==='photo').map(entry => (
-                      <div key={entry.id} className="relative group rounded-xl overflow-hidden aspect-[4/3] bg-gray-100 shadow-sm cursor-pointer"
-                        onClick={() => setLightbox(entry.content)}>
+                      <div key={entry.id}
+                        className="relative group rounded-xl overflow-hidden aspect-[4/3] bg-gray-100 shadow-sm cursor-pointer"
+                        onClick={() => setLightbox(entry.content)}
+                      >
                         <NextImage src={entry.content} alt="Foto" fill unoptimized className="object-cover transition-transform group-hover:scale-105" />
                         <div className="absolute inset-0 bg-black/0 group-hover:bg-black/40 transition-all flex items-center justify-center gap-2 opacity-0 group-hover:opacity-100">
                           <button onClick={e => { e.stopPropagation(); setLightbox(entry.content); }}
@@ -420,8 +538,10 @@ export default function SiteMediaBrowser({ companyId, sites }: SiteMediaBrowserP
                           </p>
                         </div>
                       </div>
-                      <button onClick={() => downloadDataUrl(entry.content, `audio_${entry.authorName}_${entry.createdAt.slice(0,10)}.webm`)}
-                        className="w-8 h-8 bg-gray-50 hover:bg-primary/5 rounded-xl flex items-center justify-center transition-colors">
+                      <button
+                        onClick={() => downloadDataUrl(entry.content, `audio_${entry.authorName}_${entry.createdAt.slice(0,10)}.webm`)}
+                        className="w-8 h-8 bg-gray-50 hover:bg-primary/5 rounded-xl flex items-center justify-center transition-colors"
+                      >
                         <Download className="w-3.5 h-3.5 text-primary" />
                       </button>
                     </div>
@@ -444,8 +564,10 @@ export default function SiteMediaBrowser({ companyId, sites }: SiteMediaBrowserP
                           </p>
                         </div>
                       </div>
-                      <button onClick={() => downloadText(entry.content, `notiz_${entry.authorName}_${entry.createdAt.slice(0,10)}.txt`)}
-                        className="w-8 h-8 bg-gray-50 hover:bg-primary/5 rounded-xl flex items-center justify-center transition-colors">
+                      <button
+                        onClick={() => downloadText(entry.content, `notiz_${entry.authorName}_${entry.createdAt.slice(0,10)}.txt`)}
+                        className="w-8 h-8 bg-gray-50 hover:bg-primary/5 rounded-xl flex items-center justify-center transition-colors"
+                      >
                         <Download className="w-3.5 h-3.5 text-primary" />
                       </button>
                     </div>
