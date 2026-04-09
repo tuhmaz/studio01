@@ -97,6 +97,7 @@ export default function SiteMediaBrowser({ companyId, sites }: SiteMediaBrowserP
 
   const [entries,    setEntries]    = useState<MediaEntry[]>([]);
   const [sonders,    setSonders]    = useState<SonderItem[]>([]);
+  const sondersRef = React.useRef<SonderItem[]>([]);
   const [isLoading,  setIsLoading]  = useState(false);
   const [lightbox,   setLightbox]   = useState<string | null>(null);
 
@@ -122,14 +123,15 @@ export default function SiteMediaBrowser({ companyId, sites }: SiteMediaBrowserP
     })
       .then(r => r.json())
       .then(j => {
-        setSonders(
-          (j.data ?? []).map((a: any) => ({
-            id:            a.id,
-            title:         a.title ?? 'Sonderauftrag',
-            address:       a.address ?? undefined,
-            scheduledDate: a.scheduled_date,
-          }))
-        );
+        const mapped: SonderItem[] = (j.data ?? []).map((a: any) => ({
+          id:            a.id,
+          title:         a.title ?? 'Sonderauftrag',
+          address:       a.address ?? undefined,
+          // Trim to yyyy-MM-dd regardless of DB format
+          scheduledDate: (a.scheduled_date ?? '').slice(0, 10),
+        }));
+        sondersRef.current = mapped;
+        setSonders(mapped);
       });
   }, [companyId]);
 
@@ -162,7 +164,7 @@ export default function SiteMediaBrowser({ companyId, sites }: SiteMediaBrowserP
         const json = await res.json();
         mediaRows = json.data ?? [];
 
-        const assignment = sonders.find(s => s.id === assignId);
+        const assignment = sondersRef.current.find(s => s.id === assignId);
         setEntries(mediaRows.map((r: any) => ({
           id:              r.id,
           type:            r.type,
@@ -205,7 +207,7 @@ export default function SiteMediaBrowser({ companyId, sites }: SiteMediaBrowserP
         const assignJson = await assignRes.json();
         const assignMap: Record<string, { date: string; title: string }> = {};
         for (const a of assignJson.data ?? []) {
-          assignMap[a.id] = { date: a.scheduled_date, title: a.title ?? '' };
+          assignMap[a.id] = { date: (a.scheduled_date ?? '').slice(0, 10), title: a.title ?? '' };
         }
 
         setEntries(mediaRows.map((r: any) => ({
@@ -223,7 +225,7 @@ export default function SiteMediaBrowser({ companyId, sites }: SiteMediaBrowserP
     } finally {
       setIsLoading(false);
     }
-  }, [selectedValue, companyId, year, month, isSonder, sonders]);
+  }, [selectedValue, companyId, year, month, isSonder]);
 
   useEffect(() => { void fetchMedia(); }, [fetchMedia]);
 
