@@ -360,10 +360,10 @@ export default function TeamPage() {
             <DialogTrigger asChild>
               <Button className="font-bold h-12 px-6 shadow-lg"><UserPlus className="mr-2 h-5 w-5" />Neuer Mitarbeiter</Button>
             </DialogTrigger>
-            <DialogContent className="sm:max-w-3xl rounded-3xl max-h-[90vh] overflow-y-auto">
+            <DialogContent aria-describedby="team-form-description" className="sm:max-w-3xl rounded-3xl max-h-[90vh] overflow-y-auto">
               <DialogHeader>
                 <DialogTitle className="text-2xl font-black">{editingUser ? 'Mitarbeiter bearbeiten' : 'Neuen Mitarbeiter hinzufügen'}</DialogTitle>
-                <DialogDescription className="font-medium">Vollständige Erfassung der steuerrelevanten Daten.</DialogDescription>
+                <DialogDescription id="team-form-description" className="font-medium">Vollständige Erfassung der steuerrelevanten Daten.</DialogDescription>
               </DialogHeader>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-4 py-6">
                 <div className="md:col-span-2 space-y-2">

@@ -170,10 +170,10 @@ export function Shell({ children, userRole, userName }: ShellProps) {
       </SidebarInset>
 
       <Dialog open={isPasswordModalOpen} onOpenChange={setIsPasswordModalOpen}>
-        <DialogContent className="sm:max-w-[400px] rounded-3xl">
+        <DialogContent aria-describedby="password-modal-description" className="sm:max-w-[400px] rounded-3xl">
           <DialogHeader>
             <DialogTitle>Passwort ändern</DialogTitle>
-            <DialogDescription>Legen Sie ein neues Passwort für Ihren Zugang fest.</DialogDescription>
+            <DialogDescription id="password-modal-description">Legen Sie ein neues Passwort für Ihren Zugang fest.</DialogDescription>
           </DialogHeader>
           <div className="grid gap-4 py-4">
             <div className="grid gap-2">

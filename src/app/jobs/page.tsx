@@ -275,7 +275,7 @@ function SiteDetailDialog({ site, open, onClose, onEdit, onDelete }: {
 
   return (
     <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
-      <DialogContent className="sm:max-w-4xl rounded-[2.5rem] p-0 overflow-hidden border-none shadow-2xl">
+      <DialogContent aria-describedby="site-details-description" className="sm:max-w-4xl rounded-[2.5rem] p-0 overflow-hidden border-none shadow-2xl">
         <div className="bg-primary p-10 text-white">
           <div className="flex justify-between items-start mb-4">
             <Badge className="bg-white/20 text-white border-none font-black text-xs px-4">{site.routeCode || site.region}</Badge>
@@ -298,7 +298,7 @@ function SiteDetailDialog({ site, open, onClose, onEdit, onDelete }: {
             </div>
           </div>
           <DialogTitle className="text-3xl font-black uppercase tracking-tight">{site.city}</DialogTitle>
-          <DialogDescription className="sr-only">{site.address} — Objekt-ID: {site.id}</DialogDescription>
+          <DialogDescription id="site-details-description" className="sr-only">{site.address} — Objekt-ID: {site.id}</DialogDescription>
           <div className="flex flex-wrap gap-4 mt-2">
             <p className="text-white/70 flex items-center gap-1.5 font-medium text-sm"><MapPin className="w-4 h-4" /> {site.address}</p>
             <div className="flex items-center gap-3 text-white/90 text-xs font-bold bg-black/10 px-3 py-1 rounded-full">
@@ -420,13 +420,13 @@ function AddEditSiteDialog({ open, site, nextId, availableRegions, onSave, onClo
 
   return (
     <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
-      <DialogContent className="sm:max-w-5xl rounded-[2rem] border-none shadow-2xl p-0 overflow-hidden max-h-[95vh] flex flex-col">
+      <DialogContent aria-describedby="job-form-description" className="sm:max-w-5xl rounded-[2rem] border-none shadow-2xl p-0 overflow-hidden max-h-[95vh] flex flex-col">
         {/* Header */}
         <div className="bg-primary p-8 text-white shrink-0">
           <DialogTitle className="text-2xl font-black uppercase">
             {site ? 'Liegenschaft bearbeiten' : 'Neue Liegenschaft anlegen'}
           </DialogTitle>
-          <DialogDescription className="text-white/60 text-sm font-medium mt-1">
+          <DialogDescription id="job-form-description" className="text-white/60 text-sm font-medium mt-1">
             {site ? `Objekt-ID: ${site.id}` : 'Manuelle Erfassung einer neuen Liegenschaft'}
           </DialogDescription>
         </div>

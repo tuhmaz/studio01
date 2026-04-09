@@ -9,7 +9,7 @@ import {
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Dialog, DialogContent } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select';
@@ -586,7 +586,9 @@ export default function SiteMediaBrowser({ companyId, sites }: SiteMediaBrowserP
 
       {/* ── Lightbox ── */}
       <Dialog open={!!lightbox} onOpenChange={() => setLightbox(null)}>
-        <DialogContent className="max-w-5xl p-0 border-none bg-black/95 rounded-2xl overflow-hidden">
+        <DialogContent aria-describedby="lightbox-description" className="max-w-5xl p-0 border-none bg-black/95 rounded-2xl overflow-hidden">
+          <DialogTitle className="sr-only">Bildvorschau</DialogTitle>
+          <DialogDescription id="lightbox-description" className="sr-only">Vollbildansicht des ausgewählten Mediums</DialogDescription>
           <button onClick={() => setLightbox(null)}
             className="absolute top-3 right-3 z-10 w-9 h-9 bg-white/10 hover:bg-white/20 rounded-full flex items-center justify-center transition-colors">
             <X className="w-5 h-5 text-white" />

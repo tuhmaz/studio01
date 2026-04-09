@@ -34,6 +34,7 @@ import {
   DialogContent,
   DialogHeader,
   DialogTitle,
+  DialogDescription,
   DialogTrigger,
   DialogFooter
 } from '@/components/ui/dialog';
@@ -486,13 +487,14 @@ export default function SchedulePage() {
                           </CardContent>
                         </Card>
                       </DialogTrigger>
-                      <DialogContent className="sm:max-w-2xl rounded-3xl border-none shadow-2xl">
+                      <DialogContent aria-describedby="schedule-dialog-description" className="sm:max-w-2xl rounded-3xl border-none shadow-2xl">
                         <DialogHeader>
                           <div className="flex flex-wrap items-center gap-3 mb-4">
                             <Badge className="bg-primary text-white font-mono px-3 py-1 text-xs">{site?.routeCode || site?.region}</Badge>
                             <Badge variant="outline" className="font-black text-[10px] border-primary/20 uppercase">{task.status}</Badge>
                           </div>
                           <DialogTitle className="text-2xl font-black text-primary">{site?.name}</DialogTitle>
+                          <DialogDescription id="schedule-dialog-description" className="sr-only">Details zur geplanten Aufgabe</DialogDescription>
                         </DialogHeader>
                         <Separator className="my-6" />
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-8 py-4">

@@ -10,7 +10,7 @@ import {
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
-import { Dialog, DialogContent } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { useToast } from '@/hooks/use-toast';
 
@@ -515,7 +515,9 @@ export default function NotesPanel({
 
       {/* ── Lightbox ── */}
       <Dialog open={!!lightboxSrc} onOpenChange={() => setLightboxSrc(null)}>
-        <DialogContent className="max-w-4xl p-0 border-none bg-black/90 rounded-2xl overflow-hidden">
+        <DialogContent aria-describedby="notes-lightbox-description" className="max-w-4xl p-0 border-none bg-black/90 rounded-2xl overflow-hidden">
+          <DialogTitle className="sr-only">Bildvorschau</DialogTitle>
+          <DialogDescription id="notes-lightbox-description" className="sr-only">Vollbildansicht des ausgewählten Mediums</DialogDescription>
           <button onClick={() => setLightboxSrc(null)}
             className="absolute top-3 right-3 z-10 w-9 h-9 bg-white/10 hover:bg-white/20 rounded-full flex items-center justify-center transition-colors">
             <X className="w-5 h-5 text-white" />

@@ -799,10 +799,10 @@ export default function TrackingPage() {
 
 
       <Dialog open={showManualEntry} onOpenChange={o => !o && setShowManualEntry(false)}>
-        <DialogContent className="rounded-[2rem] border-none shadow-2xl p-0 overflow-hidden sm:max-w-md">
+        <DialogContent aria-describedby="manual-entry-description" className="rounded-[2rem] border-none shadow-2xl p-0 overflow-hidden sm:max-w-md">
           <div className="bg-primary p-6 text-white">
             <DialogTitle className="text-xl font-black uppercase flex items-center gap-3"><Edit className="w-5 h-5" /> Manueller Zeiteintrag</DialogTitle>
-            <DialogDescription className="text-white/60 text-sm font-medium mt-1">Fügen Sie eine Schicht manuell für dieses Objekt hinzu.</DialogDescription>
+            <DialogDescription id="manual-entry-description" className="text-white/60 text-sm font-medium mt-1">Fügen Sie eine Schicht manuell für dieses Objekt hinzu.</DialogDescription>
           </div>
           <div className="p-6 space-y-4">
             <div className="space-y-2">
