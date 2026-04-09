@@ -4,8 +4,8 @@ import React, { useState, useEffect, useCallback } from 'react';
 import NextImage from 'next/image';
 import {
   MapPin, Image as ImageIcon, Volume2, FileText, Download,
-  ZoomIn, X, Loader2, FolderOpen, Calendar, ChevronDown,
-  Search, Filter, Package
+  ZoomIn, X, Loader2, FolderOpen, Calendar,
+  Search, Filter, Package, Zap
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -35,7 +35,10 @@ interface MediaEntry {
   duration?: number;
   jobAssignmentId?: string;
   scheduledDate?: string;
+  assignmentTitle?: string;
 }
+
+const SONDER_ID = '__sonder__';
 
 interface SiteMediaBrowserProps {
   companyId: string;
@@ -86,6 +89,7 @@ export default function SiteMediaBrowser({ companyId, sites }: SiteMediaBrowserP
   const [lightbox, setLightbox]   = useState<string | null>(null);
 
   const selectedSite = sites.find(s => s.id === selectedSiteId);
+  const isSonder = selectedSiteId === SONDER_ID;
 
   // ── Fetch media for the selected site + month ────────────────────────────────
 
@@ -98,35 +102,45 @@ export default function SiteMediaBrowser({ companyId, sites }: SiteMediaBrowserP
       const lastDay = new Date(Number(year), Number(month), 0).getDate();
       const monthEnd = `${year}-${month}-${String(lastDay).padStart(2, '0')}`;
 
-      // Fetch work_log_entries for this site in the date range
+      const isSonder = selectedSiteId === SONDER_ID;
+
+      // Fetch work_log_entries — for Sonderauftrag: job_site_id IS NULL
       const res = await fetch('/api/data', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           action: 'query_range',
           table: 'work_log_entries',
-          filters: { company_id: companyId, job_site_id: selectedSiteId },
+          filters: isSonder
+            ? { company_id: companyId, job_site_id: null }
+            : { company_id: companyId, job_site_id: selectedSiteId },
           rangeFilters: [{ column: 'created_at', gte: monthStart, lte: monthEnd + 'T23:59:59Z' }],
           orderBy: { column: 'created_at', ascending: false },
         }),
       });
       const json = await res.json();
 
-      // Also fetch job_assignments for this site in the range to get scheduled_date
+      // Fetch job_assignments to get scheduled_date and title
       const assignRes = await fetch('/api/data', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           action: 'query_range',
           table: 'job_assignments',
-          filters: { company_id: companyId, job_site_id: selectedSiteId },
-          rangeFilters: [{ column: 'scheduled_date', gte: monthStart, lte: monthEnd }],
-          select: 'id, scheduled_date',
+          filters: isSonder
+            ? { company_id: companyId, job_site_id: null }
+            : { company_id: companyId, job_site_id: selectedSiteId },
+          rangeFilters: isSonder
+            ? [{ column: 'scheduled_date', gte: monthStart, lte: monthEnd }]
+            : [{ column: 'scheduled_date', gte: monthStart, lte: monthEnd }],
+          select: 'id, scheduled_date, title',
         }),
       });
       const assignJson = await assignRes.json();
-      const assignMap: Record<string, string> = {};
-      for (const a of assignJson.data ?? []) assignMap[a.id] = a.scheduled_date;
+      const assignMap: Record<string, { date: string; title: string }> = {};
+      for (const a of assignJson.data ?? []) {
+        assignMap[a.id] = { date: a.scheduled_date, title: a.title ?? 'Sonderauftrag' };
+      }
 
       setEntries((json.data ?? []).map((r: any) => ({
         id:              r.id,
@@ -136,7 +150,8 @@ export default function SiteMediaBrowser({ companyId, sites }: SiteMediaBrowserP
         createdAt:       r.created_at,
         duration:        r.duration ?? undefined,
         jobAssignmentId: r.job_assignment_id,
-        scheduledDate:   r.job_assignment_id ? assignMap[r.job_assignment_id] : undefined,
+        scheduledDate:   r.job_assignment_id ? assignMap[r.job_assignment_id]?.date : undefined,
+        assignmentTitle: r.job_assignment_id ? assignMap[r.job_assignment_id]?.title : undefined,
       })));
     } finally {
       setIsLoading(false);
@@ -173,7 +188,7 @@ export default function SiteMediaBrowser({ companyId, sites }: SiteMediaBrowserP
 
   const handleDownloadAll = () => {
     let delay = 0;
-    const sitSlug = selectedSite?.name.slice(0, 20).replace(/\s+/g, '_') ?? 'site';
+    const sitSlug = isSonder ? 'sonderauftrag' : (selectedSite?.name.slice(0, 20).replace(/\s+/g, '_') ?? 'site');
     for (const e of filtered) {
       if (e.type === 'photo') {
         setTimeout(() => downloadDataUrl(e.content, `foto_${sitSlug}_${e.createdAt.slice(0, 10)}_${e.authorName}.jpg`), delay);
@@ -211,6 +226,12 @@ export default function SiteMediaBrowser({ companyId, sites }: SiteMediaBrowserP
               <SelectValue placeholder="Standort wählen…" />
             </SelectTrigger>
             <SelectContent>
+              {/* Sonderaufträge (no job_site_id) */}
+              <SelectItem value={SONDER_ID} className="text-sm font-bold text-amber-700">
+                <span className="inline-flex items-center gap-1.5">
+                  <Zap className="w-3 h-3" /> Sonderaufträge
+                </span>
+              </SelectItem>
               {sites.map(s => (
                 <SelectItem key={s.id} value={s.id} className="text-sm">
                   <span className="font-black text-primary mr-2">{s.routeCode ?? s.id}</span>
@@ -317,7 +338,7 @@ export default function SiteMediaBrowser({ companyId, sites }: SiteMediaBrowserP
             <div className="text-center">
               <p className="font-black text-foreground/60 uppercase text-sm">Keine Berichte</p>
               <p className="text-xs text-muted-foreground mt-1">
-                Für {selectedSite?.name} wurden im {MONTHS.find(mo=>mo.value===month)?.label} {year} keine Medien erfasst.
+                Für {isSonder ? 'Sonderaufträge' : selectedSite?.name} wurden im {MONTHS.find(mo=>mo.value===month)?.label} {year} keine Medien erfasst.
               </p>
             </div>
           </div>
@@ -342,9 +363,16 @@ export default function SiteMediaBrowser({ companyId, sites }: SiteMediaBrowserP
                 {/* Date header */}
                 <div className="flex items-center gap-3">
                   <div className="h-px flex-1 bg-gray-100" />
-                  <span className="text-[10px] font-black uppercase tracking-widest text-muted-foreground bg-white px-2">
-                    {new Date(date + 'T12:00:00').toLocaleDateString('de-DE', { weekday: 'long', day: '2-digit', month: 'long' })}
-                  </span>
+                  <div className="flex flex-col items-center bg-white px-2">
+                    <span className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">
+                      {new Date(date + 'T12:00:00').toLocaleDateString('de-DE', { weekday: 'long', day: '2-digit', month: 'long' })}
+                    </span>
+                    {isSonder && dayEntries[0]?.assignmentTitle && (
+                      <span className="text-[9px] font-bold text-amber-600 flex items-center gap-1">
+                        <Zap className="w-2.5 h-2.5" />{dayEntries[0].assignmentTitle}
+                      </span>
+                    )}
+                  </div>
                   <div className="h-px flex-1 bg-gray-100" />
                 </div>
 

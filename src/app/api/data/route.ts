@@ -49,9 +49,11 @@ export async function POST(req: NextRequest) {
         let query = sql`SELECT ${sql.unsafe(select === '*' ? '*' : select)} FROM ${sql(table)}`;
 
         if (filterEntries.length > 0) {
-          // Build dynamic WHERE using sql fragments
+          // Build dynamic WHERE using sql fragments — null values become IS NULL
           const conditions = filterEntries.map(
-            ([col, val]) => sql`${sql(col)} = ${val as any}`
+            ([col, val]) => val === null
+              ? sql`${sql(col)} IS NULL`
+              : sql`${sql(col)} = ${val as any}`
           );
           query = sql`${query} WHERE ${conditions.reduce((a, b) => sql`${a} AND ${b}`)}`;
         }
@@ -96,7 +98,9 @@ export async function POST(req: NextRequest) {
         let query = sql`SELECT ${sql.unsafe(select === '*' ? '*' : select)} FROM ${sql(table)}`;
 
         const conditions = [
-          ...filterEntries.map(([col, val]) => sql`${sql(col)} = ${val as any}`),
+          ...filterEntries.map(([col, val]) => val === null
+            ? sql`${sql(col)} IS NULL`
+            : sql`${sql(col)} = ${val as any}`),
           ...rangeFilters.flatMap(rf => {
             const parts = [];
             if (rf.gte !== undefined) parts.push(sql`${sql(rf.column)} >= ${rf.gte}`);
