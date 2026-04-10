@@ -30,6 +30,7 @@ export interface User {
   bundesland?: string;
   hasChurchTax?: boolean;
   kirchensteuerpflichtig?: boolean;
+  kvZusatzRate?: number;  // Krankenkassen-Zusatzbeitrag in % (z.B. 1.7 für TK, 1.9 für Barmer)
   canLoginWithPassword?: boolean;
   authProvider?: 'password' | 'anonymous';
   svNr?: string; // Sozialversicherungsnummer

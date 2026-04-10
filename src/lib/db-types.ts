@@ -62,6 +62,7 @@ export interface DbUser {
   sv_nr: string | null;
   steuer_id: string | null;
   status_taetigkeit: string | null;
+  kv_zusatz_rate: number | null; // Zusatzbeitrag der Krankenkasse in %
   created_at: string;
   updated_at: string;
 }

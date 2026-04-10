@@ -511,12 +511,12 @@ function WorkerDetailDialog({
                 <Separator />
                 {[
                   { label: `Lohnsteuer (SK ${user.taxClass ?? 1})`, value: payroll.lohnsteuer },
-                  { label: 'Solidaritätszuschlag', value: payroll.soli },
+                  ...(payroll.soli > 0 ? [{ label: 'Solidaritätszuschlag', value: payroll.soli }] : []),
                   ...(payroll.kirchensteuer > 0 ? [{ label: 'Kirchensteuer', value: payroll.kirchensteuer }] : []),
-                  { label: 'Krankenversicherung', value: payroll.krankenversicherung },
-                  { label: 'Rentenversicherung', value: payroll.rentenversicherung },
-                  { label: 'Arbeitslosenversicherung', value: payroll.arbeitslosenversicherung },
-                  { label: 'Pflegeversicherung', value: payroll.pflegeversicherung },
+                  { label: `Krankenversicherung (${(14.6 + payroll.kvZusatzRate).toFixed(2)}% / 2 = ${(7.3 + payroll.kvZusatzRate / 2).toFixed(2)}% AN)`, value: payroll.krankenversicherung },
+                  { label: 'Rentenversicherung (9,3% AN)', value: payroll.rentenversicherung },
+                  { label: 'Arbeitslosenversicherung (1,3% AN)', value: payroll.arbeitslosenversicherung },
+                  { label: `Pflegeversicherung (${(user.kinder ?? 0) > 0 ? '1,7%' : '2,0%'} AN)`, value: payroll.pflegeversicherung },
                 ].map(({ label, value }) => (
                   <div key={label} className="flex justify-between items-center text-sm text-muted-foreground">
                     <span>{label}</span>
@@ -530,7 +530,7 @@ function WorkerDetailDialog({
                 </div>
                 <p className="text-[9px] text-muted-foreground/60 leading-relaxed pt-2">
                   * Vereinfachte Simulation. Keine rechtsgültige Lohnabrechnung.
-                  Steuerklasse {user.taxClass ?? 1}, {user.kinder ?? 0} Kinder, {user.bundesland ?? 'DEFAULT'}.
+                  SK {user.taxClass ?? 1} · {user.kinder ?? 0} Kinder · {user.bundesland ?? 'ST'} · KV-Zusatz {payroll.kvZusatzRate.toFixed(2)}%
                 </p>
               </div>
             </TabsContent>
@@ -634,6 +634,7 @@ export default function ReportsPage() {
     svNr: u.sv_nr,
     steuerId: u.steuer_id,
     statusTaetigkeit: u.status_taetigkeit,
+    kvZusatzRate: u.kv_zusatz_rate ?? 1.7,
   })), [rawEmployees]);
 
   const timeEntries = useMemo<TimeEntry[]>(() => (rawTimeEntries ?? []).map((e: any) => ({

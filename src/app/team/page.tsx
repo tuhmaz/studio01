@@ -106,6 +106,7 @@ export default function TeamPage() {
       svNr: row.sv_nr,
       steuerId: row.steuer_id,
       statusTaetigkeit: row.status_taetigkeit,
+      kvZusatzRate: row.kv_zusatz_rate ?? 1.7,
     }));
   }, [teamRaw]);
 
@@ -119,6 +120,7 @@ export default function TeamPage() {
     kinder: 0,
     hasChurchTax: false,
     bundesland: 'ST',
+    kvZusatzRate: 1.7,
     password: '',
     confirmPassword: '',
   });
@@ -256,6 +258,7 @@ export default function TeamPage() {
               sv_nr: formData.svNr || null,
               steuer_id: formData.steuerId || null,
               status_taetigkeit: formData.statusTaetigkeit || null,
+              kv_zusatz_rate: formData.kvZusatzRate ?? 1.7,
             },
           }),
         });
@@ -293,6 +296,7 @@ export default function TeamPage() {
       kinder: 0,
       hasChurchTax: false,
       bundesland: 'ST',
+      kvZusatzRate: 1.7,
       password: '',
       confirmPassword: '',
     });
@@ -479,6 +483,19 @@ export default function TeamPage() {
                     <p className="text-[10px] text-muted-foreground uppercase font-bold">9% Kirchensteuer in Sachsen-Anhalt</p>
                   </div>
                   <Switch checked={!!formData.hasChurchTax} onCheckedChange={(val) => setFormData({...formData, hasChurchTax: val})} />
+                </div>
+                <div className="space-y-2">
+                  <Label>KV-Zusatzbeitrag (%)</Label>
+                  <p className="text-[10px] text-muted-foreground font-bold uppercase">Zusatzbeitrag der Krankenkasse (z.B. 1.20 TK · 1.70 DAK · 1.90 Barmer)</p>
+                  <Input
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    max="5"
+                    className="h-12"
+                    value={formData.kvZusatzRate ?? 1.7}
+                    onChange={e => setFormData({...formData, kvZusatzRate: parseFloat(e.target.value) || 0})}
+                  />
                 </div>
 
                 <div className="md:col-span-2 border-t pt-4 mt-2">
