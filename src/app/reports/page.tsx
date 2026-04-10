@@ -17,9 +17,11 @@ import {
 } from '@/components/ui/dialog';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Separator } from '@/components/ui/separator';
+import { Label } from '@/components/ui/label';
+import { Input } from '@/components/ui/input';
 import {
   Clock, Users, TrendingUp, MapPin, Loader2,
-  Timer, ChevronRight, AlertCircle, FileDown, X, FileText, Image as ImageIcon, Trash2
+  Timer, ChevronRight, AlertCircle, FileDown, X, FileText, Image as ImageIcon, Trash2, Edit2
 } from 'lucide-react';
 import { simulatePayroll } from '@/lib/payroll';
 import { generateArbeitszeitnachweis, generateLohnzettel, LohnExportEntry, CompanySettings, save } from '@/lib/export-lohn';
@@ -272,6 +274,26 @@ function computeSiteStats(
   return Array.from(map.values()).sort((a, b) => b.totalMinutes - a.totalMinutes);
 }
 
+// ─── SVG → PNG Konvertierung (für jsPDF addImage) ────────────────────────────
+
+async function svgToPng(svgDataUrl: string, width = 400, height = 120): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const img = new window.Image();
+    img.onload = () => {
+      const canvas = document.createElement('canvas');
+      canvas.width  = width;
+      canvas.height = height;
+      const ctx = canvas.getContext('2d')!;
+      ctx.fillStyle = '#ffffff';
+      ctx.fillRect(0, 0, width, height);
+      ctx.drawImage(img, 0, 0, width, height);
+      resolve(canvas.toDataURL('image/png'));
+    };
+    img.onerror = reject;
+    img.src = svgDataUrl;
+  });
+}
+
 // ─── PDF Export Helper ────────────────────────────────────────────────────────
 
 function toExportEntries(entries: EnrichedEntry[]): LohnExportEntry[] {
@@ -311,7 +333,7 @@ function toExportEntries(entries: EnrichedEntry[]): LohnExportEntry[] {
 // ─── Worker Detail Dialog ─────────────────────────────────────────────────────
 
 function WorkerDetailDialog({
-  stats, month, year, open, onClose, onShowPdf, company, onVoidEntry
+  stats, month, year, open, onClose, onShowPdf, company, onVoidEntry, onEditEntry
 }: {
   stats: WorkerMonthStats;
   month: number; year: number;
@@ -319,9 +341,17 @@ function WorkerDetailDialog({
   onShowPdf: (type: 'stunden' | 'lohn', data: string) => void;
   company?: CompanySettings;
   onVoidEntry?: (entryId: string) => Promise<void>;
+  onEditEntry?: (entryId: string, start: string, end: string) => Promise<void>;
 }) {
   const [confirmVoidId, setConfirmVoidId] = useState<string | null>(null);
   const [voidingId, setVoidingId] = useState<string | null>(null);
+  
+  // Edit State
+  const [editingEntry, setEditingEntry] = useState<EnrichedEntry | null>(null);
+  const [editStart, setEditStart] = useState('');
+  const [editEnd, setEditEnd] = useState('');
+  const [isEditing, setIsEditing] = useState(false);
+
   const { user, entries, workMinutes, remoteBonusMinutes, billableMinutes, overtimeMinutes,
           brutto, visitedSites } = stats;
   const payroll = simulatePayroll(user, brutto);
@@ -337,8 +367,15 @@ function WorkerDetailDialog({
     return Object.entries(groups).sort(([a], [b]) => a.localeCompare(b));
   }, [entries]);
 
-  const handleExport = (type: 'stunden' | 'lohn') => {
+  const handleExport = async (type: 'stunden' | 'lohn') => {
     const generator = type === 'stunden' ? generateArbeitszeitnachweis : generateLohnzettel;
+
+    // SVG-Unterschrift → PNG konvertieren (jsPDF unterstützt kein SVG in addImage)
+    let signatureData: string | undefined = user.signatureData;
+    if (signatureData?.startsWith('data:image/svg+xml')) {
+      try { signatureData = await svgToPng(signatureData); } catch { signatureData = undefined; }
+    }
+
     const pdfData = generator({
       worker: {
         id: user.id,
@@ -353,6 +390,7 @@ function WorkerDetailDialog({
         kinder: user.kinder,
         hasChurchTax: user.hasChurchTax,
         kvZusatzRate: user.kvZusatzRate,
+        signatureData,
       },
       entries: toExportEntries(entries),
       month,
@@ -496,13 +534,32 @@ function WorkerDetailDialog({
                                 </button>
                               </div>
                             ) : (
-                              <button
-                                title="Stunden stornieren"
-                                className="text-muted-foreground hover:text-red-500 transition-colors shrink-0 p-1"
-                                onClick={() => setConfirmVoidId(entry.id)}
-                              >
-                                <Trash2 className="w-3.5 h-3.5" />
-                              </button>
+                              <div className="flex items-center gap-2">
+                                  {onEditEntry && (
+                                    <button
+                                      title="Stunden bearbeiten"
+                                      className="text-muted-foreground hover:text-blue-500 transition-colors shrink-0 p-1"
+                                      onClick={() => {
+                                        setEditingEntry({ entry, site, assignment, worker: user });
+                                        const sd = new Date(entry.clockInDateTime!);
+                                        const ed = entry.clockOutDateTime ? new Date(entry.clockOutDateTime) : new Date();
+                                        
+                                        const pad = (n: number) => String(n).padStart(2, '0');
+                                        setEditStart(`${sd.getFullYear()}-${pad(sd.getMonth()+1)}-${pad(sd.getDate())}T${pad(sd.getHours())}:${pad(sd.getMinutes())}`);
+                                        setEditEnd(`${ed.getFullYear()}-${pad(ed.getMonth()+1)}-${pad(ed.getDate())}T${pad(ed.getHours())}:${pad(ed.getMinutes())}`);
+                                      }}
+                                    >
+                                      <Edit2 className="w-3.5 h-3.5" />
+                                    </button>
+                                  )}
+                                <button
+                                  title="Stunden stornieren"
+                                  className="text-muted-foreground hover:text-red-500 transition-colors shrink-0 p-1"
+                                  onClick={() => setConfirmVoidId(entry.id)}
+                                >
+                                  <Trash2 className="w-3.5 h-3.5" />
+                                </button>
+                              </div>
                             )
                           )}
                         </div>
@@ -571,6 +628,67 @@ function WorkerDetailDialog({
           </Tabs>
         </div>
       </DialogContent>
+
+      {/* Edit Dialog */}
+      <Dialog open={!!editingEntry} onOpenChange={o => !o && setEditingEntry(null)}>
+        <DialogContent className="sm:max-w-md rounded-3xl border-none shadow-2xl p-6">
+          <DialogTitle className="text-xl font-black text-primary">Zeiteintrag bearbeiten</DialogTitle>
+          <DialogDescription className="text-muted-foreground font-medium mb-4">
+            Passen Sie die Arbeitszeiten für diesen Eintrag an.
+          </DialogDescription>
+          
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <Label className="text-xs font-black uppercase text-primary/60 tracking-widest">Startzeit</Label>
+              <Input
+                type="datetime-local"
+                value={editStart}
+                onChange={e => setEditStart(e.target.value)}
+                className="rounded-xl font-bold"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label className="text-xs font-black uppercase text-primary/60 tracking-widest">Endzeit</Label>
+              <Input
+                type="datetime-local"
+                value={editEnd}
+                onChange={e => setEditEnd(e.target.value)}
+                className="rounded-xl font-bold"
+              />
+            </div>
+          </div>
+          
+          <div className="flex justify-end gap-3 mt-6">
+            <Button
+              variant="outline"
+              onClick={() => setEditingEntry(null)}
+              className="rounded-xl font-bold border-gray-200"
+              disabled={isEditing}
+            >
+              Abbrechen
+            </Button>
+            <Button
+              className="rounded-xl font-black px-6"
+              disabled={isEditing || !editStart || !editEnd}
+              onClick={async () => {
+                if (!editingEntry || !onEditEntry) return;
+                setIsEditing(true);
+                try {
+                  await onEditEntry(editingEntry.entry.id, editStart, editEnd);
+                  setEditingEntry(null);
+                } catch (e) {
+                  // error handled in parent
+                } finally {
+                  setIsEditing(false);
+                }
+              }}
+            >
+              {isEditing ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : null}
+              Speichern
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </Dialog>
   );
 }
@@ -592,6 +710,7 @@ export default function ReportsPage() {
   const role = userProfile?.role ?? 'WORKER';
   const userName = userProfile?.name ?? '';
   const hasContext = !!userProfile && !!companyId;
+  const canManageTeam = role === 'ADMIN' || role === 'LEADER';
 
   useEffect(() => {
     return () => {
@@ -668,7 +787,8 @@ export default function ReportsPage() {
     svNr: u.sv_nr,
     steuerId: u.steuer_id,
     statusTaetigkeit: u.status_taetigkeit,
-    kvZusatzRate: parseFloat(u.kv_zusatz_rate) || 1.7,
+    kvZusatzRate:  parseFloat(u.kv_zusatz_rate) || 1.7,
+    signatureData: u.signature_data ?? undefined,
   })), [rawEmployees]);
 
   const timeEntries = useMemo<TimeEntry[]>(() => (rawTimeEntries ?? []).map((e: any) => ({
@@ -742,6 +862,44 @@ export default function ReportsPage() {
       toast({ title: 'Stunden storniert', description: 'Der Zeiteintrag wurde auf 0 gesetzt.' });
     } catch {
       toast({ variant: 'destructive', title: 'Stornierung fehlgeschlagen' });
+    }
+  };
+
+  // ── Edit a time entry ──────────────────────────────────────────────────────
+  const handleEditEntry = async (entryId: string, start: string, end: string) => {
+    try {
+      const startDate = new Date(start);
+      const endDate = new Date(end);
+      
+      if (isNaN(startDate.getTime()) || isNaN(endDate.getTime())) {
+        throw new Error('Ungültiges Datum');
+      }
+      if (endDate <= startDate) {
+        throw new Error('Das Enddatum muss nach dem Startdatum liegen');
+      }
+
+      const actualWorkMinutes = Math.round((endDate.getTime() - startDate.getTime()) / 60000);
+
+      const res = await fetch('/api/data', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'update',
+          table: 'time_entries',
+          filters: { id: entryId, company_id: companyId },
+          data: { 
+            clock_in_datetime: startDate.toISOString(),
+            clock_out_datetime: endDate.toISOString(),
+            actual_work_minutes: actualWorkMinutes
+          }
+        })
+      });
+      if (!res.ok) throw new Error('Bearbeiten fehlgeschlagen');
+      toast({ description: 'Zeiteintrag erfolgreich aktualisiert.' });
+      refreshTimeEntries();
+    } catch (e: any) {
+      toast({ variant: 'destructive', description: e.message || 'Fehler beim Bearbeiten' });
+      throw e;
     }
   };
 
@@ -967,7 +1125,8 @@ export default function ReportsPage() {
           onClose={() => setSelectedWorkerStats(null)}
           onShowPdf={handleShowPdf}
           company={company}
-          onVoidEntry={handleVoidEntry}
+          onVoidEntry={canManageTeam ? handleVoidEntry : undefined}
+          onEditEntry={canManageTeam ? handleEditEntry : undefined}
         />
       )}
 

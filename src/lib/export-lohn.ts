@@ -40,6 +40,7 @@ export interface LohnExportWorker {
   steuerId?: string;
   statusTaetigkeit?: string;
   kvZusatzRate?: number;
+  signatureData?: string; // base64 PNG data-URL (nach SVG→PNG Konvertierung im Browser)
 }
 
 export interface CompanySettings {
@@ -460,6 +461,20 @@ export function generateArbeitszeitnachweis(params: LohnExportParams) {
         data.cell.styles.textColor = [210, 215, 225];
       }
     },
+    didDrawCell: (data) => {
+      // Unterschrift-Spalte (Index 9) — Signatur in jede Zeile einzeichnen
+      if (
+        data.section === 'body' &&
+        data.column.index === 9 &&
+        data.row.index < groupedEntries.length &&
+        worker.signatureData
+      ) {
+        const { x, y, width, height } = data.cell;
+        try {
+          doc.addImage(worker.signatureData, 'PNG', x + 1, y + 0.5, width - 2, height - 1);
+        } catch (_) { /* Bild nicht verfügbar */ }
+      }
+    },
   });
 
   // ── Summary (hours only, no money) ──
@@ -530,6 +545,14 @@ export function generateArbeitszeitnachweis(params: LohnExportParams) {
   doc.line(col3x + 4, ry + 6, col3x + colW3 - 6, ry + 6);
   ry += 14;
   doc.text('Unterschrift Mitarbeiter:', col3x + 4, ry);
+  // Digitale Unterschrift einzeichnen (falls vorhanden)
+  if (worker.signatureData) {
+    try {
+      const sigW = colW3 - 10;
+      const sigH = 7;
+      doc.addImage(worker.signatureData, 'PNG', col3x + 4, ry - sigH + 1, sigW, sigH);
+    } catch (_) { /* Bild nicht verfügbar */ }
+  }
   doc.line(col3x + 4, ry + 6, col3x + colW3 - 6, ry + 6);
 
   drawFooter(doc, company, worker.name, periodLabel);
@@ -899,6 +922,14 @@ export function generateLohnzettel(params: LohnExportParams) {
     doc.setFont('helvetica', 'normal');
     doc.setFontSize(7);
     doc.text(label + ':', x + 3, sy + 5);
+    // Digitale Unterschrift Mitarbeiter (i === 1)
+    if (i === 1 && worker.signatureData) {
+      try {
+        const imgW = sigW - 8;
+        const imgH = 8;
+        doc.addImage(worker.signatureData, 'PNG', x + 3, sy + 5, imgW, imgH);
+      } catch (_) { /* Bild nicht verfügbar */ }
+    }
     doc.setDrawColor(...BORDER);
     doc.line(x + 3, sy + 14, x + sigW - 5, sy + 14);
   });

@@ -1,7 +1,7 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   View, Text, ScrollView, StyleSheet, TouchableOpacity,
-  Alert, ActivityIndicator, TextInput,
+  Alert, ActivityIndicator, TextInput, PanResponder, Modal,
 } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { Ionicons } from '@expo/vector-icons';
@@ -14,14 +14,157 @@ import { COLORS } from '@/utils/constants';
 import { formatDuration, formatDate } from '@/utils/helpers';
 
 interface MonthEntry { actual_work_minutes: number; clock_in_datetime: string; }
+type Point = { x: number; y: number };
+
+// ─── SVG-Konvertierung ────────────────────────────────────────────────────────
+
+const PAD_W = 320;
+const PAD_H = 130;
+
+function strokesToSvg(strokes: Point[][]): string {
+  const paths = strokes
+    .filter(s => s.length > 0)
+    .map(s => {
+      if (s.length === 1)
+        return `M${s[0].x.toFixed(1)},${s[0].y.toFixed(1)} L${(s[0].x + 0.5).toFixed(1)},${s[0].y.toFixed(1)}`;
+      return s.map((p, i) => `${i === 0 ? 'M' : 'L'}${p.x.toFixed(1)},${p.y.toFixed(1)}`).join(' ');
+    })
+    .join(' ');
+
+  return (
+    `<svg xmlns="http://www.w3.org/2000/svg" width="${PAD_W}" height="${PAD_H}" ` +
+    `viewBox="0 0 ${PAD_W} ${PAD_H}">` +
+    `<rect width="${PAD_W}" height="${PAD_H}" fill="white"/>` +
+    `<path d="${paths}" fill="none" stroke="#000000" stroke-width="2.5" ` +
+    `stroke-linecap="round" stroke-linejoin="round"/>` +
+    `</svg>`
+  );
+}
+
+function svgToDataUrl(svg: string): string {
+  // btoa is available as a global in React Native
+  return `data:image/svg+xml;base64,${btoa(unescape(encodeURIComponent(svg)))}`;
+}
+
+// ─── Signature Pad Modal ──────────────────────────────────────────────────────
+
+function SignaturePadModal({
+  visible,
+  onSave,
+  onCancel,
+}: {
+  visible: boolean;
+  onSave: (dataUrl: string) => void;
+  onCancel: () => void;
+}) {
+  const [strokes, setStrokes]       = useState<Point[][]>([]);
+  const [current, setCurrent]       = useState<Point[]>([]);
+  const allPoints = [...strokes, current];
+
+  const panResponder = useRef(
+    PanResponder.create({
+      onStartShouldSetPanResponder: () => true,
+      onMoveShouldSetPanResponder:  () => true,
+      onPanResponderGrant: (evt) => {
+        const { locationX, locationY } = evt.nativeEvent;
+        setCurrent([{ x: locationX, y: locationY }]);
+      },
+      onPanResponderMove: (evt) => {
+        const { locationX, locationY } = evt.nativeEvent;
+        setCurrent(prev => [...prev, { x: locationX, y: locationY }]);
+      },
+      onPanResponderRelease: () => {
+        setCurrent(prev => {
+          setStrokes(s => [...s, prev]);
+          return [];
+        });
+      },
+    })
+  ).current;
+
+  const handleClear = () => { setStrokes([]); setCurrent([]); };
+
+  const handleSave = () => {
+    const allStrokes = strokes.filter(s => s.length > 0);
+    if (allStrokes.length === 0) {
+      Alert.alert('Keine Unterschrift', 'Bitte zuerst unterschreiben.');
+      return;
+    }
+    onSave(svgToDataUrl(strokesToSvg(allStrokes)));
+  };
+
+  // Reset when modal opens
+  useEffect(() => {
+    if (visible) { setStrokes([]); setCurrent([]); }
+  }, [visible]);
+
+  return (
+    <Modal visible={visible} transparent animationType="slide" onRequestClose={onCancel}>
+      <View style={pad.overlay}>
+        <View style={pad.sheet}>
+
+          {/* Header */}
+          <View style={pad.header}>
+            <Text style={pad.title}>Unterschrift</Text>
+            <TouchableOpacity onPress={onCancel}>
+              <Ionicons name="close" size={22} color={COLORS.text} />
+            </TouchableOpacity>
+          </View>
+
+          <Text style={pad.hint}>Unterschreiben Sie im weißen Feld</Text>
+
+          {/* Drawing area */}
+          <View
+            style={pad.canvas}
+            {...panResponder.panHandlers}
+            collapsable={false}
+          >
+            {/* Render all captured stroke points as small dots */}
+            {allPoints.flatMap((stroke, si) =>
+              stroke.map((pt, pi) => (
+                <View
+                  key={`${si}-${pi}`}
+                  style={[pad.dot, { left: pt.x - 1.5, top: pt.y - 1.5 }]}
+                />
+              ))
+            )}
+
+            {/* Placeholder text if empty */}
+            {strokes.length === 0 && current.length === 0 && (
+              <Text style={pad.placeholder}>Hier unterschreiben ↓</Text>
+            )}
+          </View>
+
+          {/* Actions */}
+          <View style={pad.actions}>
+            <TouchableOpacity style={pad.clearBtn} onPress={handleClear}>
+              <Ionicons name="refresh-outline" size={16} color={COLORS.textMuted} />
+              <Text style={pad.clearText}>Löschen</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={pad.saveBtn} onPress={handleSave}>
+              <Ionicons name="checkmark" size={16} color="#fff" />
+              <Text style={pad.saveBtnText}>Speichern</Text>
+            </TouchableOpacity>
+          </View>
+
+        </View>
+      </View>
+    </Modal>
+  );
+}
+
+// ─── Profile Screen ───────────────────────────────────────────────────────────
 
 export default function ProfileScreen() {
   const { user, logout } = useAuth();
-  const [entries,     setEntries]     = useState<MonthEntry[]>([]);
-  const [loading,     setLoading]     = useState(true);
-  const [serverUrl,   setServerUrl]   = useState('');
-  const [editServer,  setEditServer]  = useState(false);
-  const [tempUrl,     setTempUrl]     = useState('');
+  const [entries,       setEntries]       = useState<MonthEntry[]>([]);
+  const [loading,       setLoading]       = useState(true);
+  const [serverUrl,     setServerUrl]     = useState('');
+  const [editServer,    setEditServer]    = useState(false);
+  const [tempUrl,       setTempUrl]       = useState('');
+  const [hasSig,        setHasSig]        = useState(false);
+  const [sigPadOpen,    setSigPadOpen]    = useState(false);
+  const [savingSig,     setSavingSig]     = useState(false);
 
   const now   = new Date();
   const month = now.getMonth();
@@ -33,22 +176,30 @@ export default function ProfileScreen() {
     setServerUrl(url);
     if (!silent) setLoading(true);
     try {
+      // Load time entries
       const start = `${year}-${String(month + 1).padStart(2, '0')}-01`;
       const end   = `${year}-${String(month + 1).padStart(2, '0')}-31`;
-      const res = await apiData<MonthEntry[]>({
-        action: 'query_range', table: 'time_entries',
-        filters: { employee_id: user.id, company_id: user.companyId },
-        rangeFilters: [{ column: 'clock_in_datetime', gte: start, lte: end }],
-        orderBy: { column: 'clock_in_datetime', ascending: false },
-      });
-      setEntries((res.data ?? []).filter(e => e.actual_work_minutes != null));
+      const [entriesRes, userRes] = await Promise.all([
+        apiData<MonthEntry[]>({
+          action: 'query_range', table: 'time_entries',
+          filters: { employee_id: user.id, company_id: user.companyId },
+          rangeFilters: [{ column: 'clock_in_datetime', gte: start, lte: end }],
+          orderBy: { column: 'clock_in_datetime', ascending: false },
+        }),
+        apiData<{ signature_data: string | null }[]>({
+          action: 'query', table: 'users',
+          filters: { id: user.id },
+          select: 'signature_data',
+        }),
+      ]);
+      setEntries((entriesRes.data ?? []).filter(e => e.actual_work_minutes != null));
+      const sigData = (userRes.data ?? [])[0]?.signature_data;
+      setHasSig(!!sigData);
     } finally { setLoading(false); }
   }, [user, month, year]);
 
   useFocusEffect(
-    useCallback(() => {
-      load(true);
-    }, [load])
+    useCallback(() => { load(true); }, [load])
   );
 
   const totalMinutes = entries.reduce((s, e) => s + (e.actual_work_minutes ?? 0), 0);
@@ -67,6 +218,49 @@ export default function ProfileScreen() {
       { text: 'Abbrechen', style: 'cancel' },
       { text: 'Abmelden', style: 'destructive', onPress: logout },
     ]);
+  };
+
+  const handleSaveSignature = async (dataUrl: string) => {
+    if (!user) return;
+    setSigPadOpen(false);
+    setSavingSig(true);
+    try {
+      await apiData({
+        action: 'update', table: 'users',
+        filters: { id: user.id },
+        data: { signature_data: dataUrl },
+      });
+      setHasSig(true);
+      Alert.alert('Gespeichert', 'Ihre Unterschrift wurde erfolgreich gespeichert.');
+    } catch {
+      Alert.alert('Fehler', 'Unterschrift konnte nicht gespeichert werden.');
+    } finally {
+      setSavingSig(false);
+    }
+  };
+
+  const handleDeleteSignature = () => {
+    Alert.alert(
+      'Unterschrift löschen',
+      'Möchten Sie Ihre Unterschrift wirklich löschen?',
+      [
+        { text: 'Abbrechen', style: 'cancel' },
+        {
+          text: 'Löschen', style: 'destructive',
+          onPress: async () => {
+            setSavingSig(true);
+            try {
+              await apiData({
+                action: 'update', table: 'users',
+                filters: { id: user!.id },
+                data: { signature_data: null },
+              });
+              setHasSig(false);
+            } finally { setSavingSig(false); }
+          },
+        },
+      ]
+    );
   };
 
   const roleLabel = user?.role === 'ADMIN' ? 'Administrator' : user?.role === 'LEADER' ? 'Teamleiter' : 'Mitarbeiter';
@@ -117,6 +311,43 @@ export default function ProfileScreen() {
           ))}
         </View>
 
+        {/* ── Digitale Unterschrift ── */}
+        <View style={styles.card}>
+          <View style={styles.cardHeader}>
+            <Ionicons name="create-outline" size={16} color={COLORS.primary} />
+            <Text style={styles.cardTitle}>Digitale Unterschrift</Text>
+          </View>
+
+          <Text style={styles.sigDesc}>
+            Ihre Unterschrift wird automatisch auf dem Arbeitszeitnachweis gedruckt.
+          </Text>
+
+          {savingSig ? (
+            <ActivityIndicator color={COLORS.primary} style={{ marginVertical: 12 }} />
+          ) : hasSig ? (
+            <View style={styles.sigStatusRow}>
+              <View style={styles.sigBadge}>
+                <Ionicons name="checkmark-circle" size={16} color="#22c55e" />
+                <Text style={styles.sigBadgeText}>Unterschrift gespeichert</Text>
+              </View>
+              <View style={styles.sigBtns}>
+                <TouchableOpacity style={styles.sigEditBtn} onPress={() => setSigPadOpen(true)}>
+                  <Ionicons name="pencil-outline" size={14} color={COLORS.primary} />
+                  <Text style={styles.sigEditText}>Ändern</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={styles.sigDeleteBtn} onPress={handleDeleteSignature}>
+                  <Ionicons name="trash-outline" size={14} color="#ef4444" />
+                </TouchableOpacity>
+              </View>
+            </View>
+          ) : (
+            <TouchableOpacity style={styles.sigAddBtn} onPress={() => setSigPadOpen(true)}>
+              <Ionicons name="add-circle-outline" size={17} color="#fff" />
+              <Text style={styles.sigAddText}>Unterschrift hinzufügen</Text>
+            </TouchableOpacity>
+          )}
+        </View>
+
         {/* Server URL */}
         <View style={styles.card}>
           <View style={styles.cardHeader}>
@@ -154,9 +385,18 @@ export default function ProfileScreen() {
 
         <Text style={styles.version}>Hausmeister Pro v1.0.0</Text>
       </ScrollView>
+
+      {/* Signature Pad Modal */}
+      <SignaturePadModal
+        visible={sigPadOpen}
+        onSave={handleSaveSignature}
+        onCancel={() => setSigPadOpen(false)}
+      />
     </View>
   );
 }
+
+// ─── Styles ───────────────────────────────────────────────────────────────────
 
 const styles = StyleSheet.create({
   container:    { flex: 1, backgroundColor: COLORS.bg },
@@ -186,17 +426,47 @@ const styles = StyleSheet.create({
   entryRow:     { flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 6, borderTopWidth: 1, borderTopColor: COLORS.border },
   entryDate:    { flex: 1, fontSize: 12, color: COLORS.textMuted },
   entryDur:     { fontSize: 12, fontWeight: '700', color: COLORS.text },
+
+  // Signature card
+  sigDesc:       { fontSize: 11, color: COLORS.textMuted, marginBottom: 12, lineHeight: 16 },
+  sigStatusRow:  { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  sigBadge:      { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  sigBadgeText:  { fontSize: 12, fontWeight: '700', color: '#22c55e' },
+  sigBtns:       { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  sigEditBtn:    { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: `${COLORS.primary}15`, borderRadius: 8, paddingHorizontal: 10, paddingVertical: 6 },
+  sigEditText:   { fontSize: 12, fontWeight: '700', color: COLORS.primary },
+  sigDeleteBtn:  { padding: 6, backgroundColor: '#fef2f2', borderRadius: 8 },
+  sigAddBtn:     { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, backgroundColor: COLORS.primary, borderRadius: 12, paddingVertical: 12 },
+  sigAddText:    { color: '#fff', fontWeight: '800', fontSize: 13 },
+
+  // Server card
   urlText:      { fontSize: 12, color: COLORS.textMuted, fontFamily: 'monospace' },
-  urlInput:     {
-    borderWidth: 1.5, borderColor: COLORS.border, borderRadius: 10,
-    paddingHorizontal: 12, paddingVertical: 8, fontSize: 13, color: COLORS.text,
-  },
+  urlInput:     { borderWidth: 1.5, borderColor: COLORS.border, borderRadius: 10, paddingHorizontal: 12, paddingVertical: 8, fontSize: 13, color: COLORS.text },
   saveBtn:      { backgroundColor: COLORS.primary, borderRadius: 10, paddingVertical: 10, alignItems: 'center' },
   saveBtnText:  { color: '#fff', fontWeight: '800', fontSize: 13 },
-  logoutBtn:    {
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8,
-    backgroundColor: `${COLORS.accent}15`, borderRadius: 16, paddingVertical: 16, marginTop: 4,
-  },
+  logoutBtn:    { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, backgroundColor: `${COLORS.accent}15`, borderRadius: 16, paddingVertical: 16, marginTop: 4 },
   logoutText:   { color: COLORS.accent, fontWeight: '800', fontSize: 15 },
   version:      { textAlign: 'center', color: COLORS.textLight, fontSize: 11, marginTop: 20 },
+});
+
+const pad = StyleSheet.create({
+  overlay:     { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' },
+  sheet:       { backgroundColor: '#fff', borderTopLeftRadius: 28, borderTopRightRadius: 28, padding: 20, paddingBottom: 36 },
+  header:      { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 },
+  title:       { fontSize: 17, fontWeight: '900', color: COLORS.text },
+  hint:        { fontSize: 11, color: COLORS.textMuted, marginBottom: 14 },
+  canvas:      {
+    width: '100%', height: PAD_H,
+    backgroundColor: '#fff',
+    borderWidth: 1.5, borderColor: COLORS.border, borderRadius: 14,
+    overflow: 'hidden',
+    position: 'relative',
+  },
+  dot:         { position: 'absolute', width: 3, height: 3, borderRadius: 1.5, backgroundColor: '#000' },
+  placeholder: { position: 'absolute', bottom: 10, left: 0, right: 0, textAlign: 'center', fontSize: 12, color: COLORS.textLight },
+  actions:     { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 16, gap: 12 },
+  clearBtn:    { flexDirection: 'row', alignItems: 'center', gap: 6, paddingVertical: 10, paddingHorizontal: 16, borderRadius: 12, borderWidth: 1.5, borderColor: COLORS.border, flex: 1, justifyContent: 'center' },
+  clearText:   { fontSize: 13, fontWeight: '700', color: COLORS.textMuted },
+  saveBtn:     { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: COLORS.primary, paddingVertical: 10, paddingHorizontal: 20, borderRadius: 12, flex: 2, justifyContent: 'center' },
+  saveBtnText: { color: '#fff', fontWeight: '800', fontSize: 13 },
 });

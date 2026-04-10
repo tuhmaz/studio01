@@ -63,6 +63,7 @@ export interface DbUser {
   steuer_id: string | null;
   status_taetigkeit: string | null;
   kv_zusatz_rate: number | null; // Zusatzbeitrag der Krankenkasse in %
+  signature_data: string | null;  // Digitale Unterschrift als SVG data-URL
   created_at: string;
   updated_at: string;
 }

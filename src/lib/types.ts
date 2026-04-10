@@ -31,6 +31,7 @@ export interface User {
   hasChurchTax?: boolean;
   kirchensteuerpflichtig?: boolean;
   kvZusatzRate?: number;  // Krankenkassen-Zusatzbeitrag in % (z.B. 1.7 für TK, 1.9 für Barmer)
+  signatureData?: string; // Digitale Unterschrift als SVG data-URL
   canLoginWithPassword?: boolean;
   authProvider?: 'password' | 'anonymous';
   svNr?: string; // Sozialversicherungsnummer
