@@ -296,7 +296,12 @@ export default function TrackingPage() {
     [jobSitesRaw],
   );
 
-  const site = activeAssignment ? jobSites.find(s => s.id === activeAssignment.jobSiteId) : null;
+  const site = activeAssignment?.jobSiteId
+    ? (jobSites.find(s => s.id === activeAssignment.jobSiteId) ?? null)
+    : null;
+  // Display name/address: prefer site data, fall back to assignment title
+  const displayName    = site?.name || site?.city || activeAssignment?.title || 'Einsatz';
+  const displayAddress = site?.address ? `${site.address}${site.city ? ', ' + site.city : ''}` : null;
 
   const dueServices = useMemo(() => {
     if (!site?.services) return [];
@@ -632,9 +637,9 @@ export default function TrackingPage() {
                     </p>
                     {a.status === 'IN_PROGRESS' && <div className="w-2 h-2 rounded-full bg-green-400 animate-pulse" />}
                   </div>
-                  <p className="font-black text-lg truncate">{s?.name || s?.city || 'Unbekannt'}</p>
+                  <p className="font-black text-lg truncate">{s?.name || s?.city || a.title || 'Einsatz'}</p>
                   <p className={`text-xs font-medium truncate mt-1 ${isActive ? 'text-white/70' : 'text-muted-foreground'}`}>
-                    {s?.address || 'Keine Adresse'}
+                    {s?.address || (a.scheduledDate ? new Date(a.scheduledDate).toLocaleDateString('de-DE') : 'Kein Datum')}
                   </p>
                 </button>
               );
@@ -666,7 +671,7 @@ export default function TrackingPage() {
             </div>
             <CardTitle className="text-3xl font-black text-foreground uppercase tracking-tight">Zeiterfassung</CardTitle>
             <CardDescription className="font-bold text-muted-foreground">
-              {isClockedIn ? `Eingestempelt — ${site?.name || site?.city || ''}` : 'Starten Sie Ihre Schicht am Einsatzort.'}
+              {isClockedIn ? `Eingestempelt — ${displayName}` : 'Starten Sie Ihre Schicht am Einsatzort.'}
             </CardDescription>
           </CardHeader>
 
@@ -674,7 +679,7 @@ export default function TrackingPage() {
             <CardContent className="py-20 flex justify-center">
               <Loader2 className="animate-spin text-primary w-10 h-10" />
             </CardContent>
-          ) : activeAssignment && site ? (
+          ) : activeAssignment ? (
             <>
               <CardContent className="px-8 space-y-5">
                 <div className="bg-white p-6 rounded-3xl shadow-sm border border-primary/8 space-y-5">
@@ -684,19 +689,21 @@ export default function TrackingPage() {
                     </div>
                     <div className="min-w-0 flex-1">
                       <p className="text-[10px] text-primary font-black uppercase tracking-widest mb-1">Aktuelles Objekt</p>
-                      <p className="text-xl font-black">{site.name || site.city}</p>
-                      <p className="text-xs text-muted-foreground font-medium mt-1">{site.address}, {site.city}</p>
+                      <p className="text-xl font-black">{displayName}</p>
+                      <p className="text-xs text-muted-foreground font-medium mt-1">{displayAddress ?? activeAssignment.scheduledDate ?? ''}</p>
                       {locationError && <p className="text-xs text-destructive font-bold mt-2">{locationError}</p>}
                     </div>
                   </div>
 
+                  {displayAddress && (
                   <div className="mt-4 rounded-3xl overflow-hidden border border-primary/10 shadow-sm h-48 bg-gray-50 relative">
                     <iframe
                       width="100%" height="100%" style={{ border: 0 }} loading="lazy" allowFullScreen
                       referrerPolicy="no-referrer-when-downgrade"
-                      src={`https://maps.google.com/maps?q=${encodeURIComponent(site.address + ', ' + site.city)}&t=&z=15&ie=UTF8&iwloc=&output=embed`}
+                      src={`https://maps.google.com/maps?q=${encodeURIComponent(displayAddress)}&t=&z=15&ie=UTF8&iwloc=&output=embed`}
                     />
                   </div>
+                  )}
 
                   {(activeAssignment.assignedWorkerIds?.length ?? 0) > 0 && (
                     <div className="flex items-center gap-3 px-4 py-3 bg-primary/5 rounded-2xl">
