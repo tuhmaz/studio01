@@ -74,9 +74,42 @@ export async function POST(req: NextRequest) {
 
       if (!found) continue;
 
+      // ─── OSRM Distanz- & Fahrtzeitberechnung ───
+      let distanceKm = 0;
+      let travelTimeMinutes = 0;
+      let isRemote = false;
+
+      try {
+        const hqLat = 52.0189651;
+        const hqLng = 11.7265854;
+        const osrmUrl = `https://router.project-osrm.org/route/v1/driving/${hqLng},${hqLat};${lng},${lat}?overview=false`;
+        const osrmRes = await fetch(osrmUrl);
+        const osrmData = await osrmRes.json();
+
+        if (osrmData.code === 'Ok' && osrmData.routes && osrmData.routes.length > 0) {
+          const distanceMeters = osrmData.routes[0].distance;
+          const durationSeconds = osrmData.routes[0].duration;
+
+          distanceKm = parseFloat((distanceMeters / 1000).toFixed(1));
+          travelTimeMinutes = Math.round(durationSeconds / 60);
+
+          if (distanceKm > 95) {
+            isRemote = true;
+            travelTimeMinutes += 60; // +1 Std. bei > 95km
+          }
+        }
+      } catch (e) {
+        console.error(`OSRM route calc failed for site ${site.id}`, e);
+      }
+
       await sql`
         UPDATE public.job_sites
-        SET lat = ${lat}, lng = ${lng}
+        SET lat = ${lat}, 
+            lng = ${lng},
+            distance_from_hq = ${distanceKm},
+            travel_time_from_hq = ${travelTimeMinutes},
+            estimated_travel_time_minutes_from_hq = ${travelTimeMinutes},
+            is_remote = ${isRemote}
         WHERE id = ${site.id}
       `;
 

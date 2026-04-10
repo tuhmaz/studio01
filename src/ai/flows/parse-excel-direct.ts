@@ -296,19 +296,46 @@ export async function parseExcelDirect(
         };
       }
 
-      const idNum = parseInt(id, 10) || 0;
-      // Placeholder-Logik: Für echte Distanzen von "Johannes-R.-Becher-Straße 25, 39218 Schönebeck"
-      // wird zukünftig eine Maps-API (z.B. Google Maps) angebunden.
-      // Hier simulieren wir Distanzen so, dass LR-38 teilweise über 95km liegt.
-      const distanceFromHQ = region === 'LR-38' ? 75 + (idNum % 40) : 10 + (idNum % 20);
-      const isRemote = distanceFromHQ > 95;
-      
-      // Basis-Fahrtzeit (grob 1 Min pro km)
-      let estimatedTravelTimeMinutesFromHQ = region === 'LR-38' ? distanceFromHQ + 20 : distanceFromHQ + 10;
-      
-      // Regel: Wenn Distanz > 95km, wird eine zusätzliche Stunde (60 Min) berechnet
-      if (isRemote) {
-        estimatedTravelTimeMinutesFromHQ += 60;
+      let distanceFromHQ = 0;
+      let estimatedTravelTimeMinutesFromHQ = 0;
+      let isRemote = false;
+
+      try {
+        const query = [address, city, postalCode, 'Deutschland'].filter(Boolean).join(', ');
+        const url = `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(query)}&limit=1&countrycodes=de`;
+        const res = await fetch(url, { headers: { 'User-Agent': 'HausmeisterPro/1.0' } });
+        const data = await res.json();
+
+        if (data && data.length > 0) {
+          const siteLat = parseFloat(data[0].lat);
+          const siteLng = parseFloat(data[0].lon);
+
+          const hqLat = 52.0189651;
+          const hqLng = 11.7265854;
+
+          const osrmUrl = `https://router.project-osrm.org/route/v1/driving/${hqLng},${hqLat};${siteLng},${siteLat}?overview=false`;
+          const osrmRes = await fetch(osrmUrl);
+          const osrmData = await osrmRes.json();
+
+          if (osrmData.code === 'Ok' && osrmData.routes && osrmData.routes.length > 0) {
+            const distanceMeters = osrmData.routes[0].distance;
+            const durationSeconds = osrmData.routes[0].duration;
+
+            distanceFromHQ = parseFloat((distanceMeters / 1000).toFixed(1));
+            estimatedTravelTimeMinutesFromHQ = Math.round(durationSeconds / 60);
+            
+            if (distanceFromHQ > 95) {
+              isRemote = true;
+              estimatedTravelTimeMinutesFromHQ += 60; // +1 Std. bei > 95km
+            }
+          }
+        }
+        // Nominatim Rate-Limit einhalten (max 1 Request pro Sekunde)
+        await new Promise(r => setTimeout(r, 1100));
+      } catch (e) {
+        console.error("Route calc failed for", city, e);
+        // Auch bei Fehler kurz warten
+        await new Promise(r => setTimeout(r, 1100));
       }
 
       sitesMap.set(id, {
