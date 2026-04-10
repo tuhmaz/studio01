@@ -149,11 +149,17 @@ function computeMonthlyStats(
   month: number,
   year: number
 ): WorkerMonthStats[] {
+  // Abrechnungszeitraum: 21. Vormonat – 20. Aktueller Monat
+  const prevMonth = month === 0 ? 11 : month - 1;
+  const prevYear  = month === 0 ? year - 1 : year;
+  const periodStart = new Date(prevYear, prevMonth, 21, 0, 0, 0);
+  const periodEnd   = new Date(year, month, 20, 23, 59, 59);
+
   const relevant = timeEntries.filter(e => {
     if (e.status !== 'SUBMITTED' && e.status !== 'APPROVED') return false;
     if (!e.clockInDateTime) return false;
     const d = new Date(e.clockInDateTime);
-    return d.getMonth() === month && d.getFullYear() === year;
+    return d >= periodStart && d <= periodEnd;
   });
 
   return users
@@ -165,8 +171,13 @@ function computeMonthlyStats(
       if (!userEntries.length) return null;
 
       const workMinutes = userEntries.reduce((s, e) => s + (e.entry.actualWorkMinutes ?? 0), 0);
-      // FIX: use stored travelBonusMinutes from each entry instead of hardcoded 60 per remote site
-      const remoteBonusMinutes = userEntries.reduce((s, e) => s + (e.entry.travelBonusMinutes ?? 0), 0);
+      // Fahrtabzug: gespeicherter Wert, oder -60 falls Remote-Standort aber kein Wert gespeichert
+      const remoteBonusMinutes = userEntries.reduce((s, e) => {
+        const stored = e.entry.travelBonusMinutes ?? 0;
+        if (stored !== 0) return s + stored;
+        const isFar = (e.site?.isRemote ?? false) || Number(e.site?.distanceFromHQ ?? 0) >= 50;
+        return s + (isFar ? -60 : 0);
+      }, 0);
       const billableMinutes = workMinutes + remoteBonusMinutes;
       const targetMinutes = (user.monthlyTargetHours ?? 0) * 60;
       const overtimeMinutes = targetMinutes > 0 ? Math.max(0, billableMinutes - targetMinutes) : 0;
@@ -259,20 +270,33 @@ function computeSiteStats(
 function toExportEntries(entries: EnrichedEntry[]): LohnExportEntry[] {
   return entries
     .filter(e => e.entry.clockInDateTime && e.entry.clockOutDateTime)
-    .map(e => ({
-      date: e.entry.clockInDateTime!,
-      clockIn: e.entry.clockInDateTime!,
-      clockOut: e.entry.clockOutDateTime!,
-      workMinutes: e.entry.actualWorkMinutes ?? 0,
-      siteName: e.site?.name || e.site?.city || e.assignment?.title || '',
-      siteAddress: e.site?.address || '',
-      region: e.site?.routeCode || e.site?.region || '',
-      isRemote: e.site?.isRemote ?? false,
-      distanceKm: 0,
-      // FIX: use stored travelBonusMinutes instead of hardcoded 60
-      travelBonusMinutes: e.entry.travelBonusMinutes ?? 0,
-      categories: e.assignment?.categories ?? [],
-    }));
+    .map(e => {
+      const isRemote = e.site?.isRemote ?? false;
+      const distanceFromHQ = Number(e.site?.distanceFromHQ ?? 0);
+      const isFarSite = isRemote || distanceFromHQ >= 50;
+
+      // Wenn die Stelle remote ist aber kein Fahrtabzug gespeichert wurde → automatisch -60 anwenden
+      const storedBonus = e.entry.travelBonusMinutes ?? 0;
+      const travelBonusMinutes = storedBonus !== 0 ? storedBonus : (isFarSite ? -60 : 0);
+
+      // Objekt: Name + Adresse kombinieren für eindeutige Identifikation (z.B. mehrere Standorte in Braunschweig)
+      const siteName    = [e.site?.name, e.site?.city].filter(Boolean).join(' / ') || e.assignment?.title || '';
+      const siteAddress = e.site?.address || '';
+
+      return {
+        date:               e.entry.clockInDateTime!,
+        clockIn:            e.entry.clockInDateTime!,
+        clockOut:           e.entry.clockOutDateTime!,
+        workMinutes:        e.entry.actualWorkMinutes ?? 0,
+        siteName,
+        siteAddress,
+        region:             e.site?.routeCode || e.site?.region || '',
+        isRemote:           isFarSite,
+        distanceKm:         distanceFromHQ,
+        travelBonusMinutes,
+        categories:         e.assignment?.categories ?? [],
+      };
+    });
 }
 
 // ─── Worker Detail Dialog ─────────────────────────────────────────────────────
