@@ -593,25 +593,42 @@ export default function TrackingPage() {
         </div>
 
 
-        {assignments.filter(a => a.status !== 'COMPLETED').length > 1 && (
+        {assignments.filter(a => a.status !== 'COMPLETED').length > 0 && (
           <div className="flex gap-3 overflow-x-auto pb-4 snap-x">
-            {assignments.filter(a => a.status !== 'COMPLETED').map(a => {
+            {assignments.filter(a => a.status !== 'COMPLETED')
+              .sort((a, b) => {
+                if (a.status === 'IN_PROGRESS') return -1;
+                if (b.status === 'IN_PROGRESS') return 1;
+                const aDelayed = a.scheduledDate && a.scheduledDate < today ? 1 : 0;
+                const bDelayed = b.scheduledDate && b.scheduledDate < today ? 1 : 0;
+                return bDelayed - aDelayed; // Show delayed first
+              })
+              .map(a => {
               const s = jobSites.find(site => site.id === a.jobSiteId);
               const isActive = a.id === selectedAssignmentId;
+              const isDelayed = a.scheduledDate && a.scheduledDate < today;
+              
               return (
                 <button
                   key={a.id}
                   onClick={() => setSelectedAssignmentId(a.id)}
                   disabled={isClockedIn && !isActive}
-                  className={`snap-center shrink-0 px-5 py-4 rounded-3xl border-2 text-left w-[240px] transition-all duration-300
+                  className={`snap-center shrink-0 px-5 py-4 rounded-3xl border-2 text-left w-[240px] transition-all duration-300 relative overflow-hidden
                     ${isActive
                       ? 'bg-primary text-white border-primary shadow-xl shadow-primary/20 scale-100 ring-4 ring-primary/20'
-                      : 'bg-white border-transparent shadow-sm text-foreground hover:bg-gray-50 scale-95 opacity-80'
+                      : isDelayed
+                        ? 'bg-red-50 border-red-200 shadow-sm text-foreground hover:bg-red-100 scale-95 opacity-90'
+                        : 'bg-white border-transparent shadow-sm text-foreground hover:bg-gray-50 scale-95 opacity-80'
                     } ${isClockedIn && !isActive ? 'opacity-50 cursor-not-allowed' : ''}`}
                 >
+                  {isDelayed && !isActive && (
+                    <div className="absolute top-0 right-0 bg-red-500 text-white text-[8px] font-black px-2 py-0.5 rounded-bl-lg uppercase tracking-wider">
+                      Verspätet
+                    </div>
+                  )}
                   <div className="flex items-center justify-between mb-2">
-                    <p className={`text-[10px] font-black uppercase tracking-widest ${isActive ? 'text-white/80' : 'text-primary/60'}`}>
-                      {a.status === 'IN_PROGRESS' ? 'Läuft' : 'Ausstehend'}
+                    <p className={`text-[10px] font-black uppercase tracking-widest ${isActive ? 'text-white/80' : isDelayed ? 'text-red-600' : 'text-primary/60'}`}>
+                      {a.status === 'IN_PROGRESS' ? 'Läuft' : isDelayed ? 'Verspätet' : 'Ausstehend'}
                     </p>
                     {a.status === 'IN_PROGRESS' && <div className="w-2 h-2 rounded-full bg-green-400 animate-pulse" />}
                   </div>
@@ -630,9 +647,16 @@ export default function TrackingPage() {
 
           <CardHeader className="pb-4 px-8 pt-8">
             <div className="flex items-center justify-between mb-4">
-              <Badge variant={isClockedIn ? 'default' : 'secondary'} className="px-4 py-1.5 font-black uppercase text-[10px] tracking-widest">
-                {isClockedIn ? 'Im Dienst' : 'Bereit'}
-              </Badge>
+              <div className="flex items-center gap-2">
+                <Badge variant={isClockedIn ? 'default' : 'secondary'} className="px-4 py-1.5 font-black uppercase text-[10px] tracking-widest">
+                  {isClockedIn ? 'Im Dienst' : 'Bereit'}
+                </Badge>
+                {activeAssignment && activeAssignment.scheduledDate && activeAssignment.scheduledDate < today && (
+                  <Badge variant="destructive" className="px-4 py-1.5 font-black uppercase text-[10px] tracking-widest bg-red-500 hover:bg-red-600">
+                    Verspätet
+                  </Badge>
+                )}
+              </div>
               {isClockedIn && myActiveEntry?.clockInDateTime && (
                 <span className="flex items-center gap-2 text-primary font-black tabular-nums text-sm">
                   <Clock className="w-4 h-4" />
