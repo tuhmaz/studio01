@@ -604,8 +604,8 @@ export function generateLohnzettel(params: LohnExportParams) {
   // To keep it simple, if a grouped entry has multiple sites, we distribute the visit
   // Or we just use the original entries for siteMap but ensure unique visits per day?
   // Let's count unique days per site
-  const siteMap = new Map<string, { name: string; address: string; visits: number; minutes: number; isRemote: boolean }>();
-  
+  const siteMap = new Map<string, { name: string; address: string; visits: number; minutes: number; travelBonusMinutes: number }>();
+
   // Track visits per site per day to avoid double counting
   const siteVisitsPerDay = new Set<string>();
 
@@ -613,15 +613,20 @@ export function generateLohnzettel(params: LohnExportParams) {
     const key = e.siteName || e.siteAddress || '?';
     const dayKey = `${e.date.split('T')[0]}-${key}`;
     const existing = siteMap.get(key);
-    
+
     if (existing) {
       if (!siteVisitsPerDay.has(dayKey)) {
         existing.visits += 1;
         siteVisitsPerDay.add(dayKey);
       }
       existing.minutes += e.workMinutes;
+      existing.travelBonusMinutes += (e.travelBonusMinutes ?? 0);
     } else {
-      siteMap.set(key, { name: e.siteName, address: e.siteAddress, visits: 1, minutes: e.workMinutes, isRemote: e.isRemote });
+      siteMap.set(key, {
+        name: e.siteName, address: e.siteAddress,
+        visits: 1, minutes: e.workMinutes,
+        travelBonusMinutes: e.travelBonusMinutes ?? 0,
+      });
       siteVisitsPerDay.add(dayKey);
     }
   });
@@ -700,11 +705,11 @@ export function generateLohnzettel(params: LohnExportParams) {
     { content: String(s.visits), styles: { halign: 'center' as const, fontStyle: 'bold' as const } },
     { content: fmtHHMM(s.minutes) + ' h', styles: { halign: 'center' as const, fontStyle: 'bold' as const, textColor: PRIMARY } },
     {
-      content: s.isRemote ? '−1h / Besuch' : '—',
+      content: s.travelBonusMinutes !== 0 ? `-${fmtHHMM(Math.abs(s.travelBonusMinutes))} h` : '-',
       styles: {
         halign: 'center' as const,
-        textColor: s.isRemote ? ([180, 40, 40] as [number,number,number]) : ([160,165,175] as [number,number,number]),
-        fontStyle: s.isRemote ? 'bold' as const : 'normal' as const,
+        textColor: s.travelBonusMinutes !== 0 ? ([180, 40, 40] as [number,number,number]) : ([160,165,175] as [number,number,number]),
+        fontStyle: s.travelBonusMinutes !== 0 ? 'bold' as const : 'normal' as const,
       },
     },
   ]);
@@ -779,7 +784,7 @@ export function generateLohnzettel(params: LohnExportParams) {
   ry += rowH;
   if (totalBonusMin !== 0) {
     const bonusLabel = totalBonusMin < 0 ? 'Fahrtabzug (Fernstandorte):' : 'Fahrtbonus:';
-    const bonusVal   = (totalBonusMin < 0 ? '−' : '+') + fmtHHMM(Math.abs(totalBonusMin)) + ' Std.';
+    const bonusVal   = (totalBonusMin < 0 ? '-' : '+') + fmtHHMM(Math.abs(totalBonusMin)) + ' Std.';
     drawRow(bonusLabel, bonusVal, MARGIN, halfW, totalBonusMin < 0 ? [180, 40, 40] : ORANGE);
     ry += rowH;
   }
@@ -844,23 +849,23 @@ export function generateLohnzettel(params: LohnExportParams) {
   const kvPct   = (14.6 + (worker.kvZusatzRate ?? 1.7)).toFixed(2);
   const pvPct   = (worker.kinder ?? 0) > 0 ? '3,4' : '4,0';
 
-  drawRow(`Lohnsteuer (SK ${worker.taxClass ?? 1}):`,   '−' + fmtCurrency(payroll.lohnsteuer),              midX, rightW, RED);
+  drawRow(`Lohnsteuer (SK ${worker.taxClass ?? 1}):`,   '-' + fmtCurrency(payroll.lohnsteuer),              midX, rightW, RED);
   ry += rowH;
   if (payroll.soli > 0) {
-    drawRow('Solidaritätszuschlag:',                    '−' + fmtCurrency(payroll.soli),                    midX, rightW, RED);
+    drawRow('Solidaritätszuschlag:',                    '-' + fmtCurrency(payroll.soli),                    midX, rightW, RED);
     ry += rowH;
   }
   if (payroll.kirchensteuer > 0) {
-    drawRow('Kirchensteuer:',                           '−' + fmtCurrency(payroll.kirchensteuer),           midX, rightW, RED);
+    drawRow('Kirchensteuer:',                           '-' + fmtCurrency(payroll.kirchensteuer),           midX, rightW, RED);
     ry += rowH;
   }
-  drawRow(`KV (${kvPct}%/2 AN):`,                      '−' + fmtCurrency(payroll.krankenversicherung),     midX, rightW, RED);
+  drawRow(`KV (${kvPct}%/2 AN):`,                      '-' + fmtCurrency(payroll.krankenversicherung),     midX, rightW, RED);
   ry += rowH;
-  drawRow(`PV (${pvPct}%/2 AN):`,                      '−' + fmtCurrency(payroll.pflegeversicherung),      midX, rightW, RED);
+  drawRow(`PV (${pvPct}%/2 AN):`,                      '-' + fmtCurrency(payroll.pflegeversicherung),      midX, rightW, RED);
   ry += rowH;
-  drawRow('RV (18,6%/2 AN):',                          '−' + fmtCurrency(payroll.rentenversicherung),      midX, rightW, RED);
+  drawRow('RV (18,6%/2 AN):',                          '-' + fmtCurrency(payroll.rentenversicherung),      midX, rightW, RED);
   ry += rowH;
-  drawRow('AV (2,6%/2 AN):',                           '−' + fmtCurrency(payroll.arbeitslosenversicherung), midX, rightW, RED);
+  drawRow('AV (2,6%/2 AN):',                           '-' + fmtCurrency(payroll.arbeitslosenversicherung), midX, rightW, RED);
   ry += rowH;
 
   // Netto highlight

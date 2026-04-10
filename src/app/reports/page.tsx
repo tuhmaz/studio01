@@ -102,7 +102,7 @@ const OVERTIME_RATE = 1.25;
 function fmtMin(mins: number): string {
   const h = Math.floor(Math.abs(mins) / 60);
   const m = Math.abs(mins) % 60;
-  const sign = mins < 0 ? '−' : '';
+  const sign = mins < 0 ? '-' : '';
   return m > 0 ? `${sign}${h}h ${m}m` : `${sign}${h}h`;
 }
 
