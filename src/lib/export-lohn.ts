@@ -393,10 +393,10 @@ export function generateArbeitszeitnachweis(params: LohnExportParams) {
         styles: { halign: 'center' as const, fontStyle: 'bold' as const, textColor: PRIMARY },
       },
       {
-        content: e.travelBonusMinutes > 0 ? `+${fmtHHMM(e.travelBonusMinutes)}` : '—',
+        content: e.travelBonusMinutes > 0 ? `-${fmtHHMM(e.travelBonusMinutes)}` : '—',
         styles: {
           halign: 'center' as const,
-          textColor: e.travelBonusMinutes > 0 ? ORANGE : ([160,165,175] as [number,number,number]),
+          textColor: e.travelBonusMinutes > 0 ? ([180, 40, 40] as [number,number,number]) : ([160,165,175] as [number,number,number]),
           fontStyle: e.travelBonusMinutes > 0 ? 'bold' as const : 'normal' as const,
         },
       },
@@ -502,7 +502,7 @@ export function generateArbeitszeitnachweis(params: LohnExportParams) {
 
   drawSummaryRow('Reine Arbeitszeit:', fmtHHMM(totalWorkMin) + ' Std.', MARGIN, colW1);
   ry += rowH;
-  drawSummaryRow('Fahrzeit-Zuschlag:', '+' + fmtHHMM(totalBonusMin) + ' Std.', MARGIN, colW1, ORANGE);
+  drawSummaryRow('Fahrzeit-Zuschlag:', fmtHHMM(totalBonusMin) + ' Std.', MARGIN, colW1, ORANGE);
   ry += rowH;
   drawSummaryRow('Gesamte vergütete Zeit:', fmtHHMM(totalMin) + ' Std.', MARGIN, colW1);
 
