@@ -389,6 +389,8 @@ function AddEditSiteDialog({ open, site, nextId, availableRegions, onSave, onClo
   const [form, setForm] = useState<SiteForm>(emptyForm());
   const [newRegionInput, setNewRegionInput] = useState('');
   const [showNewRegion, setShowNewRegion] = useState(false);
+  const [calculatingDistance, setCalculatingDistance] = useState(false);
+  const { toast } = useToast();
 
   useEffect(() => {
     if (open) {
@@ -400,6 +402,72 @@ function AddEditSiteDialog({ open, site, nextId, availableRegions, onSave, onClo
   }, [site, open, nextId]);
 
   const set = (field: string, value: any) => setForm(f => ({ ...f, [field]: value }));
+
+  const handleCalculateDistance = async () => {
+    try {
+      setCalculatingDistance(true);
+      // HQ Coordinates: Johannes-R.-Becher-Straße 25 39218 Schönebeck (Elbe)
+      const hqLat = 52.0189651;
+      const hqLng = 11.7265854;
+
+      let siteLat = parseFloat(form.latitude);
+      let siteLng = parseFloat(form.longitude);
+
+      // 1. Geocode site if lat/lng are missing
+      if (!siteLat || !siteLng || isNaN(siteLat) || isNaN(siteLng)) {
+        const query = [form.address, form.city, form.postalCode, 'Deutschland'].filter(Boolean).join(', ');
+        const url = `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(query)}&limit=1&countrycodes=de`;
+        const res = await fetch(url, { headers: { 'User-Agent': 'HausmeisterPro/1.0' } });
+        const data = await res.json();
+        if (data && data.length > 0) {
+          siteLat = parseFloat(data[0].lat);
+          siteLng = parseFloat(data[0].lon);
+          set('latitude', String(siteLat));
+          set('longitude', String(siteLng));
+        } else {
+          throw new Error('Adresse konnte nicht gefunden werden.');
+        }
+      }
+
+      // 2. OSRM calculation
+      const osrmUrl = `https://router.project-osrm.org/route/v1/driving/${hqLng},${hqLat};${siteLng},${siteLat}?overview=false`;
+      const osrmRes = await fetch(osrmUrl);
+      const osrmData = await osrmRes.json();
+
+      if (osrmData.code === 'Ok' && osrmData.routes && osrmData.routes.length > 0) {
+        const distanceMeters = osrmData.routes[0].distance;
+        const durationSeconds = osrmData.routes[0].duration;
+
+        const distanceKm = (distanceMeters / 1000).toFixed(1);
+        const durationMinutes = Math.round(durationSeconds / 60);
+
+        set('distanceFromHQ', distanceKm);
+        set('estimatedTravelTimeMinutesFromHQ', String(durationMinutes));
+
+        // Check if remote (> 95km)
+        if (parseFloat(distanceKm) > 95) {
+          set('isRemote', true);
+        } else {
+          set('isRemote', false);
+        }
+
+        toast({
+          title: 'Berechnung erfolgreich',
+          description: `Distanz: ${distanceKm} km, Dauer: ${durationMinutes} Min.`,
+        });
+      } else {
+        throw new Error('Routenberechnung fehlgeschlagen.');
+      }
+    } catch (e: any) {
+      toast({
+        title: 'Fehler bei der Berechnung',
+        description: e.message || 'Die Distanz konnte nicht berechnet werden.',
+        variant: 'destructive',
+      });
+    } finally {
+      setCalculatingDistance(false);
+    }
+  };
 
   const setSvc = (key: string, field: string, value: any) =>
     setForm(f => ({ ...f, services: { ...f.services, [key]: { ...f.services[key], [field]: value } } }));
@@ -562,9 +630,28 @@ function AddEditSiteDialog({ open, site, nextId, availableRegions, onSave, onClo
                   <Input value={form.longitude} onChange={e => set('longitude', e.target.value)} placeholder="z.B. 11.6175" className="rounded-xl font-bold" />
                 </div>
 
+                <div className="col-span-2">
+                  <Button 
+                    type="button" 
+                    variant="outline" 
+                    onClick={handleCalculateDistance} 
+                    disabled={calculatingDistance || (!form.city && !form.latitude)}
+                    className="w-full rounded-xl border-primary/20 hover:bg-primary/5 text-primary font-black"
+                  >
+                    {calculatingDistance ? (
+                      <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Berechnung läuft...</>
+                    ) : (
+                      <><Navigation className="w-4 h-4 mr-2" /> Distanz & Fahrtzeit vom HQ berechnen</>
+                    )}
+                  </Button>
+                  <p className="text-[9px] text-muted-foreground font-medium mt-1 text-center">
+                    HQ: Johannes-R.-Becher-Straße 25, 39218 Schönebeck (Elbe)
+                  </p>
+                </div>
+
                 <div className="space-y-2">
                   <Label className="text-[10px] font-black uppercase text-primary/60 tracking-widest">Entfernung HQ (km)</Label>
-                  <Input type="number" min="0" value={form.distanceFromHQ} onChange={e => set('distanceFromHQ', e.target.value)} className="rounded-xl font-bold" />
+                  <Input type="number" min="0" step="0.1" value={form.distanceFromHQ} onChange={e => set('distanceFromHQ', e.target.value)} className="rounded-xl font-bold" />
                 </div>
 
                 <div className="space-y-2">

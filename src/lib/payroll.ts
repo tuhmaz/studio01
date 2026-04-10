@@ -132,7 +132,7 @@ export function simulatePayroll(user: User, bruttoLohn: number): PayrollResult {
   const kinder       = user.kinder ?? 0;
   const bundesland   = user.bundesland ?? 'DEFAULT';
   const kirchenpflichtig = user.hasChurchTax ?? user.kirchensteuerpflichtig ?? false;
-  const kvZusatzRate = user.kvZusatzRate ?? KV_DEFAULT_ZUSATZ;
+  const kvZusatzRate = Number(user.kvZusatzRate ?? KV_DEFAULT_ZUSATZ) || KV_DEFAULT_ZUSATZ;
 
   // ── 1. Lohnsteuer (progressiv nach EStG §32a) ─────────────────────────────
   const annualBrutto = bruttoLohn * 12;

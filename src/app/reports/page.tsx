@@ -635,7 +635,7 @@ export default function ReportsPage() {
     svNr: u.sv_nr,
     steuerId: u.steuer_id,
     statusTaetigkeit: u.status_taetigkeit,
-    kvZusatzRate: u.kv_zusatz_rate ?? 1.7,
+    kvZusatzRate: parseFloat(u.kv_zusatz_rate) || 1.7,
   })), [rawEmployees]);
 
   const timeEntries = useMemo<TimeEntry[]>(() => (rawTimeEntries ?? []).map((e: any) => ({

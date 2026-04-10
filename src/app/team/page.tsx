@@ -106,7 +106,7 @@ export default function TeamPage() {
       svNr: row.sv_nr,
       steuerId: row.steuer_id,
       statusTaetigkeit: row.status_taetigkeit,
-      kvZusatzRate: row.kv_zusatz_rate ?? 1.7,
+      kvZusatzRate: parseFloat(row.kv_zusatz_rate) || 1.7,
     }));
   }, [teamRaw]);
 
