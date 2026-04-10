@@ -319,6 +319,7 @@ function WorkerDetailDialog({
         statusTaetigkeit: user.statusTaetigkeit,
         kinder: user.kinder,
         hasChurchTax: user.hasChurchTax,
+        kvZusatzRate: user.kvZusatzRate,
       },
       entries: toExportEntries(entries),
       month,

@@ -9,6 +9,7 @@
 
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
+import { simulatePayroll } from './payroll';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -38,6 +39,7 @@ export interface LohnExportWorker {
   svNr?: string;
   steuerId?: string;
   statusTaetigkeit?: string;
+  kvZusatzRate?: number;
 }
 
 export interface CompanySettings {
@@ -698,10 +700,10 @@ export function generateLohnzettel(params: LohnExportParams) {
     { content: String(s.visits), styles: { halign: 'center' as const, fontStyle: 'bold' as const } },
     { content: fmtHHMM(s.minutes) + ' h', styles: { halign: 'center' as const, fontStyle: 'bold' as const, textColor: PRIMARY } },
     {
-      content: s.isRemote ? '+1h / Besuch' : '—',
+      content: s.isRemote ? '−1h / Besuch' : '—',
       styles: {
         halign: 'center' as const,
-        textColor: s.isRemote ? ORANGE : ([160,165,175] as [number,number,number]),
+        textColor: s.isRemote ? ([180, 40, 40] as [number,number,number]) : ([160,165,175] as [number,number,number]),
         fontStyle: s.isRemote ? 'bold' as const : 'normal' as const,
       },
     },
@@ -773,11 +775,15 @@ export function generateLohnzettel(params: LohnExportParams) {
   const halfW = midX - MARGIN;
   const rightW = MARGIN + CW - midX;
 
-  drawRow('Reine Arbeitszeit:', fmtHHMM(totalWorkMin) + ' Std.', MARGIN, halfW);
+  drawRow('Brutto-Arbeitszeit:', fmtHHMM(totalWorkMin) + ' Std.', MARGIN, halfW);
   ry += rowH;
-  drawRow('Fahrzeit-Zuschlag (+1h/Besuch):', '+' + fmtHHMM(totalBonusMin) + ' Std.', MARGIN, halfW, ORANGE);
-  ry += rowH;
-  drawRow('Gesamte vergütete Zeit:', fmtHHMM(totalBillable) + ' Std.', MARGIN, halfW);
+  if (totalBonusMin !== 0) {
+    const bonusLabel = totalBonusMin < 0 ? 'Fahrtabzug (Fernstandorte):' : 'Fahrtbonus:';
+    const bonusVal   = (totalBonusMin < 0 ? '−' : '+') + fmtHHMM(Math.abs(totalBonusMin)) + ' Std.';
+    drawRow(bonusLabel, bonusVal, MARGIN, halfW, totalBonusMin < 0 ? [180, 40, 40] : ORANGE);
+    ry += rowH;
+  }
+  drawRow('Vergütete Netto-Zeit:', fmtHHMM(totalBillable) + ' Std.', MARGIN, halfW);
   ry += rowH;
   drawRow('Sollstunden / Monat:', `${worker.monthlyTargetHours ?? 0} Std.`, MARGIN, halfW);
   ry += rowH;
@@ -820,73 +826,50 @@ export function generateLohnzettel(params: LohnExportParams) {
 
   ry += rowH * 1.1;
 
-  // German Social Security & Tax Calculation (Sachsen-Anhalt approx)
-  const isMinijob = worker.contractType === 'MINIJOB';
-  
-  // KV: 7.3% + Zusatzbeitrag (approx 1.7% / 2 = 0.85%) = 8.15%
-  // PV: 1.7% + (0.6% Kinderlosenzuschlag if kinder == 0)
-  // RV: 9.3%
-  // AV: 1.3%
-  const rateKV = 0.0815;
-  const ratePV = 0.017 + ((worker.kinder ?? 0) === 0 ? 0.006 : 0);
-  const rateRV = 0.093;
-  const rateAV = 0.013;
+  // ── Payroll via simulatePayroll (EStG §32a + korrekte SV-Sätze 2025/2026) ──
+  const payroll = simulatePayroll({
+    id: '', name: worker.name, email: '', role: 'WORKER' as const,
+    contractType: worker.contractType as any,
+    hourlyRate:          hourlyRate,
+    monthlyTargetHours:  worker.monthlyTargetHours,
+    taxClass:            worker.taxClass as any,
+    kinder:              worker.kinder,
+    hasChurchTax:        worker.hasChurchTax,
+    kvZusatzRate:        worker.kvZusatzRate,
+    svNr:                worker.svNr,
+    steuerId:            worker.steuerId,
+  }, bruttoTotal);
 
-  const dedKV = isMinijob ? 0 : bruttoTotal * rateKV;
-  const dedPV = isMinijob ? 0 : bruttoTotal * ratePV;
-  const dedRV = isMinijob ? 0 : bruttoTotal * rateRV;
-  const dedAV = isMinijob ? 0 : bruttoTotal * rateAV;
-  const svTotal = dedKV + dedPV + dedRV + dedAV;
+  const RED = [160, 50, 50] as [number, number, number];
+  const kvPct   = (14.6 + (worker.kvZusatzRate ?? 1.7)).toFixed(2);
+  const pvPct   = (worker.kinder ?? 0) > 0 ? '3,4' : '4,0';
 
-  // Simplified Tax (Lohnsteuer) calculation based on Tax Class
-  // Tax classes 1, 2, 4 approx 15% flat for this demo if > 1000€ (very rough estimate)
-  // Tax class 3 approx 5%, Tax class 5, 6 approx 25%
-  let taxRate = 0;
-  if (!isMinijob && bruttoTotal > 1000) {
-    switch (worker.taxClass) {
-      case 3: taxRate = 0.05; break;
-      case 5: case 6: taxRate = 0.25; break;
-      default: taxRate = 0.15; break; // 1, 2, 4
-    }
-  }
-  const lohnsteuer = isMinijob ? 0 : bruttoTotal * taxRate;
-  
-  // SolZ: 5.5% of Lohnsteuer (only if Lohnsteuer is relatively high, but we simplify)
-  const solz = isMinijob ? 0 : lohnsteuer * 0.055;
-  
-  // Kirchensteuer: 9% of Lohnsteuer in Sachsen-Anhalt
-  const kirchensteuer = (worker.hasChurchTax && !isMinijob) ? lohnsteuer * 0.09 : 0;
-  const taxTotal = lohnsteuer + solz + kirchensteuer;
-
-  const nettoTotal = bruttoTotal - svTotal - taxTotal;
-
-  drawRow('Lohnsteuer:', '-' + fmtCurrency(lohnsteuer), midX, rightW, [160, 50, 50]);
+  drawRow(`Lohnsteuer (SK ${worker.taxClass ?? 1}):`,   '−' + fmtCurrency(payroll.lohnsteuer),              midX, rightW, RED);
   ry += rowH;
-  if (solz > 0) {
-    drawRow('Solidaritätszuschlag:', '-' + fmtCurrency(solz), midX, rightW, [160, 50, 50]);
+  if (payroll.soli > 0) {
+    drawRow('Solidaritätszuschlag:',                    '−' + fmtCurrency(payroll.soli),                    midX, rightW, RED);
     ry += rowH;
   }
-  if (kirchensteuer > 0) {
-    drawRow('Kirchensteuer (9%):', '-' + fmtCurrency(kirchensteuer), midX, rightW, [160, 50, 50]);
+  if (payroll.kirchensteuer > 0) {
+    drawRow('Kirchensteuer:',                           '−' + fmtCurrency(payroll.kirchensteuer),           midX, rightW, RED);
     ry += rowH;
   }
-  
-  drawRow('KV incl. Z:', '-' + fmtCurrency(dedKV), midX, rightW, [160, 50, 50]);
+  drawRow(`KV (${kvPct}%/2 AN):`,                      '−' + fmtCurrency(payroll.krankenversicherung),     midX, rightW, RED);
   ry += rowH;
-  drawRow('PV incl. A / Z:', '-' + fmtCurrency(dedPV), midX, rightW, [160, 50, 50]);
+  drawRow(`PV (${pvPct}%/2 AN):`,                      '−' + fmtCurrency(payroll.pflegeversicherung),      midX, rightW, RED);
   ry += rowH;
-  drawRow('RV:', '-' + fmtCurrency(dedRV), midX, rightW, [160, 50, 50]);
+  drawRow('RV (18,6%/2 AN):',                          '−' + fmtCurrency(payroll.rentenversicherung),      midX, rightW, RED);
   ry += rowH;
-  drawRow('AV:', '-' + fmtCurrency(dedAV), midX, rightW, [160, 50, 50]);
+  drawRow('AV (2,6%/2 AN):',                           '−' + fmtCurrency(payroll.arbeitslosenversicherung), midX, rightW, RED);
   ry += rowH;
 
   // Netto highlight
-  fillRect(doc, midX + 2, ry - 3, rightW - 4, 12, [40, 160, 80]); // Green bg
+  fillRect(doc, midX + 2, ry - 3, rightW - 4, 12, [40, 160, 80]);
   doc.setTextColor(255, 255, 255);
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(10);
   doc.text('NETTO-VERDIENST:', midX + 5, ry + 4);
-  doc.text(fmtCurrency(nettoTotal), midX + rightW - 5, ry + 4, { align: 'right' });
+  doc.text(fmtCurrency(payroll.netto), midX + rightW - 5, ry + 4, { align: 'right' });
 
   // ── Signature strip ──
   sy += 110;
