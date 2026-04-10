@@ -309,7 +309,7 @@ export function generateArbeitszeitnachweis(params: LohnExportParams) {
       groupedEntriesMap.set(d, {
         date: e.date, // keep original for display if needed, but wait, fmtDate might expect a valid date string. Let's just use e.date or d
         siteNames: new Set(e.siteName || e.siteAddress
-          ? [e.siteAddress ? `${e.siteName}\n${e.siteAddress}` : e.siteName]
+          ? [e.siteAddress ? `${e.siteName} - ${e.siteAddress}` : e.siteName]
           : []),
         regions: new Set(e.region ? [e.region] : []),
         categories: new Set(e.categories),
@@ -320,7 +320,7 @@ export function generateArbeitszeitnachweis(params: LohnExportParams) {
       });
     } else {
       const g = groupedEntriesMap.get(d)!;
-      if (e.siteName || e.siteAddress) g.siteNames.add(e.siteAddress ? `${e.siteName}\n${e.siteAddress}` : e.siteName);
+      if (e.siteName || e.siteAddress) g.siteNames.add(e.siteAddress ? `${e.siteName} - ${e.siteAddress}` : e.siteName);
       if (e.region) g.regions.add(e.region);
       e.categories.forEach(c => g.categories.add(c));
 
