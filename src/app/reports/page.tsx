@@ -289,7 +289,7 @@ function WorkerDetailDialog({
 }) {
   const [confirmVoidId, setConfirmVoidId] = useState<string | null>(null);
   const [voidingId, setVoidingId] = useState<string | null>(null);
-  const { user, entries, workMinutes, remoteBonusMinutes, overtimeMinutes,
+  const { user, entries, workMinutes, remoteBonusMinutes, billableMinutes, overtimeMinutes,
           brutto, visitedSites } = stats;
   const payroll = simulatePayroll(user, brutto);
 
@@ -349,8 +349,8 @@ function WorkerDetailDialog({
           </div>
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
             {[
-              { label: 'Arbeitszeit', value: fmtMin(workMinutes) },
-              { label: 'Remote +', value: fmtMin(remoteBonusMinutes) },
+              { label: 'Vergütete Zeit', value: fmtMin(billableMinutes) },
+              { label: 'Fahrtabzug', value: remoteBonusMinutes !== 0 ? fmtMin(remoteBonusMinutes) : '—' },
               { label: 'Überstunden', value: fmtMin(overtimeMinutes) },
               { label: 'Brutto', value: fmtCurrency(brutto) },
             ].map(({ label, value }) => (
@@ -687,7 +687,7 @@ export default function ReportsPage() {
   }, [timeEntries, assignments, jobSites, selectedMonth, selectedYear]);
 
   const totalBrutto      = workerStats.reduce((s, w) => s + w.brutto, 0);
-  const totalWorkMinutes = workerStats.reduce((s, w) => s + w.workMinutes, 0);
+  const totalWorkMinutes = workerStats.reduce((s, w) => s + w.billableMinutes, 0);
 
   // ── Void (stornieren) a time entry ────────────────────────────────────────
 
@@ -870,9 +870,9 @@ export default function ReportsPage() {
                         </div>
                       </div>
                     </TableCell>
-                    <TableCell className="text-right font-bold text-sm">{fmtMin(stats.workMinutes)}</TableCell>
-                    <TableCell className="text-right font-bold text-sm text-amber-700 hidden sm:table-cell">
-                      {stats.remoteBonusMinutes > 0 ? `+${fmtMin(stats.remoteBonusMinutes)}` : '—'}
+                    <TableCell className="text-right font-bold text-sm">{fmtMin(stats.billableMinutes)}</TableCell>
+                    <TableCell className="text-right font-bold text-sm text-red-600 hidden sm:table-cell">
+                      {stats.remoteBonusMinutes !== 0 ? fmtMin(stats.remoteBonusMinutes) : '—'}
                     </TableCell>
                     <TableCell className="text-right font-black text-sm text-primary">{fmtCurrency(stats.brutto)}</TableCell>
                     <TableCell>

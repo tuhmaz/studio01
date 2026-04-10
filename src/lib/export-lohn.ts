@@ -393,11 +393,11 @@ export function generateArbeitszeitnachweis(params: LohnExportParams) {
         styles: { halign: 'center' as const, fontStyle: 'bold' as const, textColor: PRIMARY },
       },
       {
-        content: e.travelBonusMinutes > 0 ? `-${fmtHHMM(e.travelBonusMinutes)}` : '—',
+        content: (e.travelBonusMinutes ?? 0) !== 0 ? `-${fmtHHMM(Math.abs(e.travelBonusMinutes))}` : '—',
         styles: {
           halign: 'center' as const,
-          textColor: e.travelBonusMinutes > 0 ? ([180, 40, 40] as [number,number,number]) : ([160,165,175] as [number,number,number]),
-          fontStyle: e.travelBonusMinutes > 0 ? 'bold' as const : 'normal' as const,
+          textColor: (e.travelBonusMinutes ?? 0) !== 0 ? ([180, 40, 40] as [number,number,number]) : ([160,165,175] as [number,number,number]),
+          fontStyle: (e.travelBonusMinutes ?? 0) !== 0 ? 'bold' as const : 'normal' as const,
         },
       },
       { content: '', styles: { halign: 'center' as const } }, // Unterschrift
@@ -438,16 +438,16 @@ export function generateArbeitszeitnachweis(params: LohnExportParams) {
     },
     alternateRowStyles: { fillColor: [250, 251, 255] },
     columnStyles: {
-        0: { cellWidth: 7, halign: 'center' },
-        1: { cellWidth: 18, halign: 'center' },
-        2: { cellWidth: 9, halign: 'center' },
-        3: { cellWidth: 50 },
-        4: { cellWidth: 29 }, // Reduced from 44 to give 15mm to signature
-        5: { cellWidth: 13, halign: 'center' },
-        6: { cellWidth: 13, halign: 'center' },
-        7: { cellWidth: 12, halign: 'center' },
-        8: { cellWidth: 13, halign: 'center' },
-        9: { cellWidth: 30, halign: 'center' }, // Increased from 15 to 30mm
+        0: { cellWidth: 7,  halign: 'center' },  // Nr.
+        1: { cellWidth: 18, halign: 'center' },  // Datum
+        2: { cellWidth: 9,  halign: 'center' },  // Tag
+        3: { cellWidth: 46 },                    // Objekt / Adresse
+        4: { cellWidth: 27 },                    // Tätigkeiten
+        5: { cellWidth: 13, halign: 'center' },  // Beginn
+        6: { cellWidth: 13, halign: 'center' },  // Ende
+        7: { cellWidth: 13, halign: 'center' },  // Std.
+        8: { cellWidth: 16, halign: 'center' },  // Fahrtzt.  ← wider for "-01:00"
+        9: { cellWidth: 32, halign: 'center' },  // Unterschrift
       },
     didParseCell: (data) => {
       if (data.row.index >= groupedEntries.length) {
@@ -502,7 +502,7 @@ export function generateArbeitszeitnachweis(params: LohnExportParams) {
 
   drawSummaryRow('Reine Arbeitszeit:', fmtHHMM(totalWorkMin) + ' Std.', MARGIN, colW1);
   ry += rowH;
-  drawSummaryRow('Fahrzeit-Zuschlag:', fmtHHMM(totalBonusMin) + ' Std.', MARGIN, colW1, ORANGE);
+  drawSummaryRow('Fahrzeit-Zuschlag:', fmtHHMM(Math.abs(totalBonusMin)) + ' Std.', MARGIN, colW1, ORANGE);
   ry += rowH;
   drawSummaryRow('Gesamte vergütete Zeit:', fmtHHMM(totalMin) + ' Std.', MARGIN, colW1);
 
