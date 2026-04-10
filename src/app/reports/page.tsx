@@ -171,13 +171,20 @@ function computeMonthlyStats(
       if (!userEntries.length) return null;
 
       const workMinutes = userEntries.reduce((s, e) => s + (e.entry.actualWorkMinutes ?? 0), 0);
-      // Fahrtabzug: gespeicherter Wert, oder -60 falls Remote-Standort aber kein Wert gespeichert
-      const remoteBonusMinutes = userEntries.reduce((s, e) => {
+      // Fahrtabzug: max -60 Min pro Tag (nicht pro Einsatz)
+      const bonusPerDay = new Map<string, number>();
+      userEntries.forEach(e => {
+        if (!e.entry.clockInDateTime) return;
+        const day = e.entry.clockInDateTime.split('T')[0];
         const stored = e.entry.travelBonusMinutes ?? 0;
-        if (stored !== 0) return s + stored;
-        const isFar = (e.site?.isRemote ?? false) || Number(e.site?.distanceFromHQ ?? 0) >= 50;
-        return s + (isFar ? -60 : 0);
-      }, 0);
+        const isFar = stored !== 0
+          ? true
+          : ((e.site?.isRemote ?? false) || Number(e.site?.distanceFromHQ ?? 0) >= 95);
+        if (!isFar) return;
+        const prev = bonusPerDay.get(day) ?? 0;
+        bonusPerDay.set(day, Math.max(-60, prev + (stored !== 0 ? stored : -60)));
+      });
+      const remoteBonusMinutes = Array.from(bonusPerDay.values()).reduce((s, v) => s + v, 0);
       const billableMinutes = workMinutes + remoteBonusMinutes;
       const targetMinutes = (user.monthlyTargetHours ?? 0) * 60;
       const overtimeMinutes = targetMinutes > 0 ? Math.max(0, billableMinutes - targetMinutes) : 0;
@@ -273,14 +280,16 @@ function toExportEntries(entries: EnrichedEntry[]): LohnExportEntry[] {
     .map(e => {
       const isRemote = e.site?.isRemote ?? false;
       const distanceFromHQ = Number(e.site?.distanceFromHQ ?? 0);
-      const isFarSite = isRemote || distanceFromHQ >= 50;
+      const isFarSite = isRemote || distanceFromHQ >= 95;
 
       // Wenn die Stelle remote ist aber kein Fahrtabzug gespeichert wurde → automatisch -60 anwenden
       const storedBonus = e.entry.travelBonusMinutes ?? 0;
       const travelBonusMinutes = storedBonus !== 0 ? storedBonus : (isFarSite ? -60 : 0);
 
-      // Objekt: Name + Adresse kombinieren für eindeutige Identifikation (z.B. mehrere Standorte in Braunschweig)
-      const siteName    = [e.site?.name, e.site?.city].filter(Boolean).join(' / ') || e.assignment?.title || '';
+      // Objekt: Name + Stadt kombinieren, aber Dopplung vermeiden (z.B. "Burg / Burg")
+      const nameParts   = [e.site?.name, e.site?.city].filter(Boolean);
+      const uniqueParts = nameParts.filter((v, i, arr) => arr.indexOf(v) === i);
+      const siteName    = uniqueParts.join(' / ') || e.assignment?.title || '';
       const siteAddress = e.site?.address || '';
 
       return {

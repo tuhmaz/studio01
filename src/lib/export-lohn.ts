@@ -316,20 +316,21 @@ export function generateArbeitszeitnachweis(params: LohnExportParams) {
         clockIn: e.clockIn,
         clockOut: e.clockOut,
         workMinutes: e.workMinutes,
-        travelBonusMinutes: e.travelBonusMinutes,
+        travelBonusMinutes: Math.max(-60, e.travelBonusMinutes),
       });
     } else {
       const g = groupedEntriesMap.get(d)!;
       if (e.siteName || e.siteAddress) g.siteNames.add(e.siteAddress ? `${e.siteName}\n${e.siteAddress}` : e.siteName);
       if (e.region) g.regions.add(e.region);
       e.categories.forEach(c => g.categories.add(c));
-      
+
       // Update earliest clockIn and latest clockOut
       if (new Date(e.clockIn) < new Date(g.clockIn)) g.clockIn = e.clockIn;
       if (new Date(e.clockOut) > new Date(g.clockOut)) g.clockOut = e.clockOut;
-      
+
       g.workMinutes += e.workMinutes;
-      g.travelBonusMinutes += e.travelBonusMinutes;
+      // Maximal -60 Minuten Fahrtabzug pro Tag (unabhaengig von Anzahl der Standorte)
+      g.travelBonusMinutes = Math.max(-60, g.travelBonusMinutes + e.travelBonusMinutes);
     }
   });
 
@@ -587,7 +588,7 @@ export function generateLohnzettel(params: LohnExportParams) {
         siteNames: new Set(e.siteName ? [e.siteName] : []),
         siteAddresses: new Set(e.siteAddress ? [e.siteAddress] : []),
         workMinutes: e.workMinutes,
-        travelBonusMinutes: e.travelBonusMinutes,
+        travelBonusMinutes: Math.max(-60, e.travelBonusMinutes),
         isRemote: e.isRemote,
       });
     } else {
@@ -595,7 +596,8 @@ export function generateLohnzettel(params: LohnExportParams) {
       if (e.siteName) g.siteNames.add(e.siteName);
       if (e.siteAddress) g.siteAddresses.add(e.siteAddress);
       g.workMinutes += e.workMinutes;
-      g.travelBonusMinutes += e.travelBonusMinutes;
+      // Maximal -60 Minuten Fahrtabzug pro Tag
+      g.travelBonusMinutes = Math.max(-60, g.travelBonusMinutes + e.travelBonusMinutes);
       g.isRemote = g.isRemote || e.isRemote;
     }
   });
@@ -619,15 +621,16 @@ export function generateLohnzettel(params: LohnExportParams) {
     if (existing) {
       if (!siteVisitsPerDay.has(dayKey)) {
         existing.visits += 1;
+        // Fahrtabzug nur einmal pro Tag pro Standort addieren
+        if (e.travelBonusMinutes !== 0) existing.travelBonusMinutes += -60;
         siteVisitsPerDay.add(dayKey);
       }
       existing.minutes += e.workMinutes;
-      existing.travelBonusMinutes += (e.travelBonusMinutes ?? 0);
     } else {
       siteMap.set(key, {
         name: e.siteName, address: e.siteAddress,
         visits: 1, minutes: e.workMinutes,
-        travelBonusMinutes: e.travelBonusMinutes ?? 0,
+        travelBonusMinutes: e.travelBonusMinutes !== 0 ? -60 : 0,
       });
       siteVisitsPerDay.add(dayKey);
     }
