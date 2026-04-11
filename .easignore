@@ -1,4 +1,4 @@
-# Exclude all Next.js / web app files — only mobile/ is needed for EAS Build
+# Exclude Next.js / web app files
 src/
 public/
 scripts/
@@ -27,3 +27,11 @@ test-api.js
 tsconfig.json
 .genkit/
 .modified
+
+# Exclude heavy mobile build artifacts and dependencies
+mobile/node_modules
+mobile/android/app/build
+mobile/android/build
+mobile/android/.gradle
+mobile/dist
+mobile/.expo
