@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
-import { getToken, setToken } from '@/api/client';
+import { getToken, setToken, clearToken } from '@/api/client';
 import { login as apiLogin, logout as apiLogout, verifySession, MobileUser } from '@/api/auth';
 
 interface AuthState {
@@ -30,8 +30,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           if (profile) {
             setTokenState(stored);
             setUser(profile);
+          } else {
+            // Token abgelaufen oder ungültig — aus SecureStore löschen
+            await clearToken();
           }
         }
+      } catch {
+        // Netzwerkfehler beim Start: Token behalten für nächsten Versuch
       } finally {
         setLoading(false);
       }

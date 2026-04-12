@@ -5,6 +5,7 @@ import {
 } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { Ionicons } from '@expo/vector-icons';
+import Svg, { Path } from 'react-native-svg';
 import * as SecureStore from 'expo-secure-store';
 import { useFocusEffect } from 'expo-router';
 import { useAuth } from '@/context/AuthContext';
@@ -21,21 +22,37 @@ type Point = { x: number; y: number };
 const PAD_W = 320;
 const PAD_H = 130;
 
+function getSvgPathFromStroke(stroke: Point[]) {
+  if (!stroke || stroke.length === 0) return '';
+  if (stroke.length === 1) return `M${stroke[0].x.toFixed(1)},${stroke[0].y.toFixed(1)} L${(stroke[0].x + 0.5).toFixed(1)},${stroke[0].y.toFixed(1)}`;
+  
+  let d = `M ${stroke[0].x.toFixed(1)} ${stroke[0].y.toFixed(1)}`;
+  let p0 = stroke[0];
+  
+  for (let i = 1; i < stroke.length; i++) {
+    const p1 = stroke[i];
+    const midPoint = {
+      x: p0.x + (p1.x - p0.x) / 2,
+      y: p0.y + (p1.y - p0.y) / 2
+    };
+    d += ` Q ${p0.x.toFixed(1)} ${p0.y.toFixed(1)} ${midPoint.x.toFixed(1)} ${midPoint.y.toFixed(1)}`;
+    p0 = p1;
+  }
+  d += ` L ${p0.x.toFixed(1)} ${p0.y.toFixed(1)}`;
+  return d;
+}
+
 function strokesToSvg(strokes: Point[][]): string {
   const paths = strokes
     .filter(s => s.length > 0)
-    .map(s => {
-      if (s.length === 1)
-        return `M${s[0].x.toFixed(1)},${s[0].y.toFixed(1)} L${(s[0].x + 0.5).toFixed(1)},${s[0].y.toFixed(1)}`;
-      return s.map((p, i) => `${i === 0 ? 'M' : 'L'}${p.x.toFixed(1)},${p.y.toFixed(1)}`).join(' ');
-    })
+    .map(getSvgPathFromStroke)
     .join(' ');
 
   return (
     `<svg xmlns="http://www.w3.org/2000/svg" width="${PAD_W}" height="${PAD_H}" ` +
     `viewBox="0 0 ${PAD_W} ${PAD_H}">` +
     `<rect width="${PAD_W}" height="${PAD_H}" fill="white"/>` +
-    `<path d="${paths}" fill="none" stroke="#000000" stroke-width="2.5" ` +
+    `<path d="${paths}" fill="none" stroke="#000000" stroke-width="3" ` +
     `stroke-linecap="round" stroke-linejoin="round"/>` +
     `</svg>`
   );
@@ -119,19 +136,23 @@ function SignaturePadModal({
             {...panResponder.panHandlers}
             collapsable={false}
           >
-            {/* Render all captured stroke points as small dots */}
-            {allPoints.flatMap((stroke, si) =>
-              stroke.map((pt, pi) => (
-                <View
-                  key={`${si}-${pi}`}
-                  style={[pad.dot, { left: pt.x - 1.5, top: pt.y - 1.5 }]}
+            <Svg width="100%" height="100%" pointerEvents="none">
+              {allPoints.filter(s => s.length > 0).map((stroke, i) => (
+                <Path
+                  key={i}
+                  d={getSvgPathFromStroke(stroke)}
+                  fill="none"
+                  stroke="#000000"
+                  strokeWidth="3"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
                 />
-              ))
-            )}
+              ))}
+            </Svg>
 
             {/* Placeholder text if empty */}
             {strokes.length === 0 && current.length === 0 && (
-              <Text style={pad.placeholder}>Hier unterschreiben ↓</Text>
+              <Text style={[pad.placeholder, { pointerEvents: 'none' }]}>Hier unterschreiben ↓</Text>
             )}
           </View>
 
@@ -462,7 +483,6 @@ const pad = StyleSheet.create({
     overflow: 'hidden',
     position: 'relative',
   },
-  dot:         { position: 'absolute', width: 3, height: 3, borderRadius: 1.5, backgroundColor: '#000' },
   placeholder: { position: 'absolute', bottom: 10, left: 0, right: 0, textAlign: 'center', fontSize: 12, color: COLORS.textLight },
   actions:     { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 16, gap: 12 },
   clearBtn:    { flexDirection: 'row', alignItems: 'center', gap: 6, paddingVertical: 10, paddingHorizontal: 16, borderRadius: 12, borderWidth: 1.5, borderColor: COLORS.border, flex: 1, justifyContent: 'center' },

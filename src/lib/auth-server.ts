@@ -59,9 +59,17 @@ export async function getSession(): Promise<SessionPayload | null> {
 
 /** Clear the session cookie */
 export async function deleteSession(): Promise<void> {
-  // Next.js 14: cookies() is synchronous
   const cookieStore = cookies();
-  cookieStore.delete(COOKIE_NAME);
+  // Muss dieselben Attribute (domain, path, secure) wie beim Setzen haben,
+  // sonst löscht der Browser das Cookie nicht (insb. in Production mit Domain).
+  cookieStore.set(COOKIE_NAME, '', {
+    httpOnly: true,
+    secure:   process.env.NODE_ENV === 'production',
+    sameSite: 'lax',
+    maxAge:   0,
+    path:     '/',
+    domain:   process.env.NODE_ENV === 'production' ? 'mbj.news' : undefined,
+  });
 }
 
 /** Sign a JWT and return it as a string (used by mobile login — no cookie) */

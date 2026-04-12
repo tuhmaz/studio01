@@ -45,9 +45,12 @@ export function AppProvider({ children }: { children: ReactNode }) {
           };
           setUserProfile(profile);
           syncLocalStorage(profile);
+        } else {
+          // Abgelaufene oder ungültige Sitzung — lokalen Zustand bereinigen
+          clearLocalStorage();
         }
       })
-      .catch(() => {})
+      .catch(() => { clearLocalStorage(); })
       .finally(() => setIsUserLoading(false));
   }, []);
 
@@ -81,10 +84,15 @@ export function AppProvider({ children }: { children: ReactNode }) {
   }
 
   async function logout() {
-    await fetch('/api/auth/logout', { method: 'POST' });
-    setUserProfile(null);
-    clearLocalStorage();
-    window.location.href = '/';
+    try {
+      await fetch('/api/auth/logout', { method: 'POST' });
+    } catch {
+      // Netzwerkfehler ignorieren — lokale Sitzung trotzdem beenden
+    } finally {
+      setUserProfile(null);
+      clearLocalStorage();
+      window.location.href = '/login';
+    }
   }
 
   async function changePassword(newPassword: string) {
