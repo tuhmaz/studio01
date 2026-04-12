@@ -268,10 +268,6 @@ export function generateArbeitszeitnachweis(params: LohnExportParams) {
   const { label: periodLabel } = getBillingPeriod(month, year);
   const entries = params.entries.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
 
-  const totalWorkMin  = entries.reduce((s, e) => s + e.workMinutes, 0);
-  const totalBonusMin = entries.reduce((s, e) => s + e.travelBonusMinutes, 0);
-  const totalMin      = totalWorkMin + totalBonusMin;
-
   const doc = makeDoc();
   const monthLabel = `${MONTH_NAMES_DE[month].toUpperCase()} ${year}`;
 
@@ -336,6 +332,11 @@ export function generateArbeitszeitnachweis(params: LohnExportParams) {
   });
 
   const groupedEntries = Array.from(groupedEntriesMap.values()).sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+
+  // Summen aus gruppierten Einträgen — korrekt auf max -60 Min/Tag begrenzt
+  const totalWorkMin  = groupedEntries.reduce((s, e) => s + e.workMinutes, 0);
+  const totalBonusMin = groupedEntries.reduce((s, e) => s + e.travelBonusMinutes, 0);
+  const totalMin      = totalWorkMin + totalBonusMin;
 
   const fields = [
     { label: 'MITARBEITER',  value: worker.name },
@@ -581,18 +582,6 @@ export function generateLohnzettel(params: LohnExportParams) {
   const { label: periodLabel } = getBillingPeriod(month, year);
   const entries = params.entries.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
 
-  // ── Totals ──
-  const totalWorkMin    = entries.reduce((s, e) => s + e.workMinutes, 0);
-  const totalBonusMin   = entries.reduce((s, e) => s + e.travelBonusMinutes, 0);
-  const totalBillable   = totalWorkMin + totalBonusMin;
-  const targetMin       = (worker.monthlyTargetHours ?? 0) * 60;
-  const overtimeMin     = targetMin > 0 ? Math.max(0, totalBillable - targetMin) : 0;
-  const regularMin      = totalBillable - overtimeMin;
-  const hourlyRate      = worker.hourlyRate ?? 15;
-  const regularPay      = (regularMin  / 60) * hourlyRate;
-  const overtimePay     = (overtimeMin / 60) * hourlyRate * OVERTIME_RATE;
-  const bruttoTotal     = regularPay + overtimePay;
-
   // Group entries by date first
   const groupedEntriesMap = new Map<string, {
     date: string;
@@ -626,6 +615,18 @@ export function generateLohnzettel(params: LohnExportParams) {
   });
 
   const groupedEntries = Array.from(groupedEntriesMap.values());
+
+  // ── Totals — aus gruppierten Einträgen (max -60 Min/Tag bereits angewendet) ──
+  const totalWorkMin    = groupedEntries.reduce((s, e) => s + e.workMinutes, 0);
+  const totalBonusMin   = groupedEntries.reduce((s, e) => s + e.travelBonusMinutes, 0);
+  const totalBillable   = totalWorkMin + totalBonusMin;
+  const targetMin       = (worker.monthlyTargetHours ?? 0) * 60;
+  const overtimeMin     = targetMin > 0 ? Math.max(0, totalBillable - targetMin) : 0;
+  const regularMin      = totalBillable - overtimeMin;
+  const hourlyRate      = worker.hourlyRate ?? 15;
+  const regularPay      = (regularMin  / 60) * hourlyRate;
+  const overtimePay     = (overtimeMin / 60) * hourlyRate * OVERTIME_RATE;
+  const bruttoTotal     = regularPay + overtimePay;
 
   // Per-site aggregation for the site list based on grouped entries
   // To keep it simple, if a grouped entry has multiple sites, we distribute the visit

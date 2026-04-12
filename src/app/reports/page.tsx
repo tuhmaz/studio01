@@ -475,8 +475,16 @@ function WorkerDetailDialog({
                 const totalMins = dayEntries.reduce((s, e) => s + (e.entry.actualWorkMinutes ?? 0), 0);
                 const clockIns = dayEntries.map(e => new Date(e.entry.clockInDateTime!).getTime());
                 const firstIn = new Date(Math.min(...clockIns)).toISOString();
-                const hasRemote = dayEntries.some(e => e.site?.isRemote);
-                const dayBonus = dayEntries.reduce((s, e) => s + (e.entry.travelBonusMinutes ?? 0), 0);
+                
+                // Calculate dynamic day bonus exactly as in computeMonthlyStats
+                const storedDayBonus = dayEntries.reduce((s, e) => s + (e.entry.travelBonusMinutes ?? 0), 0);
+                const isFarDay = dayEntries.some(e => {
+                  const stored = e.entry.travelBonusMinutes ?? 0;
+                  return stored !== 0 ? true : ((e.site?.isRemote ?? false) || Number(e.site?.distanceFromHQ ?? 0) >= 95);
+                });
+                const computedDayBonus = isFarDay ? Math.max(-60, storedDayBonus !== 0 ? storedDayBonus : -60) : storedDayBonus;
+                
+                const netDayMins = totalMins + computedDayBonus;
 
                 return (
                   <div key={date} className="rounded-2xl bg-gray-50 border border-gray-100 overflow-hidden">
@@ -484,12 +492,17 @@ function WorkerDetailDialog({
                     <div className="flex items-center justify-between px-4 py-3 bg-gray-100/80">
                       <span className="font-black text-sm">{fmtDate(firstIn)}</span>
                       <div className="flex items-center gap-2">
-                        {hasRemote && dayBonus > 0 && (
-                          <Badge className="text-[9px] font-black bg-amber-100 text-amber-700 border-amber-200">
-                            +{fmtMin(dayBonus)} Remote
+                        {computedDayBonus < 0 && (
+                          <Badge variant="outline" className="text-[9px] font-black bg-red-50 text-red-600 border-red-200">
+                            {fmtMin(computedDayBonus)} Fahrt
                           </Badge>
                         )}
-                        <span className="text-xs font-black text-muted-foreground">{fmtMin(totalMins)}</span>
+                        {computedDayBonus > 0 && (
+                          <Badge variant="outline" className="text-[9px] font-black bg-amber-50 text-amber-600 border-amber-200">
+                            +{fmtMin(computedDayBonus)} Bonus
+                          </Badge>
+                        )}
+                        <span className="text-xs font-black text-muted-foreground">{fmtMin(netDayMins)}</span>
                       </div>
                     </div>
                     {/* Individual time entries */}
