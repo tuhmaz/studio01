@@ -17,6 +17,7 @@ import { formatDuration, formatDate } from '@/utils/helpers';
 interface MonthEntry {
   actual_work_minutes: number;
   clock_in_datetime: string;
+  clock_out_datetime?: string | null;
   travel_bonus_minutes: number | null;
   status: string;
   job_site_id: string | null;
@@ -230,6 +231,7 @@ export default function ProfileScreen() {
   const [hasSig,        setHasSig]        = useState(false);
   const [sigPadOpen,    setSigPadOpen]    = useState(false);
   const [savingSig,     setSavingSig]     = useState(false);
+  const [siteMap,       setSiteMap]       = useState<Map<string, SiteInfo>>(new Map());
 
   const now   = new Date();
   const month = now.getMonth();
@@ -244,8 +246,8 @@ export default function ProfileScreen() {
       // Load time entries
       const prevM = month === 0 ? 11 : month - 1;
       const prevY = month === 0 ? year - 1 : year;
-      const start = `${prevY}-${String(prevM + 1).padStart(2, '0')}-21`;
-      const end   = `${year}-${String(month + 1).padStart(2, '0')}-20T23:59:59`;
+      const start = `${prevY}-${String(prevM + 1).padStart(2, '0')}-21T00:00:00.000Z`;
+      const end   = `${year}-${String(month + 1).padStart(2, '0')}-20T23:59:59.999Z`;
       const [entriesRes, userRes, sitesRes] = await Promise.all([
         apiData<MonthEntry[]>({
           action: 'query_range', table: 'time_entries',
@@ -266,13 +268,12 @@ export default function ProfileScreen() {
       ]);
       const siteMap = new Map<string, SiteInfo>();
       (sitesRes.data ?? []).forEach(s => siteMap.set(s.id, s));
-      const filtered = (entriesRes.data ?? []).filter(e =>
-        e.actual_work_minutes != null &&
-        (e.status === 'SUBMITTED' || e.status === 'APPROVED')
+      setEntries(
+        (entriesRes.data ?? []).filter(e =>
+          !!e.clock_in_datetime &&
+          (e.status === 'SUBMITTED' || e.status === 'APPROVED')
+        )
       );
-      // Attach siteMap so bonus calc can use it
-      (filtered as any)._siteMap = siteMap;
-      setEntries(filtered);
       setSiteMap(siteMap);
       const sigData = (userRes.data ?? [])[0]?.signature_data;
       setHasSig(!!sigData);
@@ -283,16 +284,32 @@ export default function ProfileScreen() {
     useCallback(() => { load(true); }, [load])
   );
 
-  // billableMinutes = workMinutes (no travel deduction from total — same as web reports page)
-  const totalMinutes  = entries.reduce((s, e) => s + (e.actual_work_minutes ?? 0), 0);
-  // Travel deduction shown separately as info only
+  // Same logic as web computeMonthlyStats
+  const entryMinutes = (entry: MonthEntry): number => {
+    if (typeof entry.actual_work_minutes === 'number' && Number.isFinite(entry.actual_work_minutes)) {
+      return Math.max(0, Math.round(entry.actual_work_minutes));
+    }
+    if (entry.clock_in_datetime && entry.clock_out_datetime) {
+      const start = new Date(entry.clock_in_datetime).getTime();
+      const end = new Date(entry.clock_out_datetime).getTime();
+      if (Number.isFinite(start) && Number.isFinite(end) && end > start) {
+        return Math.round((end - start) / 60000);
+      }
+    }
+    return 0;
+  };
+  const totalMinutes  = entries.reduce((s, e) => s + entryMinutes(e), 0);
   const bonusPerDay = new Map<string, number>();
   entries.forEach(e => {
-    const day   = e.clock_in_datetime.split('T')[0];
-    const bonus = e.travel_bonus_minutes ?? 0;
-    if (bonus === 0) return;
+    const day    = e.clock_in_datetime.split('T')[0];
+    const stored = e.travel_bonus_minutes ?? 0;
+    const site   = e.job_site_id ? siteMap.get(e.job_site_id) : null;
+    const isFar  = stored !== 0
+      ? true
+      : ((site?.is_remote ?? false) || Number(site?.distance_from_hq ?? 0) >= 95);
+    if (!isFar) return;
     const prev = bonusPerDay.get(day) ?? 0;
-    bonusPerDay.set(day, Math.max(-60, prev + bonus));
+    bonusPerDay.set(day, Math.max(-60, prev + (stored !== 0 ? stored : -60)));
   });
   const totalBonusMin = Array.from(bonusPerDay.values()).reduce((s, v) => s + v, 0);
 
@@ -404,7 +421,7 @@ export default function ProfileScreen() {
             <View key={i} style={styles.entryRow}>
               <Ionicons name="time-outline" size={13} color={COLORS.textMuted} />
               <Text style={styles.entryDate}>{formatDate(e.clock_in_datetime)}</Text>
-              <Text style={styles.entryDur}>{formatDuration(e.actual_work_minutes)}</Text>
+              <Text style={styles.entryDur}>{formatDuration(entryMinutes(e))}</Text>
             </View>
           ))}
         </View>
