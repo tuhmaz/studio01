@@ -88,7 +88,7 @@ export async function POST(req: NextRequest) {
           periodStart, periodEnd,
           totalMinutes, prevRolloverMinutes, netMinutes,
           minijobMinutes, cashMinutes, rolloverMinutes,
-          hourlyRate, minijobLimitEur,
+          hourlyRate, cashHourlyRate, minijobLimitEur,
           minijobAmount, cashAmount,
           notes,
         } = body;
@@ -101,7 +101,7 @@ export async function POST(req: NextRequest) {
             period_start, period_end,
             total_minutes, prev_rollover_minutes, net_minutes,
             minijob_minutes, cash_minutes, rollover_minutes,
-            hourly_rate, minijob_limit_eur,
+            hourly_rate, cash_hourly_rate, minijob_limit_eur,
             minijob_amount, cash_amount,
             status, notes
           ) VALUES (
@@ -109,7 +109,7 @@ export async function POST(req: NextRequest) {
             ${periodStart}, ${periodEnd},
             ${totalMinutes ?? 0}, ${prevRolloverMinutes ?? 0}, ${netMinutes ?? 0},
             ${minijobMinutes ?? 0}, ${cashMinutes ?? 0}, ${rolloverMinutes ?? 0},
-            ${hourlyRate ?? 0}, ${minijobLimitEur ?? 603},
+            ${hourlyRate ?? 0}, ${cashHourlyRate ?? hourlyRate ?? 0}, ${minijobLimitEur ?? 603},
             ${minijobAmount ?? 0}, ${cashAmount ?? 0},
             'DRAFT', ${notes ?? null}
           )
@@ -123,12 +123,15 @@ export async function POST(req: NextRequest) {
             cash_minutes           = EXCLUDED.cash_minutes,
             rollover_minutes       = EXCLUDED.rollover_minutes,
             hourly_rate            = EXCLUDED.hourly_rate,
+            cash_hourly_rate       = EXCLUDED.cash_hourly_rate,
             minijob_limit_eur      = EXCLUDED.minijob_limit_eur,
             minijob_amount         = EXCLUDED.minijob_amount,
             cash_amount            = EXCLUDED.cash_amount,
             notes                  = EXCLUDED.notes,
+            status                 = 'DRAFT',
+            settled_at             = NULL,
+            settled_by             = NULL,
             updated_at             = now()
-          WHERE payroll_settlements.status = 'DRAFT'
           RETURNING *
         `;
         return NextResponse.json({ data: rows[0] ?? null });

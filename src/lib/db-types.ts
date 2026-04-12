@@ -160,6 +160,7 @@ export interface DbPayrollSettlement {
   cash_minutes: number;
   rollover_minutes: number;
   hourly_rate: number;
+  cash_hourly_rate: number;
   minijob_limit_eur: number;
   minijob_amount: number;
   cash_amount: number;
