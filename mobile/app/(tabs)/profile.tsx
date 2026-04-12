@@ -21,8 +21,10 @@ interface MonthEntry {
   travel_bonus_minutes: number | null;
   status: string;
   job_site_id: string | null;
+  job_assignment_id?: string | null;
 }
 interface SiteInfo { id: string; is_remote: boolean; distance_from_hq: number | null; }
+interface AssignmentInfo { id: string; job_site_id: string | null; }
 type Point = { x: number; y: number };
 
 // ─── SVG-Konvertierung ────────────────────────────────────────────────────────
@@ -232,6 +234,7 @@ export default function ProfileScreen() {
   const [sigPadOpen,    setSigPadOpen]    = useState(false);
   const [savingSig,     setSavingSig]     = useState(false);
   const [siteMap,       setSiteMap]       = useState<Map<string, SiteInfo>>(new Map());
+  const [assignmentSiteMap, setAssignmentSiteMap] = useState<Map<string, string>>(new Map());
 
   const now   = new Date();
   const month = now.getMonth();
@@ -248,7 +251,7 @@ export default function ProfileScreen() {
       const prevY = month === 0 ? year - 1 : year;
       const start = `${prevY}-${String(prevM + 1).padStart(2, '0')}-21T00:00:00.000Z`;
       const end   = `${year}-${String(month + 1).padStart(2, '0')}-20T23:59:59.999Z`;
-      const [entriesRes, userRes, sitesRes] = await Promise.all([
+      const [entriesRes, userRes, sitesRes, assignmentsRes] = await Promise.all([
         apiData<MonthEntry[]>({
           action: 'query_range', table: 'time_entries',
           filters: { employee_id: user.id, company_id: user.companyId },
@@ -265,9 +268,18 @@ export default function ProfileScreen() {
           filters: { company_id: user.companyId },
           select: 'id,is_remote,distance_from_hq',
         }),
+        apiData<AssignmentInfo[]>({
+          action: 'query', table: 'job_assignments',
+          filters: { company_id: user.companyId },
+          select: 'id,job_site_id',
+        }),
       ]);
       const siteMap = new Map<string, SiteInfo>();
       (sitesRes.data ?? []).forEach(s => siteMap.set(s.id, s));
+      const assignmentMap = new Map<string, string>();
+      (assignmentsRes.data ?? []).forEach(a => {
+        if (a.id && a.job_site_id) assignmentMap.set(a.id, a.job_site_id);
+      });
       setEntries(
         (entriesRes.data ?? []).filter(e =>
           !!e.clock_in_datetime &&
@@ -275,6 +287,7 @@ export default function ProfileScreen() {
         )
       );
       setSiteMap(siteMap);
+      setAssignmentSiteMap(assignmentMap);
       const sigData = (userRes.data ?? [])[0]?.signature_data;
       setHasSig(!!sigData);
     } finally { setLoading(false); }
@@ -303,7 +316,10 @@ export default function ProfileScreen() {
   entries.forEach(e => {
     const day    = e.clock_in_datetime.split('T')[0];
     const stored = e.travel_bonus_minutes ?? 0;
-    const site   = e.job_site_id ? siteMap.get(e.job_site_id) : null;
+    const resolvedSiteId =
+      e.job_site_id ??
+      (e.job_assignment_id ? assignmentSiteMap.get(e.job_assignment_id) ?? null : null);
+    const site = resolvedSiteId ? siteMap.get(resolvedSiteId) : null;
     const isFar  = stored !== 0
       ? true
       : ((site?.is_remote ?? false) || Number(site?.distance_from_hq ?? 0) >= 95);
