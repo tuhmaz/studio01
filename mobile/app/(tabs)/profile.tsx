@@ -14,7 +14,7 @@ import { SERVER_KEY, DEFAULT_URL } from '@/api/client';
 import { COLORS } from '@/utils/constants';
 import { formatDuration, formatDate } from '@/utils/helpers';
 
-interface MonthEntry { actual_work_minutes: number; clock_in_datetime: string; travel_bonus_minutes: number | null; }
+interface MonthEntry { actual_work_minutes: number; clock_in_datetime: string; travel_bonus_minutes: number | null; status: string; }
 type Point = { x: number; y: number };
 
 // ─── SVG-Konvertierung ────────────────────────────────────────────────────────
@@ -252,7 +252,13 @@ export default function ProfileScreen() {
           select: 'signature_data',
         }),
       ]);
-      setEntries((entriesRes.data ?? []).filter(e => e.actual_work_minutes != null));
+      // Only SUBMITTED or APPROVED — same filter as web reports page
+      setEntries(
+        (entriesRes.data ?? []).filter(e =>
+          e.actual_work_minutes != null &&
+          (e.status === 'SUBMITTED' || e.status === 'APPROVED')
+        )
+      );
       const sigData = (userRes.data ?? [])[0]?.signature_data;
       setHasSig(!!sigData);
     } finally { setLoading(false); }
@@ -262,8 +268,9 @@ export default function ProfileScreen() {
     useCallback(() => { load(true); }, [load])
   );
 
-  const totalWorkMin = entries.reduce((s, e) => s + (e.actual_work_minutes ?? 0), 0);
-  // Per-day travel deduction cap (max -60 min/day) — same logic as web PDF
+  // billableMinutes = workMinutes (no travel deduction from total — same as web reports page)
+  const totalMinutes  = entries.reduce((s, e) => s + (e.actual_work_minutes ?? 0), 0);
+  // Travel deduction shown separately as info only
   const bonusPerDay = new Map<string, number>();
   entries.forEach(e => {
     const day   = e.clock_in_datetime.split('T')[0];
@@ -273,7 +280,6 @@ export default function ProfileScreen() {
     bonusPerDay.set(day, Math.max(-60, prev + bonus));
   });
   const totalBonusMin = Array.from(bonusPerDay.values()).reduce((s, v) => s + v, 0);
-  const totalMinutes  = totalWorkMin + totalBonusMin;
 
   const MONTH_NAMES = ['Januar','Februar','März','April','Mai','Juni','Juli','August','September','Oktober','November','Dezember'];
   const prevMonth   = month === 0 ? 11 : month - 1;

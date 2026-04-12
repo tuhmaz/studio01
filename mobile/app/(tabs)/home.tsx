@@ -30,7 +30,7 @@ interface JobSite {
   city: string;
 }
 
-interface PeriodEntry { actual_work_minutes: number; }
+interface PeriodEntry { actual_work_minutes: number; status: string; }
 
 interface TimeEntry {
   id: string;
@@ -198,7 +198,11 @@ export default function HomeScreen() {
         setActiveEntry(open);
         const currentAssignments = aRes.data ?? [];
         setActiveAssign(open ? currentAssignments.find(a => a.id === open.job_assignment_id) ?? null : null);
-        const periodData = (pRes.data ?? []).filter(e => e.actual_work_minutes != null);
+        // Only SUBMITTED or APPROVED — same as web reports page
+        const periodData = (pRes.data ?? []).filter(
+          e => e.actual_work_minutes != null &&
+               (e.status === 'SUBMITTED' || e.status === 'APPROVED')
+        );
         setPeriodMinutes(periodData.reduce((s, e) => s + e.actual_work_minutes, 0));
         setPeriodEntries(periodData.length);
       }
