@@ -9,7 +9,7 @@ import Svg, { Path } from 'react-native-svg';
 import * as SecureStore from 'expo-secure-store';
 import { useFocusEffect } from 'expo-router';
 import { useAuth } from '@/context/AuthContext';
-import { apiData } from '@/api/client';
+import { apiData, apiFetch } from '@/api/client';
 import { SERVER_KEY, DEFAULT_URL } from '@/api/client';
 import { COLORS } from '@/utils/constants';
 import { formatDuration, formatDate } from '@/utils/helpers';
@@ -235,6 +235,7 @@ export default function ProfileScreen() {
   const [savingSig,     setSavingSig]     = useState(false);
   const [siteMap,       setSiteMap]       = useState<Map<string, SiteInfo>>(new Map());
   const [assignmentSiteMap, setAssignmentSiteMap] = useState<Map<string, string>>(new Map());
+  const [rolloverMinutes, setRolloverMinutes] = useState(0); // Übertrag aus letzter Abrechnung
 
   const now   = new Date();
   const month = now.getMonth();
@@ -251,7 +252,8 @@ export default function ProfileScreen() {
       const prevY = month === 0 ? year - 1 : year;
       const start = `${prevY}-${String(prevM + 1).padStart(2, '0')}-21T00:00:00.000Z`;
       const end   = `${year}-${String(month + 1).padStart(2, '0')}-20T23:59:59.999Z`;
-      const [entriesRes, userRes, sitesRes, assignmentsRes] = await Promise.all([
+      const periodStart = `${prevY}-${String(prevM + 1).padStart(2, '0')}-21`;
+      const [entriesRes, userRes, sitesRes, assignmentsRes, rolloverRes] = await Promise.all([
         apiData<MonthEntry[]>({
           action: 'query_range', table: 'time_entries',
           filters: { employee_id: user.id, company_id: user.companyId },
@@ -273,21 +275,26 @@ export default function ProfileScreen() {
           filters: { company_id: user.companyId },
           select: 'id,job_site_id',
         }),
+        apiFetch<{ data: { rollover_minutes: number } | null }>('/api/payroll', {
+          method: 'POST',
+          body: { action: 'prev_rollover', companyId: user.companyId, employeeId: user.id, beforePeriodStart: periodStart },
+        }).catch(() => ({ data: null })),
       ]);
       const siteMap = new Map<string, SiteInfo>();
-      (sitesRes.data ?? []).forEach(s => siteMap.set(s.id, s));
+      (sitesRes.data ?? []).forEach((s: SiteInfo) => siteMap.set(s.id, s));
       const assignmentMap = new Map<string, string>();
-      (assignmentsRes.data ?? []).forEach(a => {
+      (assignmentsRes.data ?? []).forEach((a: AssignmentInfo) => {
         if (a.id && a.job_site_id) assignmentMap.set(a.id, a.job_site_id);
       });
       setEntries(
-        (entriesRes.data ?? []).filter(e =>
+        (entriesRes.data ?? []).filter((e: MonthEntry) =>
           !!e.clock_in_datetime &&
           (e.status === 'SUBMITTED' || e.status === 'APPROVED')
         )
       );
       setSiteMap(siteMap);
       setAssignmentSiteMap(assignmentMap);
+      setRolloverMinutes(rolloverRes.data?.rollover_minutes ?? 0);
       const sigData = (userRes.data ?? [])[0]?.signature_data;
       setHasSig(!!sigData);
     } finally { setLoading(false); }
@@ -417,20 +424,42 @@ export default function ProfileScreen() {
             <Text style={styles.cardTitle}>{periodLabel}</Text>
           </View>
           {loading ? <ActivityIndicator color={COLORS.primary} style={{ marginVertical: 16 }} /> : (
-            <View style={styles.statsRow}>
-              <View style={styles.stat}>
-                <Text style={styles.statValue}>{entries.length}</Text>
-                <Text style={styles.statLabel}>Einsätze</Text>
-              </View>
-              <View style={styles.statDivider} />
-              <View style={styles.stat}>
-                <Text style={styles.statValue}>{formatDuration(netMinutes)}</Text>
-                <Text style={styles.statLabel}>Gesamtzeit</Text>
-                {totalBonusMin < 0 && (
-                  <Text style={styles.statSub}>-{formatDuration(-totalBonusMin)} Fahrzeit</Text>
+            <React.Fragment>
+              <View style={styles.statsRow}>
+                <View style={styles.stat}>
+                  <Text style={styles.statValue}>{entries.length}</Text>
+                  <Text style={styles.statLabel}>Einsätze</Text>
+                </View>
+                <View style={styles.statDivider} />
+                <View style={styles.stat}>
+                  <Text style={styles.statValue}>{formatDuration(netMinutes)}</Text>
+                  <Text style={styles.statLabel}>Gesamtzeit</Text>
+                  {totalBonusMin < 0 && (
+                    <Text style={styles.statSub}>-{formatDuration(-totalBonusMin)} Fahrzeit</Text>
+                  )}
+                </View>
+                {rolloverMinutes > 0 && (
+                  <View style={styles.statDivider} />
+                )}
+                {rolloverMinutes > 0 && (
+                  <View style={styles.stat}>
+                    <Text style={[styles.statValue, { color: '#d97706' }]}>
+                      +{formatDuration(rolloverMinutes)}
+                    </Text>
+                    <Text style={styles.statLabel}>Übertrag</Text>
+                    <Text style={styles.statSub}>aus Vormonat</Text>
+                  </View>
                 )}
               </View>
-            </View>
+              {rolloverMinutes > 0 && (
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 10, backgroundColor: '#fef3c7', borderRadius: 8, paddingHorizontal: 10, paddingVertical: 6 }}>
+                  <Ionicons name="refresh-circle-outline" size={15} color="#d97706" />
+                  <Text style={{ fontSize: 12, color: '#92400e', fontWeight: '600' }}>
+                    {formatDuration(rolloverMinutes)} werden auf diesen Monat übertragen
+                  </Text>
+                </View>
+              )}
+            </React.Fragment>
           )}
 
           {/* Recent entries */}

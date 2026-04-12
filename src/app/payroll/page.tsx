@@ -146,6 +146,8 @@ export default function PayrollPage() {
   const [historyOpen, setHistoryOpen] = useState(false);
   const [historyData, setHistoryData] = useState<Settlement[]>([]);
   const [historyEmployee, setHistoryEmployee] = useState<WorkerStats | null>(null);
+  // For editing a historical (past-period) settlement from within Verlauf
+  const [historyEditSettlement, setHistoryEditSettlement] = useState<Settlement | null>(null);
 
   // ── Load ──────────────────────────────────────────────────────────────────
   const load = useCallback(async () => {
@@ -163,8 +165,9 @@ export default function PayrollPage() {
           filters: { company_id: companyId },
         }),
       }).then(r => r.json());
+      // Only MINIJOB workers — VOLLZEIT/MIDIJOB/TEILZEIT are NOT managed here
       const allUsers: UserRow[] = (usersRes.data ?? []).filter(
-        (u: any) => u.role === 'WORKER' || u.role === 'LEADER'
+        (u: any) => (u.role === 'WORKER' || u.role === 'LEADER') && u.contract_type === 'MINIJOB'
       );
 
       // 2. Load time entries for the period
@@ -358,6 +361,57 @@ export default function PayrollPage() {
         }),
       });
       await load();
+    } finally {
+      setSaving(null);
+    }
+  };
+
+  // ── Save a historical (past-period) draft edit ────────────────────────────
+  const handleHistorySave = async (s: Settlement, draft: DraftValues) => {
+    if (!userProfile || !historyEmployee) return;
+    setSaving(historyEmployee.id);
+    try {
+      const minijobAmount = minutesToEur(draft.minijobMinutes, s.hourlyRate);
+      const cashAmount    = minutesToEur(draft.cashMinutes, s.hourlyRate);
+      const res = await fetch('/api/payroll', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'upsert',
+          companyId:           userProfile.companyId,
+          employeeId:          s.employeeId,
+          periodStart:         s.periodStart,
+          periodEnd:           s.periodEnd,
+          totalMinutes:        s.totalMinutes,
+          prevRolloverMinutes: s.prevRolloverMinutes,
+          netMinutes:          s.netMinutes,
+          minijobMinutes:      draft.minijobMinutes,
+          cashMinutes:         draft.cashMinutes,
+          rolloverMinutes:     draft.rolloverMinutes,
+          hourlyRate:          s.hourlyRate,
+          minijobLimitEur:     s.minijobLimitEur,
+          minijobAmount,
+          cashAmount,
+          notes:               draft.notes,
+        }),
+      }).then(r => r.json());
+      if (res.error) throw new Error(res.error);
+      toast({ title: 'Korrigiert', description: 'Abrechnung wurde aktualisiert.' });
+      setHistoryEditSettlement(null);
+      // Reload history list
+      const reloaded = await fetch('/api/data', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'query', table: 'payroll_settlements',
+          filters: { company_id: userProfile.companyId, employee_id: s.employeeId },
+          orderBy: { column: 'period_start', ascending: false },
+        }),
+      }).then(r => r.json());
+      setHistoryData((reloaded.data ?? []).map(rowToSettlement));
+      await load();
+    } catch (e: any) {
+      toast({ variant: 'destructive', title: 'Fehler', description: e.message });
     } finally {
       setSaving(null);
     }
@@ -583,35 +637,63 @@ export default function PayrollPage() {
       )}
 
       {/* ── History dialog ── */}
-      <Dialog open={historyOpen} onOpenChange={setHistoryOpen}>
-        <DialogContent className="max-w-2xl rounded-3xl">
-          <DialogTitle>Verlauf — {historyEmployee?.name}</DialogTitle>
-          <DialogDescription>Alle abgerechneten Perioden</DialogDescription>
-          {historyData.length === 0 ? (
-            <p className="text-muted-foreground text-center py-8">Keine abgeschlossenen Abrechnungen</p>
+      <Dialog open={historyOpen} onOpenChange={v => { setHistoryOpen(v); if (!v) setHistoryEditSettlement(null); }}>
+        <DialogContent className="max-w-3xl rounded-3xl">
+          <DialogTitle className="flex items-center gap-2">
+            <History className="w-5 h-5 text-primary" /> Verlauf — {historyEmployee?.name}
+          </DialogTitle>
+          <DialogDescription>
+            Alle Abrechnungsperioden · Entwürfe können korrigiert werden
+          </DialogDescription>
+
+          {historyEditSettlement ? (
+            /* ── Inline correction editor ── */
+            <div className="space-y-4 pt-1">
+              <div className="bg-amber-50 border border-amber-200 rounded-xl px-4 py-2.5 flex items-center gap-2">
+                <AlertCircle className="w-4 h-4 text-amber-600 shrink-0" />
+                <span className="text-sm font-semibold text-amber-700">
+                  Korrektur: {historyEditSettlement.periodStart} → {historyEditSettlement.periodEnd}
+                </span>
+              </div>
+              <HistoryEditForm
+                settlement={historyEditSettlement}
+                saving={saving === historyEmployee?.id}
+                onSave={(draft) => handleHistorySave(historyEditSettlement, draft)}
+                onCancel={() => setHistoryEditSettlement(null)}
+              />
+            </div>
+          ) : historyData.length === 0 ? (
+            <p className="text-muted-foreground text-center py-8">Keine Abrechnungen vorhanden</p>
           ) : (
             <Table>
               <TableHeader>
-                <TableRow>
+                <TableRow className="bg-muted/40">
                   <TableHead>Zeitraum</TableHead>
-                  <TableHead className="text-right">Stunden</TableHead>
+                  <TableHead className="text-right">Netto-Std.</TableHead>
                   <TableHead className="text-right">Minijob</TableHead>
                   <TableHead className="text-right">Bar</TableHead>
-                  <TableHead className="text-right">Übertrag</TableHead>
+                  <TableHead className="text-right font-black text-amber-700">→ Übertrag</TableHead>
                   <TableHead className="text-center">Status</TableHead>
+                  <TableHead />
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {historyData.map(s => (
-                  <TableRow key={s.id}>
-                    <TableCell className="text-sm font-mono">
+                  <TableRow key={s.id} className={s.rolloverMinutes > 0 ? 'bg-amber-50/40' : ''}>
+                    <TableCell className="text-sm font-mono text-xs">
                       {s.periodStart} → {s.periodEnd}
                     </TableCell>
                     <TableCell className="text-right font-mono text-sm">{fmtMin(s.netMinutes)}</TableCell>
                     <TableCell className="text-right text-blue-600 font-mono text-sm">{fmtEur(s.minijobAmount)}</TableCell>
                     <TableCell className="text-right text-green-600 font-mono text-sm">{fmtEur(s.cashAmount)}</TableCell>
-                    <TableCell className="text-right text-amber-600 font-mono text-sm">
-                      {s.rolloverMinutes > 0 ? fmtMin(s.rolloverMinutes) : '—'}
+                    <TableCell className="text-right font-black text-sm">
+                      {s.rolloverMinutes > 0 ? (
+                        <span className="text-amber-600 flex items-center justify-end gap-1">
+                          <RotateCcw className="w-3 h-3" /> {fmtMin(s.rolloverMinutes)}
+                        </span>
+                      ) : (
+                        <span className="text-muted-foreground">—</span>
+                      )}
                     </TableCell>
                     <TableCell className="text-center">
                       <Badge className={s.status === 'SETTLED'
@@ -620,6 +702,14 @@ export default function PayrollPage() {
                       }>
                         {s.status === 'SETTLED' ? 'Abgerechnet' : 'Entwurf'}
                       </Badge>
+                    </TableCell>
+                    <TableCell>
+                      {s.status === 'DRAFT' && (
+                        <Button variant="ghost" size="icon" className="h-7 w-7" title="Korrigieren"
+                          onClick={() => setHistoryEditSettlement(s)}>
+                          <Edit2 className="w-3.5 h-3.5" />
+                        </Button>
+                      )}
                     </TableCell>
                   </TableRow>
                 ))}
@@ -841,6 +931,141 @@ function EditDialog({ worker, existingSettlement, saving, onSave, onClose }: {
         </DialogFooter>
       </DialogContent>
     </Dialog>
+  );
+}
+
+// ─── History Edit Form ────────────────────────────────────────────────────────
+// Lightweight editor used inside the Verlauf dialog to correct a past-period DRAFT
+
+function HistoryEditForm({ settlement: s, saving, onSave, onCancel }: {
+  settlement: Settlement;
+  saving: boolean;
+  onSave: (draft: DraftValues) => void;
+  onCancel: () => void;
+}) {
+  const maxMinijob = calcMinijobMax(s.hourlyRate, s.minijobLimitEur);
+  const net        = s.netMinutes;
+
+  const [minijobH, setMinijobH] = useState(Math.floor(s.minijobMinutes / 60));
+  const [minijobM, setMinijobM] = useState(s.minijobMinutes % 60);
+  const [cashH,    setCashH]    = useState(Math.floor(s.cashMinutes / 60));
+  const [cashM,    setCashM]    = useState(s.cashMinutes % 60);
+  const [notes,    setNotes]    = useState(s.notes ?? '');
+
+  const minijobMin   = minijobH * 60 + minijobM;
+  const cashMin      = cashH * 60 + cashM;
+  const allocatedMin = minijobMin + cashMin;
+  const rolloverMin  = Math.max(0, net - allocatedMin);
+  const overAlloc    = allocatedMin > net;
+  const overMinijob  = minijobMin > maxMinijob;
+
+  return (
+    <div className="space-y-4">
+      {/* Hours summary */}
+      <div className="grid grid-cols-3 gap-3 bg-muted/40 rounded-2xl p-4 text-center">
+        <div>
+          <p className="text-xs text-muted-foreground font-semibold uppercase">Gearbeitet</p>
+          <p className="text-lg font-black text-primary">{fmtMin(s.totalMinutes)}</p>
+        </div>
+        <div>
+          <p className="text-xs text-muted-foreground font-semibold uppercase">+ Übertrag</p>
+          <p className="text-lg font-black text-amber-600">
+            {s.prevRolloverMinutes > 0 ? `+${fmtMin(s.prevRolloverMinutes)}` : '—'}
+          </p>
+        </div>
+        <div>
+          <p className="text-xs text-muted-foreground font-semibold uppercase">Netto</p>
+          <p className="text-lg font-black text-green-600">{fmtMin(net)}</p>
+        </div>
+      </div>
+
+      {/* Minijob */}
+      <div className="space-y-2">
+        <div className="flex items-center justify-between">
+          <Label className="font-black text-blue-700 flex items-center gap-2">
+            <Banknote className="w-4 h-4" /> Minijob
+          </Label>
+          <span className="text-sm font-black text-blue-700">{fmtEur(minutesToEur(minijobMin, s.hourlyRate))}</span>
+        </div>
+        <div className="flex gap-2">
+          <div className="flex-1">
+            <Label className="text-xs text-muted-foreground">Stunden</Label>
+            <Input type="number" min={0} value={minijobH}
+              onChange={e => setMinijobH(Math.max(0, Number(e.target.value)))} className="rounded-xl" />
+          </div>
+          <div className="flex-1">
+            <Label className="text-xs text-muted-foreground">Minuten</Label>
+            <Input type="number" min={0} max={59} value={minijobM}
+              onChange={e => setMinijobM(Math.max(0, Math.min(59, Number(e.target.value))))} className="rounded-xl" />
+          </div>
+        </div>
+        {overMinijob && (
+          <p className="text-xs text-amber-600 flex items-center gap-1">
+            <AlertCircle className="w-3 h-3" /> Über Minijob-Grenze. Max. {fmtMin(maxMinijob)}.
+          </p>
+        )}
+      </div>
+
+      <Separator />
+
+      {/* Cash */}
+      <div className="space-y-2">
+        <div className="flex items-center justify-between">
+          <Label className="font-black text-green-700 flex items-center gap-2">
+            <Wallet className="w-4 h-4" /> Bar
+          </Label>
+          <span className="text-sm font-black text-green-700">{fmtEur(minutesToEur(cashMin, s.hourlyRate))}</span>
+        </div>
+        <div className="flex gap-2">
+          <div className="flex-1">
+            <Label className="text-xs text-muted-foreground">Stunden</Label>
+            <Input type="number" min={0} value={cashH}
+              onChange={e => setCashH(Math.max(0, Number(e.target.value)))} className="rounded-xl" />
+          </div>
+          <div className="flex-1">
+            <Label className="text-xs text-muted-foreground">Minuten</Label>
+            <Input type="number" min={0} max={59} value={cashM}
+              onChange={e => setCashM(Math.max(0, Math.min(59, Number(e.target.value))))} className="rounded-xl" />
+          </div>
+        </div>
+      </div>
+
+      {/* Auto rollover */}
+      <div className="bg-amber-50 border border-amber-200 rounded-2xl p-4 flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <RotateCcw className="w-4 h-4 text-amber-600" />
+          <div>
+            <p className="font-black text-sm text-amber-700">→ Übertrag nächster Monat</p>
+            <p className="text-xs text-amber-600">Netto − Minijob − Bar (automatisch)</p>
+          </div>
+        </div>
+        <p className="text-2xl font-black text-amber-600">{fmtMin(rolloverMin)}</p>
+      </div>
+
+      {overAlloc && (
+        <p className="text-sm text-destructive flex items-center gap-2">
+          <AlertCircle className="w-4 h-4" />
+          Zuweisung ({fmtMin(allocatedMin)}) überschreitet Netto ({fmtMin(net)}).
+        </p>
+      )}
+
+      <div className="space-y-1">
+        <Label className="text-xs text-muted-foreground">Notiz</Label>
+        <Textarea value={notes} onChange={e => setNotes(e.target.value)}
+          placeholder="Korrekturgrund..." className="rounded-xl text-sm resize-none" rows={2} />
+      </div>
+
+      <div className="flex gap-2 pt-1">
+        <Button variant="outline" onClick={onCancel} className="rounded-xl flex-1">Abbrechen</Button>
+        <Button
+          className="rounded-xl flex-1 font-black"
+          disabled={saving || overAlloc || overMinijob}
+          onClick={() => onSave({ minijobMinutes: minijobMin, cashMinutes: cashMin, rolloverMinutes: rolloverMin, notes })}
+        >
+          {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Korrektur speichern'}
+        </Button>
+      </div>
+    </div>
   );
 }
 
