@@ -1,7 +1,5 @@
 node_modules
 .expo
 .git
+android
 dist
-android/.gradle
-android/build
-android/app/build
