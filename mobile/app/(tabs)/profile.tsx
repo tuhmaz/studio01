@@ -328,6 +328,7 @@ export default function ProfileScreen() {
     bonusPerDay.set(day, Math.max(-60, prev + (stored !== 0 ? stored : -60)));
   });
   const totalBonusMin = Array.from(bonusPerDay.values()).reduce((s, v) => s + v, 0);
+  const netMinutes = totalMinutes + totalBonusMin;
 
   const MONTH_NAMES = ['Januar','Februar','März','April','Mai','Juni','Juli','August','September','Oktober','November','Dezember'];
   const prevMonth   = month === 0 ? 11 : month - 1;
@@ -423,7 +424,7 @@ export default function ProfileScreen() {
               </View>
               <View style={styles.statDivider} />
               <View style={styles.stat}>
-                <Text style={styles.statValue}>{formatDuration(totalMinutes)}</Text>
+                <Text style={styles.statValue}>{formatDuration(netMinutes)}</Text>
                 <Text style={styles.statLabel}>Gesamtzeit</Text>
                 {totalBonusMin < 0 && (
                   <Text style={styles.statSub}>-{formatDuration(-totalBonusMin)} Fahrzeit</Text>

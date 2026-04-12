@@ -28,9 +28,19 @@ interface JobSite {
   name: string;
   address: string;
   city: string;
+  is_remote?: boolean;
+  distance_from_hq?: number | null;
 }
 
-interface PeriodEntry { actual_work_minutes: number; status: string; }
+interface PeriodEntry {
+  actual_work_minutes: number | null;
+  travel_bonus_minutes?: number | null;
+  status: string;
+  clock_in_datetime: string;
+  clock_out_datetime?: string | null;
+  job_assignment_id?: string | null;
+  job_site_id?: string | null;
+}
 
 interface TimeEntry {
   id: string;
@@ -88,8 +98,8 @@ export default function HomeScreen() {
   const year       = now.getFullYear();
   const prevMonth  = month === 0 ? 11 : month - 1;
   const prevYear   = month === 0 ? year - 1 : year;
-  const periodStartStr = `${prevYear}-${String(prevMonth + 1).padStart(2,'0')}-21`;
-  const periodEndStr   = `${year}-${String(month + 1).padStart(2,'0')}-20T23:59:59`;
+  const periodStartStr = `${prevYear}-${String(prevMonth + 1).padStart(2,'0')}-21T00:00:00.000Z`;
+  const periodEndStr   = `${year}-${String(month + 1).padStart(2,'0')}-20T23:59:59.999Z`;
 
   // Timer for active shift
   const [elapsed, setElapsed] = useState(0);
@@ -167,7 +177,7 @@ export default function HomeScreen() {
         setWorkers((wRes.data ?? []).filter((w: any) => w.role === 'WORKER' || w.role === 'LEADER'));
       } else {
         // WORKER: only their published assignments (today + overdue open)
-        const [aRes, sRes, eRes, pRes] = await Promise.all([
+        const [aRes, sRes, eRes, pRes, allAssignRes] = await Promise.all([
           apiData<Assignment[]>({
             action:    'tracking_assignments',
             table:     'job_assignments',
@@ -188,6 +198,11 @@ export default function HomeScreen() {
             filters: { employee_id: user.id, company_id: user.companyId },
             rangeFilters: [{ column: 'clock_in_datetime', gte: periodStartStr, lte: periodEndStr }],
           }),
+          apiData<Assignment[]>({
+            action: 'query', table: 'job_assignments',
+            filters: { company_id: user.companyId },
+            select: 'id,job_site_id',
+          }),
         ]);
         setAssignments(aRes.data ?? []);
         const map: Record<string, JobSite> = {};
@@ -200,10 +215,42 @@ export default function HomeScreen() {
         setActiveAssign(open ? currentAssignments.find(a => a.id === open.job_assignment_id) ?? null : null);
         // Only SUBMITTED or APPROVED — same as web reports page
         const periodData = (pRes.data ?? []).filter(
-          e => e.actual_work_minutes != null &&
+          e => !!e.clock_in_datetime &&
                (e.status === 'SUBMITTED' || e.status === 'APPROVED')
         );
-        setPeriodMinutes(periodData.reduce((s, e) => s + e.actual_work_minutes, 0));
+        const assignmentSiteMap: Record<string, string> = {};
+        (allAssignRes.data ?? []).forEach(a => {
+          if (a.id && a.job_site_id) assignmentSiteMap[a.id] = a.job_site_id;
+        });
+        const entryMinutes = (entry: PeriodEntry): number => {
+          if (typeof entry.actual_work_minutes === 'number' && Number.isFinite(entry.actual_work_minutes)) {
+            return Math.max(0, Math.round(entry.actual_work_minutes));
+          }
+          if (entry.clock_in_datetime && entry.clock_out_datetime) {
+            const start = new Date(entry.clock_in_datetime).getTime();
+            const end = new Date(entry.clock_out_datetime).getTime();
+            if (Number.isFinite(start) && Number.isFinite(end) && end > start) {
+              return Math.round((end - start) / 60000);
+            }
+          }
+          return 0;
+        };
+        const totalWorkMinutes = periodData.reduce((s, e) => s + entryMinutes(e), 0);
+        const bonusPerDay = new Map<string, number>();
+        periodData.forEach(e => {
+          const day = e.clock_in_datetime.split('T')[0];
+          const stored = e.travel_bonus_minutes ?? 0;
+          const resolvedSiteId = e.job_site_id ?? (e.job_assignment_id ? assignmentSiteMap[e.job_assignment_id] : undefined);
+          const site = resolvedSiteId ? map[resolvedSiteId] : undefined;
+          const isFar = stored !== 0
+            ? true
+            : ((site?.is_remote ?? false) || Number(site?.distance_from_hq ?? 0) >= 95);
+          if (!isFar) return;
+          const prev = bonusPerDay.get(day) ?? 0;
+          bonusPerDay.set(day, Math.max(-60, prev + (stored !== 0 ? stored : -60)));
+        });
+        const totalBonusMin = Array.from(bonusPerDay.values()).reduce((s, v) => s + v, 0);
+        setPeriodMinutes(totalWorkMinutes + totalBonusMin);
         setPeriodEntries(periodData.length);
       }
     } catch (e: any) {
@@ -393,7 +440,7 @@ export default function HomeScreen() {
                 <View style={s.periodStats}>
                   <View style={s.periodStat}>
                     <Text style={s.periodStatValue}>{formatDuration(periodMinutes)}</Text>
-                    <Text style={s.periodStatLabel}>Gearbeitet</Text>
+                    <Text style={s.periodStatLabel}>Vergütet</Text>
                   </View>
                   <View style={s.periodStatDiv} />
                   <View style={s.periodStat}>

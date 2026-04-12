@@ -3,7 +3,7 @@
 import React, { useState } from 'react';
 import {
   LayoutDashboard, Calendar, MapPin, Users, FileText, LogOut,
-  Clock, Briefcase, UserCheck, Settings, Lock, Loader2
+  Clock, Briefcase, UserCheck, Settings, Lock, Loader2, Wallet
 } from 'lucide-react';
 import {
   Sidebar, SidebarContent, SidebarFooter, SidebarHeader,
@@ -49,6 +49,7 @@ export function Shell({ children, userRole, userName }: ShellProps) {
     { label: 'Zeiterfassung', icon: Clock,           href: '/tracking',   roles: ['WORKER', 'LEADER', 'ADMIN'] },
     { label: 'Team',          icon: Users,           href: '/team',       roles: ['ADMIN', 'LEADER'] },
     { label: 'Berichte',      icon: FileText,        href: '/reports',    roles: ['ADMIN', 'LEADER'] },
+    { label: 'Lohnabrechnung',icon: Wallet,          href: '/payroll',    roles: ['ADMIN', 'LEADER'] },
     { label: 'Einstellungen', icon: Settings,        href: '/settings',   roles: ['ADMIN'] },
   ];
 
@@ -155,6 +156,7 @@ export function Shell({ children, userRole, userName }: ShellProps) {
                pathname === '/tracking'   ? 'Zeiterfassung'   :
                pathname === '/team'       ? 'Team'            :
                pathname === '/reports'    ? 'Berichte'        :
+               pathname === '/payroll'    ? 'Lohnabrechnung'  :
                pathname === '/settings'   ? 'Einstellungen'   : 'Home'}
             </h2>
           </div>

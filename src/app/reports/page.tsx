@@ -71,7 +71,14 @@ interface WorkerMonthStats {
   overtimeMinutes: number;
   regularMinutes: number;
   brutto: number;
-  visitedSites: { site: JobSite; minutes: number; visits: number; isRemote: boolean }[];
+  visitedSites: {
+    site: JobSite;
+    minutes: number;
+    visits: number;
+    isRemote: boolean;
+    remoteDeductionMinutes: number;
+    netMinutes: number;
+  }[];
 }
 
 interface SiteStat {
@@ -198,9 +205,26 @@ function computeMonthlyStats(
       const brutto = regularPay + overtimePay;
 
       // Aggregate per site
-      const siteMap = new Map<string, { site: JobSite; minutes: number; visits: number; isRemote: boolean }>();
+      const siteMap = new Map<string, {
+        site: JobSite;
+        minutes: number;
+        visits: number;
+        isRemote: boolean;
+        remoteDeductionMinutes: number;
+      }>();
+      const remoteMinutesBySiteAndDay = new Map<string, number>();
       userEntries.forEach(e => {
         if (!e.site) return;
+        const siteId = e.site.id;
+        const day = e.entry.clockInDateTime?.split('T')[0];
+        const stored = e.entry.travelBonusMinutes ?? 0;
+        const isFar = stored !== 0
+          ? true
+          : ((e.site.isRemote ?? false) || Number(e.site.distanceFromHQ ?? 0) >= 95);
+        if (day && isFar) {
+          const key = `${day}__${siteId}`;
+          remoteMinutesBySiteAndDay.set(key, (remoteMinutesBySiteAndDay.get(key) ?? 0) + (e.entry.actualWorkMinutes ?? 0));
+        }
         const existing = siteMap.get(e.site.id);
         if (existing) {
           existing.minutes += e.entry.actualWorkMinutes ?? 0;
@@ -211,8 +235,32 @@ function computeMonthlyStats(
             minutes: e.entry.actualWorkMinutes ?? 0,
             visits: 1,
             isRemote: e.site.isRemote,
+            remoteDeductionMinutes: 0,
           });
         }
+      });
+
+      bonusPerDay.forEach((dayBonus, day) => {
+        if (dayBonus === 0) return;
+        const siteMinuteShares = Array.from(siteMap.values())
+          .map(s => ({
+            siteId: s.site.id,
+            minutes: remoteMinutesBySiteAndDay.get(`${day}__${s.site.id}`) ?? 0
+          }))
+          .filter(s => s.minutes > 0)
+          .sort((a, b) => b.minutes - a.minutes);
+        if (!siteMinuteShares.length) return;
+        const totalMinutesForDay = siteMinuteShares.reduce((sum, s) => sum + s.minutes, 0);
+        let distributed = 0;
+        siteMinuteShares.forEach((share, idx) => {
+          const isLast = idx === siteMinuteShares.length - 1;
+          const part = isLast
+            ? (dayBonus - distributed)
+            : Math.round((dayBonus * share.minutes) / totalMinutesForDay);
+          distributed += part;
+          const siteAgg = siteMap.get(share.siteId);
+          if (siteAgg) siteAgg.remoteDeductionMinutes += part;
+        });
       });
 
       return {
@@ -224,7 +272,12 @@ function computeMonthlyStats(
         overtimeMinutes,
         regularMinutes,
         brutto,
-        visitedSites: Array.from(siteMap.values()).sort((a, b) => b.minutes - a.minutes),
+        visitedSites: Array.from(siteMap.values())
+          .map(s => ({
+            ...s,
+            netMinutes: s.minutes + s.remoteDeductionMinutes,
+          }))
+          .sort((a, b) => b.netMinutes - a.netMinutes),
       } satisfies WorkerMonthStats;
     })
     .filter((s): s is WorkerMonthStats => s !== null);
@@ -589,19 +642,24 @@ function WorkerDetailDialog({
               {visitedSites.length === 0 && (
                 <p className="text-center text-muted-foreground font-bold py-10">Keine Standorte</p>
               )}
-              {visitedSites.map(({ site, minutes, visits, isRemote }) => (
+              {visitedSites.map(({ site, minutes, visits, isRemote, remoteDeductionMinutes, netMinutes }) => (
                 <div key={site.id} className="rounded-2xl border bg-gray-50 p-4 flex items-center gap-4">
                   <div className="flex-1 min-w-0">
                     <p className="font-black text-sm truncate">{site.name || site.city}</p>
                     <p className="text-xs text-muted-foreground truncate">{site.address}</p>
                   </div>
-                  <div className="text-right shrink-0">
-                    <p className="font-black text-sm">{fmtMin(minutes)}</p>
+                  <div className="text-right shrink-0 min-w-[140px]">
+                    {isRemote && remoteDeductionMinutes < 0 && (
+                      <Badge className="mb-1 text-[9px] font-black bg-amber-100 text-amber-700 border-amber-200">
+                        Remote {fmtMin(remoteDeductionMinutes)}
+                      </Badge>
+                    )}
+                    <p className="font-black text-sm">{fmtMin(netMinutes)}</p>
                     <p className="text-xs text-muted-foreground">{visits}× Einsatz</p>
+                    {isRemote && remoteDeductionMinutes < 0 && (
+                      <p className="text-[10px] text-muted-foreground">vor Abzug {fmtMin(minutes)}</p>
+                    )}
                   </div>
-                  {isRemote && (
-                    <Badge className="text-[9px] font-black bg-amber-100 text-amber-700 border-amber-200 shrink-0">Remote</Badge>
-                  )}
                 </div>
               ))}
             </TabsContent>

@@ -145,6 +145,36 @@ export interface DbWorkLogEntry {
 
 // ── Insert types ──────────────────────────────────────────────────────────────
 
+export type PayrollStatus = 'DRAFT' | 'SETTLED';
+
+export interface DbPayrollSettlement {
+  id: string;
+  company_id: string;
+  employee_id: string;
+  period_start: string;         // DATE as ISO string e.g. "2026-03-21"
+  period_end: string;
+  total_minutes: number;
+  prev_rollover_minutes: number;
+  net_minutes: number;
+  minijob_minutes: number;
+  cash_minutes: number;
+  rollover_minutes: number;
+  hourly_rate: number;
+  minijob_limit_eur: number;
+  minijob_amount: number;
+  cash_amount: number;
+  status: PayrollStatus;
+  notes: string | null;
+  settled_at: string | null;
+  settled_by: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export type DbPayrollSettlementInsert = Omit<DbPayrollSettlement, 'id' | 'created_at' | 'updated_at' | 'settled_at'> & {
+  settled_at?: string | null;
+};
+
 export type DbUserInsert           = Omit<DbUser, 'created_at' | 'updated_at' | 'last_login'> & { last_login?: string | null };
 export type DbJobSiteInsert        = Omit<DbJobSite, 'created_at'>;
 export type DbJobAssignmentInsert  = Omit<DbJobAssignment, 'created_at'>;
