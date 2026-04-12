@@ -1,7 +1,7 @@
 node_modules
 .expo
 .git
+dist
 android/.gradle
 android/build
 android/app/build
-credentials.json
