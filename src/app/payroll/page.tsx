@@ -29,7 +29,7 @@ import { useToast } from '@/hooks/use-toast';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
-const MINIJOB_LIMIT_EUR = 538; // Minijob-Grenze 2024/2025
+const MINIJOB_LIMIT_EUR = 603; // Minijob-Grenze ab 01.01.2026
 const MONTH_NAMES = [
   'Januar','Februar','März','April','Mai','Juni',
   'Juli','August','September','Oktober','November','Dezember',

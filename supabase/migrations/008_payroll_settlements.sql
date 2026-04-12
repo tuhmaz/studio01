@@ -25,7 +25,7 @@ CREATE TABLE IF NOT EXISTS public.payroll_settlements (
 
   -- Geldbeträge (berechnet aus hourly_rate des Mitarbeiters)
   hourly_rate           NUMERIC(10,2) NOT NULL DEFAULT 0,
-  minijob_limit_eur     NUMERIC(10,2) NOT NULL DEFAULT 538.00,  -- Minijob-Grenze (Standard 538€)
+  minijob_limit_eur     NUMERIC(10,2) NOT NULL DEFAULT 603.00,  -- Minijob-Grenze ab 01.01.2026: 603 €
   minijob_amount        NUMERIC(10,2) NOT NULL DEFAULT 0,       -- Betrag Banküberweisung
   cash_amount           NUMERIC(10,2) NOT NULL DEFAULT 0,       -- Betrag Barzahlung
 

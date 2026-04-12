@@ -109,7 +109,7 @@ export async function POST(req: NextRequest) {
             ${periodStart}, ${periodEnd},
             ${totalMinutes ?? 0}, ${prevRolloverMinutes ?? 0}, ${netMinutes ?? 0},
             ${minijobMinutes ?? 0}, ${cashMinutes ?? 0}, ${rolloverMinutes ?? 0},
-            ${hourlyRate ?? 0}, ${minijobLimitEur ?? 538},
+            ${hourlyRate ?? 0}, ${minijobLimitEur ?? 603},
             ${minijobAmount ?? 0}, ${cashAmount ?? 0},
             'DRAFT', ${notes ?? null}
           )
