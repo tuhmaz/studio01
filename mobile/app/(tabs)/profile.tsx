@@ -14,7 +14,14 @@ import { SERVER_KEY, DEFAULT_URL } from '@/api/client';
 import { COLORS } from '@/utils/constants';
 import { formatDuration, formatDate } from '@/utils/helpers';
 
-interface MonthEntry { actual_work_minutes: number; clock_in_datetime: string; travel_bonus_minutes: number | null; status: string; }
+interface MonthEntry {
+  actual_work_minutes: number;
+  clock_in_datetime: string;
+  travel_bonus_minutes: number | null;
+  status: string;
+  job_site_id: string | null;
+}
+interface SiteInfo { id: string; is_remote: boolean; distance_from_hq: number | null; }
 type Point = { x: number; y: number };
 
 // ─── SVG-Konvertierung ────────────────────────────────────────────────────────
@@ -239,7 +246,7 @@ export default function ProfileScreen() {
       const prevY = month === 0 ? year - 1 : year;
       const start = `${prevY}-${String(prevM + 1).padStart(2, '0')}-21`;
       const end   = `${year}-${String(month + 1).padStart(2, '0')}-20T23:59:59`;
-      const [entriesRes, userRes] = await Promise.all([
+      const [entriesRes, userRes, sitesRes] = await Promise.all([
         apiData<MonthEntry[]>({
           action: 'query_range', table: 'time_entries',
           filters: { employee_id: user.id, company_id: user.companyId },
@@ -251,14 +258,22 @@ export default function ProfileScreen() {
           filters: { id: user.id },
           select: 'signature_data',
         }),
+        apiData<SiteInfo[]>({
+          action: 'query', table: 'job_sites',
+          filters: { company_id: user.companyId },
+          select: 'id,is_remote,distance_from_hq',
+        }),
       ]);
-      // Only SUBMITTED or APPROVED — same filter as web reports page
-      setEntries(
-        (entriesRes.data ?? []).filter(e =>
-          e.actual_work_minutes != null &&
-          (e.status === 'SUBMITTED' || e.status === 'APPROVED')
-        )
+      const siteMap = new Map<string, SiteInfo>();
+      (sitesRes.data ?? []).forEach(s => siteMap.set(s.id, s));
+      const filtered = (entriesRes.data ?? []).filter(e =>
+        e.actual_work_minutes != null &&
+        (e.status === 'SUBMITTED' || e.status === 'APPROVED')
       );
+      // Attach siteMap so bonus calc can use it
+      (filtered as any)._siteMap = siteMap;
+      setEntries(filtered);
+      setSiteMap(siteMap);
       const sigData = (userRes.data ?? [])[0]?.signature_data;
       setHasSig(!!sigData);
     } finally { setLoading(false); }

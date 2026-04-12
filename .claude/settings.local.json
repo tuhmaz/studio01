@@ -38,7 +38,13 @@
       "Bash(curl -s \"https://job-logs.eascdn.net/production/db78568e-7bc9-4cfe-b26f-aa060a74868e/1775852839499-be0ace73-6551-4f72-862e-68c1fdf64eb2.txt?X-Goog-Algorithm=GOOG4-RSA-SHA256&X-Goog-Credential=www-production%40exponentjs.iam.gserviceaccount.com%2F20260410%2Fauto%2Fstorage%2Fgoog4_request&X-Goog-Date=20260410T204019Z&X-Goog-Expires=900&X-Goog-SignedHeaders=host&X-Goog-Signature=503a9c1610bf9f2e2ed54d6fa0218f34d036d71448c9ad3081d0fbd1ea6c8482d1d012768f1da03f8b0fb7024f2af7d482c9a2ab0a09960e826a7cc3f7fa914ebb74a1b884f0a0e3add9e4e1e99eb2359fef81022ae0723c41ae92fea2d960a4ea877d760b58c007a988fd1e83372fe87e9bd07ac5f03df4ba84651d1409bb57b3fa2e06750f27701b10ec55fefcac0f890cd7247b15f54fa79cf6e4ed403033df0bbabda4f32921af4d4535f9a65facdd99760551218e76dcc37c3a809ccc06da333afd0dfc34dae7bf76988bbc4e0e0a76396a5ab33d6caeccd5ce4257c1fe55ff3f3aa81ccd3228444946cc1f9a23568548a23dce6825734a437960473b10\")",
       "Bash(eas build:list --limit 1 --json --non-interactive)",
       "Bash(git -C \"c:/Users/salma/Downloads/studio/studio01\" ls-files mobile/ --others --ignored --exclude-standard)",
-      "Bash(npx eas-cli:*)"
+      "Bash(npx eas-cli:*)",
+      "Bash(keytool -list -v -keystore /c/Users/salma/Downloads/studio/studio01/mobile/android/app/debug.keystore -alias androiddebugkey -storepass android -keypass android)",
+      "Bash(npm install:*)",
+      "Bash(eas --version)",
+      "Bash(du -sh /c/Users/salma/Downloads/studio/studio01/mobile/android/*/)",
+      "Bash(eas build:*)",
+      "Bash(git check-ignore:*)"
     ]
   }
 }
