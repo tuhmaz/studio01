@@ -30,6 +30,8 @@ interface JobSite {
   city: string;
 }
 
+interface PeriodEntry { actual_work_minutes: number; }
+
 interface TimeEntry {
   id: string;
   clock_in_datetime: string;
@@ -45,6 +47,8 @@ interface Worker {
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
+
+const MONTH_NAMES = ['Januar','Februar','März','April','Mai','Juni','Juli','August','September','Oktober','November','Dezember'];
 
 function greeting(): string {
   const h = new Date().getHours();
@@ -79,6 +83,14 @@ export default function HomeScreen() {
 
   const today = now.toISOString().split('T')[0];
 
+  // Abrechnungszeitraum: 21st of prev month → 20th of current month
+  const month      = now.getMonth();
+  const year       = now.getFullYear();
+  const prevMonth  = month === 0 ? 11 : month - 1;
+  const prevYear   = month === 0 ? year - 1 : year;
+  const periodStartStr = `${prevYear}-${String(prevMonth + 1).padStart(2,'0')}-21`;
+  const periodEndStr   = `${year}-${String(month + 1).padStart(2,'0')}-20T23:59:59`;
+
   // Timer for active shift
   const [elapsed, setElapsed] = useState(0);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -89,9 +101,11 @@ export default function HomeScreen() {
   const [activeEntry, setActiveEntry] = useState<TimeEntry | null>(null);
   const [activeAssign, setActiveAssign] = useState<Assignment | null>(null);
   const [workers,     setWorkers]     = useState<Worker[]>([]);
-  const [loading,     setLoading]     = useState(true);
-  const [refreshing,  setRefreshing]  = useState(false);
-  const [errorMsg,    setErrorMsg]    = useState<string | null>(null);
+  const [loading,       setLoading]       = useState(true);
+  const [refreshing,    setRefreshing]    = useState(false);
+  const [errorMsg,      setErrorMsg]      = useState<string | null>(null);
+  const [periodMinutes, setPeriodMinutes] = useState(0);
+  const [periodEntries, setPeriodEntries] = useState(0);
 
   const resetHomeState = useCallback(() => {
     setAssignments([]);
@@ -100,6 +114,8 @@ export default function HomeScreen() {
     setActiveAssign(null);
     setWorkers([]);
     setErrorMsg(null);
+    setPeriodMinutes(0);
+    setPeriodEntries(0);
   }, []);
 
   // ── Load ──
@@ -151,7 +167,7 @@ export default function HomeScreen() {
         setWorkers((wRes.data ?? []).filter((w: any) => w.role === 'WORKER' || w.role === 'LEADER'));
       } else {
         // WORKER: only their published assignments (today + overdue open)
-        const [aRes, sRes, eRes] = await Promise.all([
+        const [aRes, sRes, eRes, pRes] = await Promise.all([
           apiData<Assignment[]>({
             action:    'tracking_assignments',
             table:     'job_assignments',
@@ -167,6 +183,11 @@ export default function HomeScreen() {
             action: 'query', table: 'time_entries',
             filters: { employee_id: user.id, status: 'OPEN' },
           }),
+          apiData<PeriodEntry[]>({
+            action: 'query_range', table: 'time_entries',
+            filters: { employee_id: user.id, company_id: user.companyId },
+            rangeFilters: [{ column: 'clock_in_datetime', gte: periodStartStr, lte: periodEndStr }],
+          }),
         ]);
         setAssignments(aRes.data ?? []);
         const map: Record<string, JobSite> = {};
@@ -177,6 +198,9 @@ export default function HomeScreen() {
         setActiveEntry(open);
         const currentAssignments = aRes.data ?? [];
         setActiveAssign(open ? currentAssignments.find(a => a.id === open.job_assignment_id) ?? null : null);
+        const periodData = (pRes.data ?? []).filter(e => e.actual_work_minutes != null);
+        setPeriodMinutes(periodData.reduce((s, e) => s + e.actual_work_minutes, 0));
+        setPeriodEntries(periodData.length);
       }
     } catch (e: any) {
       resetHomeState();
@@ -347,6 +371,33 @@ export default function HomeScreen() {
                 </View>
                 <Ionicons name="chevron-forward" size={22} color={COLORS.primary} />
               </TouchableOpacity>
+            )}
+
+            {/* ══ WORKER: Billing period summary ══ */}
+            {!isManagement && (
+              <View style={[
+                s.periodCard,
+                !(activeEntry || pendingToday + inProgressToday > 0) && { marginTop: 44 },
+              ]}>
+                <View style={s.periodCardHeader}>
+                  <Ionicons name="calendar-number-outline" size={13} color={COLORS.primary} />
+                  <Text style={s.periodCardTitle}>ABRECHNUNGSZEITRAUM</Text>
+                </View>
+                <Text style={s.periodRange}>
+                  21. {MONTH_NAMES[prevMonth]} – 20. {MONTH_NAMES[month]} {year}
+                </Text>
+                <View style={s.periodStats}>
+                  <View style={s.periodStat}>
+                    <Text style={s.periodStatValue}>{formatDuration(periodMinutes)}</Text>
+                    <Text style={s.periodStatLabel}>Gearbeitet</Text>
+                  </View>
+                  <View style={s.periodStatDiv} />
+                  <View style={s.periodStat}>
+                    <Text style={s.periodStatValue}>{periodEntries}</Text>
+                    <Text style={s.periodStatLabel}>Einsätze</Text>
+                  </View>
+                </View>
+              </View>
             )}
 
             {/* ══ LEADER: Routen-Übersicht card ══ */}
@@ -801,6 +852,30 @@ const s = StyleSheet.create({
     paddingVertical: 2,
   },
   catText: { fontSize: 9, fontWeight: '700', color: COLORS.primary },
+
+  // ── Billing period card
+  periodCard: {
+    backgroundColor: '#fff',
+    borderRadius: 16,
+    padding: 14,
+    marginBottom: 12,
+    marginTop: 8,
+    borderWidth: 1,
+    borderColor: `${COLORS.primary}20`,
+    shadowColor: '#000',
+    shadowOpacity: 0.04,
+    shadowRadius: 6,
+    shadowOffset: { width: 0, height: 2 },
+    elevation: 2,
+  },
+  periodCardHeader: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 4 },
+  periodCardTitle:  { fontSize: 9, fontWeight: '900', color: COLORS.primary, letterSpacing: 1, textTransform: 'uppercase' },
+  periodRange:      { fontSize: 14, fontWeight: '800', color: COLORS.text, marginBottom: 12 },
+  periodStats:      { flexDirection: 'row', alignItems: 'center' },
+  periodStat:       { flex: 1, alignItems: 'center' },
+  periodStatValue:  { fontSize: 20, fontWeight: '900', color: COLORS.primary },
+  periodStatLabel:  { fontSize: 9, fontWeight: '700', color: COLORS.textMuted, textTransform: 'uppercase', marginTop: 2 },
+  periodStatDiv:    { width: 1, height: 32, backgroundColor: COLORS.border },
 
   // ── Empty state
   emptyBox: { alignItems: 'center', paddingVertical: 48, gap: 10 },

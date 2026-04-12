@@ -198,8 +198,10 @@ export default function ProfileScreen() {
     if (!silent) setLoading(true);
     try {
       // Load time entries
-      const start = `${year}-${String(month + 1).padStart(2, '0')}-01`;
-      const end   = `${year}-${String(month + 1).padStart(2, '0')}-31`;
+      const prevM = month === 0 ? 11 : month - 1;
+      const prevY = month === 0 ? year - 1 : year;
+      const start = `${prevY}-${String(prevM + 1).padStart(2, '0')}-21`;
+      const end   = `${year}-${String(month + 1).padStart(2, '0')}-20T23:59:59`;
       const [entriesRes, userRes] = await Promise.all([
         apiData<MonthEntry[]>({
           action: 'query_range', table: 'time_entries',
@@ -226,6 +228,9 @@ export default function ProfileScreen() {
   const totalMinutes = entries.reduce((s, e) => s + (e.actual_work_minutes ?? 0), 0);
 
   const MONTH_NAMES = ['Januar','Februar','März','April','Mai','Juni','Juli','August','September','Oktober','November','Dezember'];
+  const prevMonth   = month === 0 ? 11 : month - 1;
+  const prevYear    = month === 0 ? year - 1 : year;
+  const periodLabel = `21. ${MONTH_NAMES[prevMonth]} – 20. ${MONTH_NAMES[month]} ${year}`;
 
   const handleSaveServer = async () => {
     await SecureStore.setItemAsync(SERVER_KEY, tempUrl.trim());
@@ -306,7 +311,7 @@ export default function ProfileScreen() {
         <View style={styles.card}>
           <View style={styles.cardHeader}>
             <Ionicons name="bar-chart-outline" size={16} color={COLORS.primary} />
-            <Text style={styles.cardTitle}>{MONTH_NAMES[month]} {year}</Text>
+            <Text style={styles.cardTitle}>{periodLabel}</Text>
           </View>
           {loading ? <ActivityIndicator color={COLORS.primary} style={{ marginVertical: 16 }} /> : (
             <View style={styles.statsRow}>
