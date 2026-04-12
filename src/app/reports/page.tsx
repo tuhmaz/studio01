@@ -194,8 +194,8 @@ function computeMonthlyStats(
         bonusPerDay.set(day, Math.max(-60, prev + (stored !== 0 ? stored : -60)));
       });
       const remoteBonusMinutes = Array.from(bonusPerDay.values()).reduce((s, v) => s + v, 0);
-      // User requested to NOT deduct the remote hour from the total billable minutes in the reports display
-      const billableMinutes = workMinutes;
+      // Vergütete Zeit = Reine Arbeitszeit + Fahrtabzug (remoteBonusMinutes is negative)
+      const billableMinutes = workMinutes + remoteBonusMinutes;
       const targetMinutes = (user.monthlyTargetHours ?? 0) * 60;
       const overtimeMinutes = targetMinutes > 0 ? Math.max(0, billableMinutes - targetMinutes) : 0;
       const regularMinutes = billableMinutes - overtimeMinutes;

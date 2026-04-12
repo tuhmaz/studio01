@@ -119,7 +119,7 @@ export interface PayrollResult {
 export function simulatePayroll(user: User, bruttoLohn: number): PayrollResult {
 
   // ── Minijob: pauschal, keine Abzüge für Arbeitnehmer ─────────────────────
-  if (user.contractType === 'MINIJOB' && bruttoLohn <= 538) {
+  if (user.contractType === 'MINIJOB' && bruttoLohn <= 603) { // Minijob-Grenze ab 01.01.2026
     return {
       brutto: bruttoLohn, lohnsteuer: 0, soli: 0, kirchensteuer: 0,
       krankenversicherung: 0, rentenversicherung: 0, arbeitslosenversicherung: 0,

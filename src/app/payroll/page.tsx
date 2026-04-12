@@ -253,9 +253,14 @@ export default function PayrollPage() {
 
       // 7. Build WorkerStats
       const stats: WorkerStats[] = allUsers.map(u => {
-        const totalWork  = minutesByEmployee.get(u.id) ?? 0;
-        // Note: web reports page does NOT deduct travel from billable — same here
-        const totalMin   = totalWork;
+        const totalWork   = minutesByEmployee.get(u.id) ?? 0;
+        // Sum per-day capped travel bonus for this employee (negative = deduction)
+        const dayBonuses  = bonusByEmployeeDay.get(u.id);
+        const travelBonus = dayBonuses
+          ? Array.from(dayBonuses.values()).reduce((s, v) => s + v, 0)
+          : 0;
+        // Vergütete Zeit = Reine Arbeitszeit + Fahrtabzug (consistent with Berichte)
+        const totalMin   = totalWork + travelBonus;
         const prevRoll   = prevRolloverMap.get(u.id) ?? 0;
         const net        = totalMin + prevRoll;
         return {
