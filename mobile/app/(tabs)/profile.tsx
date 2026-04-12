@@ -14,28 +14,42 @@ import { SERVER_KEY, DEFAULT_URL } from '@/api/client';
 import { COLORS } from '@/utils/constants';
 import { formatDuration, formatDate } from '@/utils/helpers';
 
-interface MonthEntry { actual_work_minutes: number; clock_in_datetime: string; }
+interface MonthEntry { actual_work_minutes: number; clock_in_datetime: string; travel_bonus_minutes: number | null; }
 type Point = { x: number; y: number };
 
 // ─── SVG-Konvertierung ────────────────────────────────────────────────────────
 
-const PAD_W = 320;
-const PAD_H = 130;
+const PAD_W = 340;
+const PAD_H = 160;
+
+/** Weighted 3-point average to reduce jitter */
+function smoothPoints(pts: Point[]): Point[] {
+  if (pts.length <= 2) return pts;
+  const out: Point[] = [pts[0]];
+  for (let i = 1; i < pts.length - 1; i++) {
+    out.push({
+      x: (pts[i - 1].x + pts[i].x * 2 + pts[i + 1].x) / 4,
+      y: (pts[i - 1].y + pts[i].y * 2 + pts[i + 1].y) / 4,
+    });
+  }
+  out.push(pts[pts.length - 1]);
+  return out;
+}
 
 function getSvgPathFromStroke(stroke: Point[]) {
   if (!stroke || stroke.length === 0) return '';
-  if (stroke.length === 1) return `M${stroke[0].x.toFixed(1)},${stroke[0].y.toFixed(1)} L${(stroke[0].x + 0.5).toFixed(1)},${stroke[0].y.toFixed(1)}`;
-  
-  let d = `M ${stroke[0].x.toFixed(1)} ${stroke[0].y.toFixed(1)}`;
-  let p0 = stroke[0];
-  
-  for (let i = 1; i < stroke.length; i++) {
-    const p1 = stroke[i];
-    const midPoint = {
-      x: p0.x + (p1.x - p0.x) / 2,
-      y: p0.y + (p1.y - p0.y) / 2
-    };
-    d += ` Q ${p0.x.toFixed(1)} ${p0.y.toFixed(1)} ${midPoint.x.toFixed(1)} ${midPoint.y.toFixed(1)}`;
+  if (stroke.length === 1) {
+    const p = stroke[0];
+    return `M${p.x.toFixed(1)},${p.y.toFixed(1)} L${(p.x + 0.5).toFixed(1)},${p.y.toFixed(1)}`;
+  }
+  const pts = smoothPoints(stroke);
+  let d = `M ${pts[0].x.toFixed(1)} ${pts[0].y.toFixed(1)}`;
+  let p0 = pts[0];
+  for (let i = 1; i < pts.length; i++) {
+    const p1 = pts[i];
+    const mx = ((p0.x + p1.x) / 2).toFixed(1);
+    const my = ((p0.y + p1.y) / 2).toFixed(1);
+    d += ` Q ${p0.x.toFixed(1)} ${p0.y.toFixed(1)} ${mx} ${my}`;
     p0 = p1;
   }
   d += ` L ${p0.x.toFixed(1)} ${p0.y.toFixed(1)}`;
@@ -74,8 +88,11 @@ function SignaturePadModal({
   onSave: (dataUrl: string) => void;
   onCancel: () => void;
 }) {
-  const [strokes, setStrokes]       = useState<Point[][]>([]);
-  const [current, setCurrent]       = useState<Point[]>([]);
+  const [strokes,    setStrokes]    = useState<Point[][]>([]);
+  const [current,    setCurrent]    = useState<Point[]>([]);
+  const [canvasSize, setCanvasSize] = useState({ w: PAD_W, h: PAD_H });
+  const lastPt = useRef<Point | null>(null);
+
   const allPoints = [...strokes, current];
 
   const panResponder = useRef(
@@ -83,23 +100,31 @@ function SignaturePadModal({
       onStartShouldSetPanResponder: () => true,
       onMoveShouldSetPanResponder:  () => true,
       onPanResponderGrant: (evt) => {
-        const { locationX, locationY } = evt.nativeEvent;
-        setCurrent([{ x: locationX, y: locationY }]);
+        const { locationX: x, locationY: y } = evt.nativeEvent;
+        lastPt.current = { x, y };
+        setCurrent([{ x, y }]);
       },
       onPanResponderMove: (evt) => {
-        const { locationX, locationY } = evt.nativeEvent;
-        setCurrent(prev => [...prev, { x: locationX, y: locationY }]);
+        const { locationX: x, locationY: y } = evt.nativeEvent;
+        const last = lastPt.current;
+        if (last) {
+          const dx = x - last.x, dy = y - last.y;
+          if (dx * dx + dy * dy < 9) return; // skip points < 3 px apart
+        }
+        lastPt.current = { x, y };
+        setCurrent(prev => [...prev, { x, y }]);
       },
       onPanResponderRelease: () => {
+        lastPt.current = null;
         setCurrent(prev => {
-          setStrokes(s => [...s, prev]);
+          if (prev.length > 0) setStrokes(s => [...s, prev]);
           return [];
         });
       },
     })
   ).current;
 
-  const handleClear = () => { setStrokes([]); setCurrent([]); };
+  const handleClear = () => { setStrokes([]); setCurrent([]); lastPt.current = null; };
 
   const handleSave = () => {
     const allStrokes = strokes.filter(s => s.length > 0);
@@ -107,12 +132,15 @@ function SignaturePadModal({
       Alert.alert('Keine Unterschrift', 'Bitte zuerst unterschreiben.');
       return;
     }
-    onSave(svgToDataUrl(strokesToSvg(allStrokes)));
+    // Normalize touch coords → PAD_W × PAD_H for consistent PDF output
+    const sx = PAD_W / canvasSize.w;
+    const sy = PAD_H / canvasSize.h;
+    const normalized = allStrokes.map(s => s.map(p => ({ x: p.x * sx, y: p.y * sy })));
+    onSave(svgToDataUrl(strokesToSvg(normalized)));
   };
 
-  // Reset when modal opens
   useEffect(() => {
-    if (visible) { setStrokes([]); setCurrent([]); }
+    if (visible) { setStrokes([]); setCurrent([]); lastPt.current = null; }
   }, [visible]);
 
   return (
@@ -128,29 +156,38 @@ function SignaturePadModal({
             </TouchableOpacity>
           </View>
 
-          <Text style={pad.hint}>Unterschreiben Sie im weißen Feld</Text>
+          <Text style={pad.hint}>Unterschreiben Sie im weißen Feld unten</Text>
 
           {/* Drawing area */}
           <View
             style={pad.canvas}
             {...panResponder.panHandlers}
             collapsable={false}
+            onLayout={(e) => {
+              const { width: w, height: h } = e.nativeEvent.layout;
+              if (w > 0 && h > 0) setCanvasSize({ w, h });
+            }}
           >
-            <Svg width="100%" height="100%" pointerEvents="none">
+            {/* viewBox matches actual canvas pixel size — no distortion */}
+            <Svg
+              width="100%"
+              height="100%"
+              viewBox={`0 0 ${canvasSize.w} ${canvasSize.h}`}
+              pointerEvents="none"
+            >
               {allPoints.filter(s => s.length > 0).map((stroke, i) => (
                 <Path
                   key={i}
                   d={getSvgPathFromStroke(stroke)}
                   fill="none"
-                  stroke="#000000"
-                  strokeWidth="3"
+                  stroke="#1a1a2e"
+                  strokeWidth="2.5"
                   strokeLinecap="round"
                   strokeLinejoin="round"
                 />
               ))}
             </Svg>
 
-            {/* Placeholder text if empty */}
             {strokes.length === 0 && current.length === 0 && (
               <Text style={[pad.placeholder, { pointerEvents: 'none' }]}>Hier unterschreiben ↓</Text>
             )}
@@ -225,7 +262,18 @@ export default function ProfileScreen() {
     useCallback(() => { load(true); }, [load])
   );
 
-  const totalMinutes = entries.reduce((s, e) => s + (e.actual_work_minutes ?? 0), 0);
+  const totalWorkMin = entries.reduce((s, e) => s + (e.actual_work_minutes ?? 0), 0);
+  // Per-day travel deduction cap (max -60 min/day) — same logic as web PDF
+  const bonusPerDay = new Map<string, number>();
+  entries.forEach(e => {
+    const day   = e.clock_in_datetime.split('T')[0];
+    const bonus = e.travel_bonus_minutes ?? 0;
+    if (bonus === 0) return;
+    const prev = bonusPerDay.get(day) ?? 0;
+    bonusPerDay.set(day, Math.max(-60, prev + bonus));
+  });
+  const totalBonusMin = Array.from(bonusPerDay.values()).reduce((s, v) => s + v, 0);
+  const totalMinutes  = totalWorkMin + totalBonusMin;
 
   const MONTH_NAMES = ['Januar','Februar','März','April','Mai','Juni','Juli','August','September','Oktober','November','Dezember'];
   const prevMonth   = month === 0 ? 11 : month - 1;
@@ -322,7 +370,10 @@ export default function ProfileScreen() {
               <View style={styles.statDivider} />
               <View style={styles.stat}>
                 <Text style={styles.statValue}>{formatDuration(totalMinutes)}</Text>
-                <Text style={styles.statLabel}>Arbeitszeit</Text>
+                <Text style={styles.statLabel}>Gesamtzeit</Text>
+                {totalBonusMin < 0 && (
+                  <Text style={styles.statSub}>-{formatDuration(-totalBonusMin)} Fahrzeit</Text>
+                )}
               </View>
             </View>
           )}
@@ -448,6 +499,7 @@ const styles = StyleSheet.create({
   stat:         { alignItems: 'center', gap: 4 },
   statValue:    { fontSize: 24, fontWeight: '900', color: COLORS.primary },
   statLabel:    { fontSize: 10, fontWeight: '700', color: COLORS.textMuted, textTransform: 'uppercase' },
+  statSub:      { fontSize: 9, fontWeight: '600', color: COLORS.accent, marginTop: 2 },
   statDivider:  { width: 1, backgroundColor: COLORS.border },
   entryRow:     { flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 6, borderTopWidth: 1, borderTopColor: COLORS.border },
   entryDate:    { flex: 1, fontSize: 12, color: COLORS.textMuted },
@@ -476,22 +528,25 @@ const styles = StyleSheet.create({
 });
 
 const pad = StyleSheet.create({
-  overlay:     { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' },
-  sheet:       { backgroundColor: '#fff', borderTopLeftRadius: 28, borderTopRightRadius: 28, padding: 20, paddingBottom: 36 },
+  overlay:     { flex: 1, backgroundColor: 'rgba(0,0,0,0.55)', justifyContent: 'flex-end' },
+  sheet:       { backgroundColor: '#fff', borderTopLeftRadius: 28, borderTopRightRadius: 28, padding: 20, paddingBottom: 40 },
   header:      { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 },
   title:       { fontSize: 17, fontWeight: '900', color: COLORS.text },
-  hint:        { fontSize: 11, color: COLORS.textMuted, marginBottom: 14 },
+  hint:        { fontSize: 11, color: COLORS.textMuted, marginBottom: 12 },
   canvas:      {
-    width: '100%', height: PAD_H,
-    backgroundColor: '#fff',
-    borderWidth: 1.5, borderColor: COLORS.border, borderRadius: 14,
+    width: '100%', height: 200,
+    backgroundColor: '#fafafa',
+    borderWidth: 1.5, borderColor: COLORS.border, borderRadius: 16,
     overflow: 'hidden',
     position: 'relative',
   },
-  placeholder: { position: 'absolute', bottom: 10, left: 0, right: 0, textAlign: 'center', fontSize: 12, color: COLORS.textLight },
-  actions:     { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 16, gap: 12 },
-  clearBtn:    { flexDirection: 'row', alignItems: 'center', gap: 6, paddingVertical: 10, paddingHorizontal: 16, borderRadius: 12, borderWidth: 1.5, borderColor: COLORS.border, flex: 1, justifyContent: 'center' },
+  placeholder: {
+    position: 'absolute', bottom: 14, left: 0, right: 0,
+    textAlign: 'center', fontSize: 13, color: COLORS.textLight, fontStyle: 'italic',
+  },
+  actions:     { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 14, gap: 12 },
+  clearBtn:    { flexDirection: 'row', alignItems: 'center', gap: 6, paddingVertical: 12, paddingHorizontal: 16, borderRadius: 12, borderWidth: 1.5, borderColor: COLORS.border, flex: 1, justifyContent: 'center' },
   clearText:   { fontSize: 13, fontWeight: '700', color: COLORS.textMuted },
-  saveBtn:     { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: COLORS.primary, paddingVertical: 10, paddingHorizontal: 20, borderRadius: 12, flex: 2, justifyContent: 'center' },
+  saveBtn:     { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: COLORS.primary, paddingVertical: 12, paddingHorizontal: 20, borderRadius: 12, flex: 2, justifyContent: 'center' },
   saveBtnText: { color: '#fff', fontWeight: '800', fontSize: 13 },
 });
