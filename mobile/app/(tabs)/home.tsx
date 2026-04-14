@@ -291,8 +291,10 @@ export default function HomeScreen() {
   }, [activeEntry]);
 
   // ── Derived stats ──
-  const todayAssignments    = assignments.filter(a => a.scheduled_date === today);
-  const overdueAssignments  = assignments.filter(a => a.scheduled_date < today);
+  // Normalize: postgres.js may return DATE as '2026-04-14T00:00:00.000Z' — take first 10 chars
+  const normDate = (d: string) => (d ?? '').substring(0, 10);
+  const todayAssignments    = assignments.filter(a => normDate(a.scheduled_date) === today);
+  const overdueAssignments  = assignments.filter(a => normDate(a.scheduled_date) < today);
   const completedToday      = todayAssignments.filter(a => a.status === 'COMPLETED').length;
   const inProgressToday     = todayAssignments.filter(a => a.status === 'IN_PROGRESS').length;
   const pendingToday        = todayAssignments.filter(a => a.status === 'PENDING').length;
@@ -565,7 +567,7 @@ function AssignmentCard({
   isActive?: boolean;
 }) {
   const statusColor = STATUS_COLOR[a.status] ?? COLORS.textMuted;
-  const isOverdue   = a.scheduled_date < new Date().toISOString().split('T')[0];
+  const isOverdue   = (a.scheduled_date ?? '').substring(0, 10) < new Date().toISOString().split('T')[0];
 
   return (
     <View style={[s.assignCard, isActive && s.assignCardActive]}>

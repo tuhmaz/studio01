@@ -22,6 +22,7 @@ import {
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { useAuth } from '@/db/provider';
+import { useQuery } from '@/db/use-query';
 import { useToast } from '@/hooks/use-toast';
 
 interface ShellProps {
@@ -33,8 +34,21 @@ interface ShellProps {
 export function Shell({ children, userRole, userName }: ShellProps) {
   const pathname = usePathname();
   const router = useRouter();
-  const { logout, changePassword } = useAuth();
+  const { logout, changePassword, userProfile } = useAuth();
   const { toast } = useToast();
+  const companyId = userProfile?.companyId;
+
+  const { data: companyRows } = useQuery<{ name?: string | null; site_name?: string | null }>({
+    table: 'companies',
+    filters: companyId ? { id: companyId } : undefined,
+    select: 'name,site_name',
+    enabled: !!companyId,
+  });
+  const company = companyRows?.[0];
+  const siteName = (company?.site_name ?? '').trim();
+  const companyName = (company?.name ?? '').trim();
+  const brandTitle = siteName || companyName || 'Haus Pro';
+  const brandSubtitle = siteName && companyName && companyName !== siteName ? companyName : (companyName ? '' : 'Tuhmaz Group');
 
   const [isPasswordModalOpen, setIsPasswordModalOpen] = useState(false);
   const [newPassword, setNewPassword] = useState('');
@@ -91,8 +105,10 @@ export function Shell({ children, userRole, userName }: ShellProps) {
               <MapPin className="text-primary w-6 h-6" />
             </div>
             <div>
-              <h1 className="font-bold text-xl tracking-tight text-white">Haus Pro</h1>
-              <p className="text-xs text-sidebar-foreground/70 uppercase font-semibold">Tuhmaz Group</p>
+              <h1 className="font-bold text-xl tracking-tight text-white">{brandTitle}</h1>
+              {brandSubtitle && (
+                <p className="text-xs text-sidebar-foreground/70 uppercase font-semibold">{brandSubtitle}</p>
+              )}
             </div>
           </div>
         </SidebarHeader>

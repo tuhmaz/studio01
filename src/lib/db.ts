@@ -32,6 +32,19 @@ function createPool() {
     transform: {
       undefined: null,
     },
+    // Keep DATE columns (OID 1082) as 'YYYY-MM-DD' strings instead of JS Date objects.
+    // Without this, JSON serialization produces '2026-04-14T00:00:00.000Z' which breaks
+    // client-side string comparisons in the mobile app.
+    types: {
+      date: {
+        to:        1082,
+        from:      [1082],
+        serialize: (x: unknown) => x instanceof Date
+          ? `${x.getFullYear()}-${String(x.getMonth() + 1).padStart(2,'0')}-${String(x.getDate()).padStart(2,'0')}`
+          : String(x),
+        parse: (x: string) => x,   // 'YYYY-MM-DD' → keep as-is
+      },
+    },
   });
 }
 

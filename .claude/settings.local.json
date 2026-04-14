@@ -44,7 +44,8 @@
       "Bash(eas --version)",
       "Bash(du -sh /c/Users/salma/Downloads/studio/studio01/mobile/android/*/)",
       "Bash(eas build:*)",
-      "Bash(git check-ignore:*)"
+      "Bash(git check-ignore:*)",
+      "Bash(npx eas:*)"
     ]
   }
 }
