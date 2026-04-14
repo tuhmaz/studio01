@@ -236,7 +236,26 @@ export default function HomeScreen() {
           return 0;
         };
         const totalWorkMinutes = periodData.reduce((s, e) => s + entryMinutes(e), 0);
-        setPeriodMinutes(totalWorkMinutes);
+
+        // Travel deduction — same logic as web Berichte/Lohnabrechnung
+        const bonusByDay = new Map<string, number>();
+        periodData.forEach(e => {
+          const day    = e.clock_in_datetime.split('T')[0];
+          const stored = e.travel_bonus_minutes ?? 0;
+          const resolvedSiteId =
+            e.job_site_id ??
+            (e.job_assignment_id ? assignmentSiteMap[e.job_assignment_id] ?? null : null);
+          const site  = resolvedSiteId ? map[resolvedSiteId] : null;
+          const isFar = stored !== 0
+            ? true
+            : ((site?.is_remote ?? false) || Number(site?.distance_from_hq ?? 0) >= 95);
+          if (!isFar) return;
+          const prev = bonusByDay.get(day) ?? 0;
+          bonusByDay.set(day, Math.max(-60, prev + (stored !== 0 ? stored : -60)));
+        });
+        const totalBonusMin = Array.from(bonusByDay.values()).reduce((s, v) => s + v, 0);
+
+        setPeriodMinutes(totalWorkMinutes + totalBonusMin);
         setPeriodEntries(periodData.length);
       }
     } catch (e: any) {

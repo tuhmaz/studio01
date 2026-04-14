@@ -431,10 +431,10 @@ export default function ProfileScreen() {
                 </View>
                 <View style={styles.statDivider} />
                 <View style={styles.stat}>
-                  <Text style={styles.statValue}>{formatDuration(totalMinutes)}</Text>
-                  <Text style={styles.statLabel}>Arbeitszeit</Text>
+                  <Text style={styles.statValue}>{formatDuration(totalMinutes + totalBonusMin)}</Text>
+                  <Text style={styles.statLabel}>Vergütete Zeit</Text>
                   {totalBonusMin < 0 && (
-                    <Text style={styles.statSub}>{formatDuration(-totalBonusMin)} Fahrzeit</Text>
+                    <Text style={styles.statSub}>-{formatDuration(-totalBonusMin)} Fahrzeit</Text>
                   )}
                 </View>
                 {rolloverMinutes > 0 && (

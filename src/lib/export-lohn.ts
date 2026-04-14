@@ -630,33 +630,38 @@ export function generateLohnzettel(params: LohnExportParams) {
   const overtimePay     = (overtimeMin / 60) * hourlyRate * OVERTIME_RATE;
   const bruttoTotal     = regularPay + overtimePay;
 
-  // Per-site aggregation for the site list based on grouped entries
-  // To keep it simple, if a grouped entry has multiple sites, we distribute the visit
-  // Or we just use the original entries for siteMap but ensure unique visits per day?
-  // Let's count unique days per site
+  // Per-site aggregation — same daily cap logic as Arbeitszeitnachweis
   const siteMap = new Map<string, { name: string; address: string; visits: number; minutes: number; travelBonusMinutes: number }>();
 
-  // Track visits per site per day to avoid double counting
+  // siteVisitsPerDay: prevents double-counting same site on same day
+  // dayTravelUsed: ensures global -60 min/day cap across ALL sites (not per site)
   const siteVisitsPerDay = new Set<string>();
+  const dayTravelUsed    = new Set<string>();
 
   entries.forEach(e => {
-    const key = e.siteName || e.siteAddress || '?';
-    const dayKey = `${e.date.split('T')[0]}-${key}`;
+    const day    = e.date.split('T')[0];
+    const key    = e.siteName || e.siteAddress || '?';
+    const dayKey = `${day}-${key}`;
     const existing = siteMap.get(key);
 
     if (existing) {
       if (!siteVisitsPerDay.has(dayKey)) {
         existing.visits += 1;
-        // Fahrtabzug nur einmal pro Tag pro Standort addieren
-        if (e.travelBonusMinutes !== 0) existing.travelBonusMinutes += -60;
+        // Fahrtabzug: max -60 Min pro Tag gesamt (nicht pro Standort)
+        if (e.travelBonusMinutes !== 0 && !dayTravelUsed.has(day)) {
+          existing.travelBonusMinutes += -60;
+          dayTravelUsed.add(day);
+        }
         siteVisitsPerDay.add(dayKey);
       }
       existing.minutes += e.workMinutes;
     } else {
+      const travel = e.travelBonusMinutes !== 0 && !dayTravelUsed.has(day) ? -60 : 0;
+      if (travel !== 0) dayTravelUsed.add(day);
       siteMap.set(key, {
         name: e.siteName, address: e.siteAddress,
         visits: 1, minutes: e.workMinutes,
-        travelBonusMinutes: e.travelBonusMinutes !== 0 ? -60 : 0,
+        travelBonusMinutes: travel,
       });
       siteVisitsPerDay.add(dayKey);
     }
