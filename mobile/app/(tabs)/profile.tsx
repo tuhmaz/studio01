@@ -75,7 +75,6 @@ function strokesToSvg(strokes: Point[][]): string {
   return (
     `<svg xmlns="http://www.w3.org/2000/svg" width="${PAD_W}" height="${PAD_H}" ` +
     `viewBox="0 0 ${PAD_W} ${PAD_H}">` +
-    `<rect width="${PAD_W}" height="${PAD_H}" fill="white"/>` +
     `<path d="${paths}" fill="none" stroke="#000000" stroke-width="3" ` +
     `stroke-linecap="round" stroke-linejoin="round"/>` +
     `</svg>`

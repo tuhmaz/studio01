@@ -568,9 +568,9 @@ export function generateArbeitszeitnachweis(params: LohnExportParams) {
   doc.text('Unterschrift Mitarbeiter:', col3x + 4, ry);
   // Digitale Unterschrift — Seitenverhältnis beibehalten
   if (worker.signatureData) {
-    addSignatureImage(doc, worker.signatureData, col3x + 4, ry + 1, colW3 - 10, 8);
+    addSignatureImage(doc, worker.signatureData, col3x + 4, ry + 1, colW3 - 10, 10);
   }
-  doc.line(col3x + 4, ry + 11, col3x + colW3 - 6, ry + 11);
+  doc.line(col3x + 4, ry + 13, col3x + colW3 - 6, ry + 13);
 
   drawFooter(doc, company, worker.name, periodLabel);
 
@@ -926,28 +926,28 @@ export function generateLohnzettel(params: LohnExportParams) {
 
   // ── Signature strip ──
   sy += 110;
-  if (sy + 20 > 283) { doc.addPage(); sy = 20; }
+  if (sy + 23 > 283) { doc.addPage(); sy = 20; }
 
-  fillRect(doc, MARGIN, sy, CW, 18, [252, 252, 255]);
+  fillRect(doc, MARGIN, sy, CW, 21, [252, 252, 255]);
   doc.setDrawColor(...BORDER);
-  doc.rect(MARGIN, sy, CW, 18);
+  doc.rect(MARGIN, sy, CW, 21);
 
   const sigCols = 3;
   const sigW = CW / sigCols;
   const sigLabels = ['Ort / Datum', 'Unterschrift Mitarbeiter', 'Unterschrift Vorgesetzter'];
   sigLabels.forEach((label, i) => {
     const x = MARGIN + i * sigW;
-    if (i > 0) doc.line(x, sy + 1, x, sy + 18);
+    if (i > 0) doc.line(x, sy + 1, x, sy + 21);
     doc.setTextColor(80, 95, 115);
     doc.setFont('helvetica', 'normal');
     doc.setFontSize(7);
     doc.text(label + ':', x + 3, sy + 5);
-    // Digitale Unterschrift Mitarbeiter (i === 1)
+    // Digitale Unterschrift Mitarbeiter (i === 1) — Seitenverhältnis beibehalten, transparent
     if (i === 1 && worker.signatureData) {
-      addSignatureImage(doc, worker.signatureData, x + 3, sy + 5, sigW - 8, 8);
+      addSignatureImage(doc, worker.signatureData, x + 3, sy + 5, sigW - 8, 10);
     }
     doc.setDrawColor(...BORDER);
-    doc.line(x + 3, sy + 14, x + sigW - 5, sy + 14);
+    doc.line(x + 3, sy + 17, x + sigW - 5, sy + 17);
   });
 
   drawFooter(doc, company, worker.name, periodLabel);
