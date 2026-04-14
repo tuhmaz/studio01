@@ -341,7 +341,7 @@ export function generateArbeitszeitnachweis(params: LohnExportParams) {
   const fields = [
     { label: 'MITARBEITER',  value: worker.name },
     { label: 'VERTRAGSART',  value: CONTRACT_LABELS[worker.contractType ?? ''] ?? '—' },
-    { label: 'SOLLSTUNDEN',  value: `${worker.monthlyTargetHours ?? 0} Std./Monat` },
+    { label: 'STUNDENSATZ',  value: worker.hourlyRate ? fmtCurrency(worker.hourlyRate) + '/h' : '—' },
     { label: 'EINTRÄGE',     value: String(groupedEntries.length) },
   ];
   fields.forEach((f, i) => {
@@ -523,9 +523,11 @@ export function generateArbeitszeitnachweis(params: LohnExportParams) {
 
   drawSummaryRow('Reine Arbeitszeit:', fmtHHMM(totalWorkMin) + ' Std.', MARGIN, colW1);
   ry += rowH;
-  drawSummaryRow('Fahrzeit-Zuschlag:', fmtHHMM(Math.abs(totalBonusMin)) + ' Std.', MARGIN, colW1, ORANGE);
-  ry += rowH;
-  drawSummaryRow('Gesamte vergütete Zeit:', fmtHHMM(totalMin) + ' Std.', MARGIN, colW1);
+  if (totalBonusMin !== 0) {
+    drawSummaryRow('Fahrtabzug (Fernstandorte):', `-${fmtHHMM(Math.abs(totalBonusMin))} Std.`, MARGIN, colW1, [180, 40, 40]);
+    ry += rowH;
+  }
+  drawSummaryRow('Vergütete Zeit (netto):', fmtHHMM(totalMin) + ' Std.', MARGIN, colW1);
 
   // Middle column
   ry = sy + 17;
@@ -809,15 +811,13 @@ export function generateLohnzettel(params: LohnExportParams) {
   const halfW = midX - MARGIN;
   const rightW = MARGIN + CW - midX;
 
-  drawRow('Brutto-Arbeitszeit:', fmtHHMM(totalWorkMin) + ' Std.', MARGIN, halfW);
+  drawRow('Reine Arbeitszeit:', fmtHHMM(totalWorkMin) + ' Std.', MARGIN, halfW);
   ry += rowH;
   if (totalBonusMin !== 0) {
-    const bonusLabel = totalBonusMin < 0 ? 'Fahrtabzug (Fernstandorte):' : 'Fahrtbonus:';
-    const bonusVal   = (totalBonusMin < 0 ? '-' : '+') + fmtHHMM(Math.abs(totalBonusMin)) + ' Std.';
-    drawRow(bonusLabel, bonusVal, MARGIN, halfW, totalBonusMin < 0 ? [180, 40, 40] : ORANGE);
+    drawRow('Fahrtabzug (Fernstandorte):', `-${fmtHHMM(Math.abs(totalBonusMin))} Std.`, MARGIN, halfW, [180, 40, 40]);
     ry += rowH;
   }
-  drawRow('Vergütete Netto-Zeit:', fmtHHMM(totalBillable) + ' Std.', MARGIN, halfW);
+  drawRow('Vergütete Zeit (netto):', fmtHHMM(totalBillable) + ' Std.', MARGIN, halfW);
   ry += rowH;
   drawRow('Sollstunden / Monat:', `${worker.monthlyTargetHours ?? 0} Std.`, MARGIN, halfW);
   ry += rowH;

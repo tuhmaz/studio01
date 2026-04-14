@@ -236,21 +236,7 @@ export default function HomeScreen() {
           return 0;
         };
         const totalWorkMinutes = periodData.reduce((s, e) => s + entryMinutes(e), 0);
-        const bonusPerDay = new Map<string, number>();
-        periodData.forEach(e => {
-          const day = e.clock_in_datetime.split('T')[0];
-          const stored = e.travel_bonus_minutes ?? 0;
-          const resolvedSiteId = e.job_site_id ?? (e.job_assignment_id ? assignmentSiteMap[e.job_assignment_id] : undefined);
-          const site = resolvedSiteId ? map[resolvedSiteId] : undefined;
-          const isFar = stored !== 0
-            ? true
-            : ((site?.is_remote ?? false) || Number(site?.distance_from_hq ?? 0) >= 95);
-          if (!isFar) return;
-          const prev = bonusPerDay.get(day) ?? 0;
-          bonusPerDay.set(day, Math.max(-60, prev + (stored !== 0 ? stored : -60)));
-        });
-        const totalBonusMin = Array.from(bonusPerDay.values()).reduce((s, v) => s + v, 0);
-        setPeriodMinutes(totalWorkMinutes + totalBonusMin);
+        setPeriodMinutes(totalWorkMinutes);
         setPeriodEntries(periodData.length);
       }
     } catch (e: any) {
