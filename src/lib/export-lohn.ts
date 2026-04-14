@@ -144,6 +144,26 @@ function fillRect(doc: jsPDF, x: number, y: number, w: number, h: number, rgb: [
   doc.rect(x, y, w, h, 'F');
 }
 
+/**
+ * Zeichnet ein Unterschrift-Bild in eine Bounding-Box, unter Beibehaltung des
+ * Originalseitenverhältnisses (SignaturPad: 340 × 160 px → Ratio 2.125 : 1).
+ */
+function addSignatureImage(
+  doc: jsPDF, dataUrl: string,
+  boxX: number, boxY: number, boxW: number, boxH: number,
+) {
+  const RATIO = 340 / 160; // PAD_W / PAD_H — Breite ist 2.125× die Höhe
+  // Berechne größtmögliche Größe, die in die Box passt
+  let imgH = Math.min(boxH, boxW / RATIO);
+  let imgW = imgH * RATIO;
+  // Zentriert in der Box
+  const ox = (boxW - imgW) / 2;
+  const oy = (boxH - imgH) / 2;
+  try {
+    doc.addImage(dataUrl, 'PNG', boxX + ox, boxY + oy, imgW, imgH);
+  } catch (_) { /* Bild nicht verfügbar */ }
+}
+
 /** Height of the page header band in mm — used by callers to position content below */
 const HEADER_H = 32;
 
@@ -471,9 +491,7 @@ export function generateArbeitszeitnachweis(params: LohnExportParams) {
         worker.signatureData
       ) {
         const { x, y, width, height } = data.cell;
-        try {
-          doc.addImage(worker.signatureData, 'PNG', x + 1, y + 0.5, width - 2, height - 1);
-        } catch (_) { /* Bild nicht verfügbar */ }
+        addSignatureImage(doc, worker.signatureData, x + 1, y + 0.5, width - 2, height - 1);
       }
     },
   });
@@ -481,12 +499,12 @@ export function generateArbeitszeitnachweis(params: LohnExportParams) {
   // ── Summary (hours only, no money) ──
   const finalY = (doc as any).lastAutoTable.finalY as number;
   let sy = finalY + 6;
-  if (sy + 40 > 283) { doc.addPage(); sy = 20; }
+  if (sy + 46 > 283) { doc.addPage(); sy = 20; }
 
-  fillRect(doc, MARGIN, sy, CW, 38, LIGHT_BG);
+  fillRect(doc, MARGIN, sy, CW, 44, LIGHT_BG);
   doc.setDrawColor(...BORDER);
   doc.setLineWidth(0.2);
-  doc.rect(MARGIN, sy, CW, 38);
+  doc.rect(MARGIN, sy, CW, 44);
 
   // Section title line
   doc.setDrawColor(...BORDER);
@@ -500,8 +518,8 @@ export function generateArbeitszeitnachweis(params: LohnExportParams) {
   // Vertical dividers
   const col2x = MARGIN + CW * 0.38;
   const col3x = MARGIN + CW * 0.66;
-  doc.line(col2x, sy + 1, col2x, sy + 38);
-  doc.line(col3x, sy + 1, col3x, sy + 38);
+  doc.line(col2x, sy + 1, col2x, sy + 44);
+  doc.line(col3x, sy + 1, col3x, sy + 44);
 
   // Left column
   const rowH = 7.5;
@@ -548,15 +566,11 @@ export function generateArbeitszeitnachweis(params: LohnExportParams) {
   doc.line(col3x + 4, ry + 6, col3x + colW3 - 6, ry + 6);
   ry += 14;
   doc.text('Unterschrift Mitarbeiter:', col3x + 4, ry);
-  // Digitale Unterschrift einzeichnen (falls vorhanden)
+  // Digitale Unterschrift — Seitenverhältnis beibehalten
   if (worker.signatureData) {
-    try {
-      const sigW = colW3 - 10;
-      const sigH = 7;
-      doc.addImage(worker.signatureData, 'PNG', col3x + 4, ry - sigH + 1, sigW, sigH);
-    } catch (_) { /* Bild nicht verfügbar */ }
+    addSignatureImage(doc, worker.signatureData, col3x + 4, ry + 1, colW3 - 10, 8);
   }
-  doc.line(col3x + 4, ry + 6, col3x + colW3 - 6, ry + 6);
+  doc.line(col3x + 4, ry + 11, col3x + colW3 - 6, ry + 11);
 
   drawFooter(doc, company, worker.name, periodLabel);
 
@@ -930,11 +944,7 @@ export function generateLohnzettel(params: LohnExportParams) {
     doc.text(label + ':', x + 3, sy + 5);
     // Digitale Unterschrift Mitarbeiter (i === 1)
     if (i === 1 && worker.signatureData) {
-      try {
-        const imgW = sigW - 8;
-        const imgH = 8;
-        doc.addImage(worker.signatureData, 'PNG', x + 3, sy + 5, imgW, imgH);
-      } catch (_) { /* Bild nicht verfügbar */ }
+      addSignatureImage(doc, worker.signatureData, x + 3, sy + 5, sigW - 8, 8);
     }
     doc.setDrawColor(...BORDER);
     doc.line(x + 3, sy + 14, x + sigW - 5, sy + 14);
