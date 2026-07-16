@@ -3,7 +3,7 @@
  * No Supabase dependency — these are plain interfaces only.
  */
 
-export type UserRole         = 'ADMIN' | 'LEADER' | 'WORKER';
+export type UserRole         = 'SUPER_ADMIN' | 'ADMIN' | 'MANAGER' | 'ACCOUNTANT' | 'LEADER' | 'WORKER';
 export type ContractType     = 'MINIJOB' | 'MIDIJOB' | 'VOLLZEIT' | 'TEILZEIT';
 export type TaxClass         = 1 | 2 | 3 | 4 | 5 | 6;
 export type TimeEntryStatus  = 'OPEN' | 'PENDING' | 'SUBMITTED' | 'APPROVED' | 'REJECTED';
@@ -59,6 +59,7 @@ export interface DbUser {
   can_login_with_password: boolean;
   invite_id: string | null;
   last_login: string | null;
+  password_changed_at: string | null;
   sv_nr: string | null;
   steuer_id: string | null;
   status_taetigkeit: string | null;
@@ -176,7 +177,10 @@ export type DbPayrollSettlementInsert = Omit<DbPayrollSettlement, 'id' | 'create
   settled_at?: string | null;
 };
 
-export type DbUserInsert           = Omit<DbUser, 'created_at' | 'updated_at' | 'last_login'> & { last_login?: string | null };
+export type DbUserInsert           = Omit<DbUser, 'created_at' | 'updated_at' | 'last_login' | 'password_changed_at'> & {
+  last_login?: string | null;
+  password_changed_at?: string | null;
+};
 export type DbJobSiteInsert        = Omit<DbJobSite, 'created_at'>;
 export type DbJobAssignmentInsert  = Omit<DbJobAssignment, 'created_at'>;
 export type DbTimeEntryInsert      = Omit<DbTimeEntry, 'created_at'>;

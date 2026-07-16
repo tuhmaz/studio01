@@ -18,11 +18,10 @@ import {
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import {
   Wallet, Users, Banknote, RotateCcw, CheckCircle2, Clock,
-  Loader2, ChevronRight, AlertCircle, Info, History, Edit2, Trash2,
+  Loader2, AlertCircle, Info, History, Edit2, Trash2,
 } from 'lucide-react';
 import { useAuth } from '@/db/provider';
 import { useToast } from '@/hooks/use-toast';

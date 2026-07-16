@@ -3,15 +3,15 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import NextImage from 'next/image';
 import {
-  FileText, Mic, MicOff, Camera, Send, Download, Trash2,
+  FileText, Mic, MicOff, Camera, Send, Download,
   Image as ImageIcon, Volume2, ZoomIn, X, Loader2,
-  FolderOpen, Filter, ChevronDown,
+  FolderOpen,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
 import { Dialog, DialogContent, DialogTitle, DialogDescription } from '@/components/ui/dialog';
-import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
+import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useToast } from '@/hooks/use-toast';
 
 // ── Types ─────────────────────────────────────────────────────────────────────

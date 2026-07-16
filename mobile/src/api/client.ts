@@ -6,7 +6,7 @@ import * as SecureStore from 'expo-secure-store';
 
 export const TOKEN_KEY   = 'hp_token';
 export const SERVER_KEY  = 'hp_server_url';
-export const DEFAULT_URL = 'https://mbj.news'; // production server
+export const DEFAULT_URL = process.env.EXPO_PUBLIC_API_URL || 'http://10.0.2.2:9002';
 
 export async function getServerUrl(): Promise<string> {
   const stored = await SecureStore.getItemAsync(SERVER_KEY);

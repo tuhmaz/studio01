@@ -7,7 +7,6 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Separator } from '@/components/ui/separator';
-import { Badge } from '@/components/ui/badge';
 import {
   Building2, Phone, Mail, Globe, FileText, Image as ImageIcon,
   Save, Loader2, CheckCircle, Upload, X, MapPin, Hash,
@@ -92,6 +91,7 @@ export default function SettingsPage() {
   const role      = (userProfile?.role ?? 'WORKER') as UserRole;
   const userName  = userProfile?.name ?? '';
   const companyId = userProfile?.companyId ?? '';
+  const canManageSettings = role === 'SUPER_ADMIN' || role === 'ADMIN';
 
   const [form, setForm]       = useState<CompanyForm>(EMPTY);
   const [loading, setLoading] = useState(true);
@@ -208,7 +208,7 @@ export default function SettingsPage() {
         </div>
 
         {/* Access guard */}
-        {!isUserLoading && role !== 'ADMIN' && (
+        {!isUserLoading && !canManageSettings && (
           <Card className="rounded-3xl border-none shadow-md bg-amber-50">
             <CardContent className="p-6 flex items-center gap-3">
               <AlertCircle className="w-5 h-5 text-amber-600 shrink-0" />
@@ -240,7 +240,7 @@ export default function SettingsPage() {
                     value={form.siteName}
                     onChange={set('siteName')}
                     className="h-12 rounded-xl font-medium"
-                    disabled={role !== 'ADMIN'}
+                    disabled={!canManageSettings}
                   />
                 </Field>
 
@@ -251,7 +251,7 @@ export default function SettingsPage() {
                       <div className="relative w-24 h-16 rounded-xl overflow-hidden border border-gray-200 bg-gray-50 flex items-center justify-center shrink-0">
                         {/* eslint-disable-next-line @next/next/no-img-element */}
                         <img src={form.logoData} alt="Logo" className="max-w-full max-h-full object-contain p-1" />
-                        {role === 'ADMIN' && (
+                        {canManageSettings && (
                           <button
                             onClick={() => setForm(f => ({ ...f, logoData: '' }))}
                             className="absolute top-1 right-1 bg-black/50 text-white rounded-full w-5 h-5 flex items-center justify-center hover:bg-black/70"
@@ -266,7 +266,7 @@ export default function SettingsPage() {
                         <span className="text-[9px] text-gray-400 font-bold uppercase">Kein Logo</span>
                       </div>
                     )}
-                    {role === 'ADMIN' && (
+                    {canManageSettings && (
                       <>
                         <input
                           ref={logoInputRef}
@@ -304,7 +304,7 @@ export default function SettingsPage() {
                     value={form.name}
                     onChange={set('name')}
                     className="h-12 rounded-xl font-medium"
-                    disabled={role !== 'ADMIN'}
+                    disabled={!canManageSettings}
                   />
                 </Field>
 
@@ -317,7 +317,7 @@ export default function SettingsPage() {
                         value={form.address}
                         onChange={set('address')}
                         className="h-12 rounded-xl font-medium pl-9"
-                        disabled={role !== 'ADMIN'}
+                        disabled={!canManageSettings}
                       />
                     </div>
                   </Field>
@@ -327,7 +327,7 @@ export default function SettingsPage() {
                       value={form.postalCode}
                       onChange={set('postalCode')}
                       className="h-12 rounded-xl font-medium"
-                      disabled={role !== 'ADMIN'}
+                      disabled={!canManageSettings}
                     />
                   </Field>
                 </div>
@@ -338,7 +338,7 @@ export default function SettingsPage() {
                     value={form.city}
                     onChange={set('city')}
                     className="h-12 rounded-xl font-medium"
-                    disabled={role !== 'ADMIN'}
+                    disabled={!canManageSettings}
                   />
                 </Field>
               </Section>
@@ -359,7 +359,7 @@ export default function SettingsPage() {
                       value={form.taxNumber}
                       onChange={set('taxNumber')}
                       className="h-12 rounded-xl font-medium pl-9"
-                      disabled={role !== 'ADMIN'}
+                      disabled={!canManageSettings}
                     />
                   </div>
                 </Field>
@@ -382,7 +382,7 @@ export default function SettingsPage() {
                         value={form.phone}
                         onChange={set('phone')}
                         className="h-12 rounded-xl font-medium pl-9"
-                        disabled={role !== 'ADMIN'}
+                        disabled={!canManageSettings}
                       />
                     </div>
                   </Field>
@@ -395,7 +395,7 @@ export default function SettingsPage() {
                         value={form.email}
                         onChange={set('email')}
                         className="h-12 rounded-xl font-medium pl-9"
-                        disabled={role !== 'ADMIN'}
+                        disabled={!canManageSettings}
                       />
                     </div>
                   </Field>
@@ -409,7 +409,7 @@ export default function SettingsPage() {
                       value={form.website}
                       onChange={set('website')}
                       className="h-12 rounded-xl font-medium pl-9"
-                      disabled={role !== 'ADMIN'}
+                      disabled={!canManageSettings}
                     />
                   </div>
                 </Field>
@@ -487,7 +487,7 @@ export default function SettingsPage() {
             <Button
               className="font-black h-12 px-10 rounded-2xl gap-2 shadow-md"
               onClick={handleSave}
-              disabled={saving || role !== 'ADMIN'}
+              disabled={saving || !canManageSettings}
             >
               {saving ? <Loader2 className="w-4 h-4 animate-spin" /> :
                saved  ? <CheckCircle className="w-4 h-4" />          :

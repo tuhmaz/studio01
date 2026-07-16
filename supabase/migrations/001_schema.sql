@@ -26,7 +26,7 @@ CREATE TABLE IF NOT EXISTS public.users (
   company_id            TEXT NOT NULL REFERENCES public.companies(id),
   name                  TEXT NOT NULL,
   email                 TEXT NOT NULL,
-  role                  TEXT NOT NULL CHECK (role IN ('ADMIN', 'LEADER', 'WORKER')),
+  role                  TEXT NOT NULL CHECK (role IN ('SUPER_ADMIN', 'ADMIN', 'MANAGER', 'ACCOUNTANT', 'LEADER', 'WORKER')),
   avatar_url            TEXT,
 
   -- Payroll fields
@@ -46,6 +46,7 @@ CREATE TABLE IF NOT EXISTS public.users (
   invite_id             TEXT,
 
   last_login            TIMESTAMPTZ,
+  password_changed_at   TIMESTAMPTZ,
   created_at            TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at            TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
@@ -75,7 +76,7 @@ CREATE TABLE IF NOT EXISTS public.account_invites (
   id         TEXT PRIMARY KEY DEFAULT 'invite-' || gen_random_uuid()::TEXT,
   company_id TEXT NOT NULL REFERENCES public.companies(id) ON DELETE CASCADE,
   email      TEXT NOT NULL,
-  role       TEXT NOT NULL CHECK (role IN ('ADMIN', 'LEADER', 'WORKER')),
+  role       TEXT NOT NULL CHECK (role IN ('SUPER_ADMIN', 'ADMIN', 'MANAGER', 'ACCOUNTANT', 'LEADER', 'WORKER')),
   created_by UUID REFERENCES public.users(id) ON DELETE SET NULL,
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );

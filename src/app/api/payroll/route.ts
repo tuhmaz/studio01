@@ -1,38 +1,46 @@
 /**
  * POST /api/payroll
  * Handles payroll settlement CRUD for Minijob workers.
- *
- * Actions:
- *   list    → GET all settlements for company + period
- *   get     → GET one settlement by employee + period_start
- *   upsert  → INSERT or UPDATE a settlement (DRAFT)
- *   settle  → Mark settlement as SETTLED (locked)
- *   delete  → Delete a DRAFT settlement
  */
 import { NextRequest, NextResponse } from 'next/server';
-import { getSession, verifyTokenString } from '@/lib/auth-server';
 import sql from '@/lib/db';
+import { getRequestSession, getRequestIp, getUserAgent } from '@/lib/request-context';
+import { hasPermission, isAdminLike, hasRole } from '@/lib/permissions';
+import { writeAuditLog } from '@/lib/audit';
 
 function err(msg: string, status = 400) {
   return NextResponse.json({ error: msg }, { status });
 }
 
+function canAccessEmployee(session: any, employeeId?: string | null) {
+  if (!employeeId) return false;
+  return isAdminLike(session) || hasRole(session, ['MANAGER', 'ACCOUNTANT']) || session.userId === employeeId;
+}
+
+async function ensureCompanyEmployee(companyId: string, employeeId: string) {
+  const rows = await sql`
+    SELECT id FROM users
+     WHERE id = ${employeeId}
+       AND company_id = ${companyId}
+     LIMIT 1
+  `;
+  return rows.length > 0;
+}
+
 export async function POST(req: NextRequest) {
-  const authHeader = req.headers.get('authorization') ?? '';
-  const bearerToken = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : null;
-  const session = bearerToken ? await verifyTokenString(bearerToken) : await getSession();
+  const session = await getRequestSession(req);
   if (!session) return err('Nicht authentifiziert', 401);
 
   const body = await req.json();
   const { action } = body;
+  const companyId = session.companyId;
 
   try {
     switch (action) {
-
-      // ── List settlements for a period ──────────────────────────────────────
       case 'list': {
-        const { companyId, periodStart } = body;
-        if (!companyId || !periodStart) return err('companyId and periodStart required');
+        if (!hasPermission(session, 'payroll.view')) return err('Keine Berechtigung', 403);
+        const { periodStart } = body;
+        if (!periodStart) return err('periodStart required');
 
         const rows = await sql`
           SELECT ps.*,
@@ -48,10 +56,11 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({ data: rows });
       }
 
-      // ── Get one settlement ─────────────────────────────────────────────────
       case 'get': {
-        const { companyId, employeeId, periodStart } = body;
-        if (!companyId || !employeeId || !periodStart) return err('companyId, employeeId, periodStart required');
+        const { employeeId, periodStart } = body;
+        if (!employeeId || !periodStart) return err('employeeId, periodStart required');
+        if (!canAccessEmployee(session, employeeId)) return err('Keine Berechtigung', 403);
+        if (!await ensureCompanyEmployee(companyId, employeeId)) return err('Mitarbeiter nicht gefunden', 404);
 
         const rows = await sql`
           SELECT * FROM payroll_settlements
@@ -63,10 +72,11 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({ data: rows[0] ?? null });
       }
 
-      // ── Get previous rollover for an employee ──────────────────────────────
       case 'prev_rollover': {
-        const { companyId, employeeId, beforePeriodStart } = body;
-        if (!companyId || !employeeId || !beforePeriodStart) return err('companyId, employeeId, beforePeriodStart required');
+        const { employeeId, beforePeriodStart } = body;
+        if (!employeeId || !beforePeriodStart) return err('employeeId, beforePeriodStart required');
+        if (!canAccessEmployee(session, employeeId)) return err('Keine Berechtigung', 403);
+        if (!await ensureCompanyEmployee(companyId, employeeId)) return err('Mitarbeiter nicht gefunden', 404);
 
         const rows = await sql`
           SELECT rollover_minutes, period_start, period_end
@@ -81,10 +91,10 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({ data: rows[0] ?? null });
       }
 
-      // ── Upsert (save draft) ────────────────────────────────────────────────
       case 'upsert': {
+        if (!hasPermission(session, 'payroll.manage')) return err('Keine Berechtigung', 403);
         const {
-          companyId, employeeId,
+          employeeId,
           periodStart, periodEnd,
           totalMinutes, prevRolloverMinutes, netMinutes,
           minijobMinutes, cashMinutes, rolloverMinutes,
@@ -93,7 +103,8 @@ export async function POST(req: NextRequest) {
           notes,
         } = body;
 
-        if (!companyId || !employeeId || !periodStart) return err('companyId, employeeId, periodStart required');
+        if (!employeeId || !periodStart) return err('employeeId, periodStart required');
+        if (!await ensureCompanyEmployee(companyId, employeeId)) return err('Mitarbeiter nicht gefunden', 404);
 
         const rows = await sql`
           INSERT INTO payroll_settlements (
@@ -134,13 +145,23 @@ export async function POST(req: NextRequest) {
             updated_at             = now()
           RETURNING *
         `;
+        await writeAuditLog({
+          session,
+          action: 'payroll.upsert',
+          entityType: 'payroll_settlements',
+          entityId: rows[0]?.id ?? `${employeeId}:${periodStart}`,
+          newValue: rows[0] ?? null,
+          ipAddress: getRequestIp(req),
+          userAgent: getUserAgent(req),
+        });
         return NextResponse.json({ data: rows[0] ?? null });
       }
 
-      // ── Settle (lock) ──────────────────────────────────────────────────────
       case 'settle': {
-        const { companyId, employeeId, periodStart } = body;
-        if (!companyId || !employeeId || !periodStart) return err('companyId, employeeId, periodStart required');
+        if (!hasPermission(session, 'payroll.settle')) return err('Keine Berechtigung', 403);
+        const { employeeId, periodStart } = body;
+        if (!employeeId || !periodStart) return err('employeeId, periodStart required');
+        if (!await ensureCompanyEmployee(companyId, employeeId)) return err('Mitarbeiter nicht gefunden', 404);
 
         const rows = await sql`
           UPDATE payroll_settlements
@@ -155,21 +176,41 @@ export async function POST(req: NextRequest) {
           RETURNING *
         `;
         if (!rows.length) return err('Settlement not found or already settled', 404);
+        await writeAuditLog({
+          session,
+          action: 'payroll.settle',
+          entityType: 'payroll_settlements',
+          entityId: rows[0]?.id ?? `${employeeId}:${periodStart}`,
+          newValue: rows[0],
+          ipAddress: getRequestIp(req),
+          userAgent: getUserAgent(req),
+        });
         return NextResponse.json({ data: rows[0] });
       }
 
-      // ── Delete draft ───────────────────────────────────────────────────────
       case 'delete': {
-        const { companyId, employeeId, periodStart } = body;
-        if (!companyId || !employeeId || !periodStart) return err('companyId, employeeId, periodStart required');
+        if (!hasPermission(session, 'payroll.settle')) return err('Keine Berechtigung', 403);
+        const { employeeId, periodStart } = body;
+        if (!employeeId || !periodStart) return err('employeeId, periodStart required');
+        if (!await ensureCompanyEmployee(companyId, employeeId)) return err('Mitarbeiter nicht gefunden', 404);
 
-        await sql`
+        const rows = await sql`
           DELETE FROM payroll_settlements
            WHERE company_id   = ${companyId}
              AND employee_id  = ${employeeId}
              AND period_start = ${periodStart}
              AND status       = 'DRAFT'
+           RETURNING *
         `;
+        await writeAuditLog({
+          session,
+          action: 'payroll.delete',
+          entityType: 'payroll_settlements',
+          entityId: rows[0]?.id ?? `${employeeId}:${periodStart}`,
+          oldValue: rows[0] ?? null,
+          ipAddress: getRequestIp(req),
+          userAgent: getUserAgent(req),
+        });
         return NextResponse.json({ data: null });
       }
 
@@ -178,6 +219,6 @@ export async function POST(req: NextRequest) {
     }
   } catch (e: any) {
     console.error('[api/payroll]', e.message);
-    return NextResponse.json({ error: e.message }, { status: 500 });
+    return NextResponse.json({ error: 'Serverfehler' }, { status: 500 });
   }
 }

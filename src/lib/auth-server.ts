@@ -4,14 +4,23 @@
  */
 import { SignJWT, jwtVerify } from 'jose';
 import { cookies } from 'next/headers';
+import sql from '@/lib/db';
 
-const COOKIE_NAME = 'hp_session';
-const EXPIRES_IN  = 60 * 60 * 24 * 7; // 7 days in seconds
+const COOKIE_NAME = process.env.SESSION_COOKIE_NAME || 'hp_session';
+const EXPIRES_IN  = Number(process.env.SESSION_EXPIRES_SECONDS ?? 60 * 60 * 24 * 7); // default: 7 days
 
 function getSecret(): Uint8Array {
   const secret = process.env.JWT_SECRET;
   if (!secret) throw new Error('JWT_SECRET environment variable is not set');
+  if (process.env.NODE_ENV === 'production' && secret.length < 32) {
+    throw new Error('JWT_SECRET must be at least 32 characters in production');
+  }
   return new TextEncoder().encode(secret);
+}
+
+function getCookieDomain(): string | undefined {
+  const value = process.env.COOKIE_DOMAIN?.trim();
+  return value || undefined;
 }
 
 export interface SessionPayload {
@@ -22,6 +31,40 @@ export interface SessionPayload {
   email: string;
 }
 
+type RawSessionPayload = SessionPayload & {
+  iat?: number;
+  exp?: number;
+};
+
+async function validateSessionPayload(payload: RawSessionPayload): Promise<SessionPayload | null> {
+  if (!payload.userId || !payload.companyId) return null;
+
+  const [user] = await sql`
+    SELECT id, company_id, role, name, email, password_changed_at
+      FROM public.users
+     WHERE id = ${payload.userId}
+     LIMIT 1
+  `;
+  if (!user || user.company_id !== payload.companyId) return null;
+
+  const issuedAtMs = typeof payload.iat === 'number' ? payload.iat * 1000 : 0;
+  const passwordChangedAtMs = user.password_changed_at
+    ? new Date(user.password_changed_at).getTime()
+    : 0;
+
+  if (passwordChangedAtMs && issuedAtMs + 1000 < passwordChangedAtMs) {
+    return null;
+  }
+
+  return {
+    userId: user.id,
+    companyId: user.company_id,
+    role: user.role,
+    name: user.name,
+    email: user.email,
+  };
+}
+
 /** Sign a JWT and set it as an httpOnly cookie */
 export async function createSession(payload: SessionPayload): Promise<void> {
   const token = await new SignJWT({ ...payload })
@@ -30,28 +73,26 @@ export async function createSession(payload: SessionPayload): Promise<void> {
     .setExpirationTime(`${EXPIRES_IN}s`)
     .sign(getSecret());
 
-  // Next.js 14: cookies() is synchronous
-  const cookieStore = cookies();
+  const cookieStore = await cookies();
   cookieStore.set(COOKIE_NAME, token, {
     httpOnly: true,
     secure:   process.env.NODE_ENV === 'production',
     sameSite: 'lax',
     maxAge:   EXPIRES_IN,
     path:     '/',
-    domain:   process.env.NODE_ENV === 'production' ? 'mbj.news' : undefined,
+    domain:   getCookieDomain(),
   });
 }
 
 /** Verify the session cookie and return the payload, or null if invalid */
 export async function getSession(): Promise<SessionPayload | null> {
   try {
-    // Next.js 14: cookies() is synchronous
-    const cookieStore = cookies();
+    const cookieStore = await cookies();
     const token = cookieStore.get(COOKIE_NAME)?.value;
     if (!token) return null;
 
     const { payload } = await jwtVerify(token, getSecret());
-    return payload as unknown as SessionPayload;
+    return validateSessionPayload(payload as unknown as RawSessionPayload);
   } catch {
     return null;
   }
@@ -59,7 +100,7 @@ export async function getSession(): Promise<SessionPayload | null> {
 
 /** Clear the session cookie */
 export async function deleteSession(): Promise<void> {
-  const cookieStore = cookies();
+  const cookieStore = await cookies();
   // Muss dieselben Attribute (domain, path, secure) wie beim Setzen haben,
   // sonst löscht der Browser das Cookie nicht (insb. in Production mit Domain).
   cookieStore.set(COOKIE_NAME, '', {
@@ -68,7 +109,7 @@ export async function deleteSession(): Promise<void> {
     sameSite: 'lax',
     maxAge:   0,
     path:     '/',
-    domain:   process.env.NODE_ENV === 'production' ? 'mbj.news' : undefined,
+    domain:   getCookieDomain(),
   });
 }
 
@@ -85,7 +126,7 @@ export async function createTokenString(payload: SessionPayload): Promise<string
 export async function verifyTokenString(token: string): Promise<SessionPayload | null> {
   try {
     const { payload } = await jwtVerify(token, getSecret());
-    return payload as unknown as SessionPayload;
+    return validateSessionPayload(payload as unknown as RawSessionPayload);
   } catch {
     return null;
   }

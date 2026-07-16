@@ -20,7 +20,7 @@ interface AuthState {
   userError: string | null;
   login:  (email: string, password: string) => Promise<void>;
   logout: () => Promise<void>;
-  changePassword: (newPassword: string) => Promise<void>;
+  changePassword: (currentPassword: string, newPassword: string) => Promise<void>;
 }
 
 const AuthContext = createContext<AuthState | undefined>(undefined);
@@ -95,11 +95,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
     }
   }
 
-  async function changePassword(newPassword: string) {
+  async function changePassword(currentPassword: string, newPassword: string) {
     const res = await fetch('/api/auth/change-password', {
       method:  'POST',
       headers: { 'Content-Type': 'application/json' },
-      body:    JSON.stringify({ newPassword }),
+      body:    JSON.stringify({ currentPassword, newPassword }),
     });
     if (!res.ok) {
       const d = await res.json();

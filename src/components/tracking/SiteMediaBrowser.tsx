@@ -5,7 +5,7 @@ import NextImage from 'next/image';
 import {
   MapPin, Image as ImageIcon, Volume2, FileText, Download,
   ZoomIn, X, Loader2, FolderOpen, Calendar,
-  Search, Filter, Package, Zap
+  Filter, Package, Zap
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';

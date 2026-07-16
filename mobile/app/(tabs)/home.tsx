@@ -266,7 +266,7 @@ export default function HomeScreen() {
       setLoading(false);
       setRefreshing(false);
     }
-  }, [user, today, isManagement, resetHomeState]);
+  }, [user, today, isManagement, periodStartStr, periodEndStr, resetHomeState]);
 
   useEffect(() => { load(); }, [load]);
   useFocusEffect(

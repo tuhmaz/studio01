@@ -1,4 +1,4 @@
-import { apiFetch, setToken, clearToken } from './client';
+import { apiFetch, clearToken } from './client';
 
 export interface MobileUser {
   id: string;

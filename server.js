@@ -4,6 +4,8 @@ const next = require('next');
 const path = require('path');
 const fs = require('fs');
 
+process.env.NODE_ENV ||= 'production';
+
 // Load .env before Next.js starts — use absolute path so it works regardless of cwd
 const envProd = path.join(__dirname, '.env.production');
 const envFile = path.join(__dirname, '.env');

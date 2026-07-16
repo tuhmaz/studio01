@@ -24,7 +24,7 @@ CREATE TABLE IF NOT EXISTS public.users (
   email                 TEXT NOT NULL UNIQUE,
   password_hash         TEXT NOT NULL,
   role                  TEXT NOT NULL DEFAULT 'WORKER'
-                          CHECK (role IN ('ADMIN', 'LEADER', 'WORKER')),
+                          CHECK (role IN ('SUPER_ADMIN', 'ADMIN', 'MANAGER', 'ACCOUNTANT', 'LEADER', 'WORKER')),
   avatar_url            TEXT,
 
   -- Payroll fields
@@ -37,7 +37,12 @@ CREATE TABLE IF NOT EXISTS public.users (
   bundesland            TEXT NOT NULL DEFAULT 'ST',
   monthly_target_hours  INTEGER,
 
+  auth_provider         TEXT NOT NULL DEFAULT 'password'
+                          CHECK (auth_provider IN ('password', 'anonymous')),
+  can_login_with_password BOOLEAN NOT NULL DEFAULT TRUE,
+  invite_id             TEXT,
   last_login            TIMESTAMPTZ,
+  password_changed_at   TIMESTAMPTZ,
   created_at            TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at            TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
@@ -163,19 +168,11 @@ CREATE INDEX IF NOT EXISTS work_log_entries_employee_idx
 
 -- ============================================================
 -- SEED: Default company + Admin user
--- Password: Admin@2026  (change after first login)
+-- Default admin seed removed. Create admin credentials on the server only.
 -- ============================================================
 INSERT INTO public.companies (id, name)
 VALUES ('tuhmaz-pro-2026', 'Tuhmaz Hausmeister')
 ON CONFLICT (id) DO NOTHING;
 
-INSERT INTO public.users (
-  company_id, name, email, password_hash, role,
-  contract_type, hourly_rate, tax_class, kinder, has_church_tax, bundesland
-) VALUES (
-  'tuhmaz-pro-2026',
-  'Admin',
-  'j.tuhmaz@gmail.com',
-  '$2b$12$FhgT0Oa8Jja6XkztBfawNOAXp9f0wVI/I/K/hJf.nEQWT0.xFXccC',
-  'ADMIN', 'VOLLZEIT', 0, 1, 0, false, 'ST'
-) ON CONFLICT (email) DO NOTHING;
+-- Admin user is intentionally not seeded in source exports.
+-- Use scripts/create-admin.mjs on the secured server.

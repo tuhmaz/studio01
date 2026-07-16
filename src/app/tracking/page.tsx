@@ -1,7 +1,6 @@
 "use client";
 
 import React, { useState, useEffect, useRef, useMemo } from 'react';
-import NextImage from 'next/image';
 import { Shell } from '@/components/layout/Shell';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -79,11 +78,19 @@ function formatElapsed(clockInDateTime: string): string {
     : `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
 }
 
-function formatRecording(seconds: number): string {
-  return `${String(Math.floor(seconds / 60)).padStart(2, '0')}:${String(seconds % 60).padStart(2, '0')}`;
+// Round recorded time to the nearest 5-minute boundary.
+function roundDateToNearestMinutes(date: Date, intervalMinutes = 5): Date {
+  const intervalMs = intervalMinutes * 60 * 1000;
+  return new Date(Math.round(date.getTime() / intervalMs) * intervalMs);
 }
 
-// Map DB row (snake_case) → app TimeEntry (camelCase)
+function roundedDurationMinutes(start: Date, end: Date): number {
+  const roundedStart = roundDateToNearestMinutes(start);
+  const roundedEnd = roundDateToNearestMinutes(end);
+  return Math.max(0, Math.round((roundedEnd.getTime() - roundedStart.getTime()) / 60000));
+}
+
+// Map DB row (snake_case) to app TimeEntry (camelCase)
 function dbRowToTimeEntry(row: any): TimeEntry & { jobAssignmentId: string } {
   return {
     id: row.id,
@@ -151,7 +158,7 @@ export default function TrackingPage() {
   const companyId       = userProfile?.companyId ?? '';
   const effectiveRole   = (userProfile?.role ?? 'WORKER') as UserRole;
   const effectiveUserName = userProfile?.name ?? 'Benutzer';
-  const canManageTeam   = effectiveRole === 'LEADER' || effectiveRole === 'ADMIN';
+  const canManageTeam   = ['SUPER_ADMIN', 'ADMIN', 'MANAGER', 'LEADER'].includes(effectiveRole);
   const hasContext      = !!userProfile && !!companyId;
   const today           = new Date().toISOString().split('T')[0];
   const currentMonth    = GERMAN_MONTHS[currentTime.getMonth()];
@@ -333,7 +340,7 @@ export default function TrackingPage() {
     justClockedInRef.current = true;
 
     try {
-      const now = new Date().toISOString();
+      const now = roundDateToNearestMinutes(new Date()).toISOString();
       const assignedWorkerIds: string[] = Array.isArray(activeAssignment.assignedWorkerIds)
         ? activeAssignment.assignedWorkerIds.filter((id: unknown): id is string => typeof id === 'string')
         : [];
@@ -433,7 +440,8 @@ export default function TrackingPage() {
     setIsProcessing(true);
 
     try {
-      const clockOutTime = new Date().toISOString();
+      const clockOutDate = roundDateToNearestMinutes(new Date());
+      const clockOutTime = clockOutDate.toISOString();
       const entriesToClose = canManageTeam
         ? openTeamEntries
         : openTeamEntries.filter(e => e.employeeId === user?.id);
@@ -443,8 +451,8 @@ export default function TrackingPage() {
 
       // Update each time entry
       for (const entry of entriesToClose) {
-        const start = entry.clockInDateTime ? new Date(entry.clockInDateTime).getTime() : Date.now();
-        const mins = Math.round((Date.now() - start) / 60000);
+        const start = entry.clockInDateTime ? new Date(entry.clockInDateTime) : new Date();
+        const mins = roundedDurationMinutes(start, clockOutDate);
         if (mins > maxMinutes) maxMinutes = mins;
 
         const updateRes = await fetch('/api/data', {
@@ -508,7 +516,10 @@ export default function TrackingPage() {
       const now = new Date();
       if (start > now || end > now) throw new Error('Zeiten in der Zukunft sind nicht erlaubt.');
 
-      const mins = Math.round((end.getTime() - start.getTime()) / 60000);
+      const roundedStart = roundDateToNearestMinutes(start);
+      const roundedEnd = roundDateToNearestMinutes(end);
+      if (roundedEnd <= roundedStart) throw new Error('Die gerundete Endzeit muss nach der gerundeten Startzeit liegen.');
+      const mins = roundedDurationMinutes(start, end);
       const assignedWorkerIds: string[] = Array.isArray(activeAssignment.assignedWorkerIds)
         ? activeAssignment.assignedWorkerIds.filter((id: unknown): id is string => typeof id === 'string')
         : [];
@@ -542,8 +553,8 @@ export default function TrackingPage() {
             employee_id: workerId,
             job_assignment_id: activeAssignment.id,
             job_site_id: activeAssignment.jobSiteId ?? null,
-            clock_in_datetime: start.toISOString(),
-            clock_out_datetime: end.toISOString(),
+            clock_in_datetime: roundedStart.toISOString(),
+            clock_out_datetime: roundedEnd.toISOString(),
             actual_work_minutes: mins,
             travel_bonus_minutes: travelBonus,
             status: 'SUBMITTED',
@@ -767,7 +778,7 @@ export default function TrackingPage() {
                   }
                 </Button>
 
-                {!isClockedIn && (effectiveRole === 'ADMIN' || effectiveRole === 'LEADER') && (
+                {!isClockedIn && canManageTeam && (
                   <Button
                     variant="outline"
                     className="w-full h-12 rounded-2xl font-black text-primary border-primary/20 hover:bg-primary/5"
@@ -858,10 +869,10 @@ export default function TrackingPage() {
         <AlertDialogContent className="rounded-[2rem] border-none shadow-2xl">
           <AlertDialogHeader>
             <AlertDialogTitle className="text-xl font-black uppercase tracking-tight">
-              {effectiveRole === 'LEADER' || effectiveRole === 'ADMIN' ? 'Schicht für alle beenden?' : 'Schicht beenden?'}
+              {canManageTeam ? 'Schicht für alle beenden?' : 'Schicht beenden?'}
             </AlertDialogTitle>
             <AlertDialogDescription className="font-medium text-muted-foreground">
-              {effectiveRole === 'LEADER' || effectiveRole === 'ADMIN'
+              {canManageTeam
                 ? `Dadurch wird die Schicht für ${openTeamEntries.length} Mitarbeiter abgeschlossen und die Aufgabe als erledigt markiert.`
                 : 'Ihre Arbeitszeit wird erfasst und die Schicht beendet.'}
             </AlertDialogDescription>

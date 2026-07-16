@@ -9,5 +9,5 @@ export async function POST() {
 // GET-Fallback: ermöglicht Logout auch per Link/Redirect
 export async function GET() {
   await deleteSession();
-  return NextResponse.redirect(new URL('/login', process.env.NEXT_PUBLIC_BASE_URL ?? 'https://mbj.news'));
+  return NextResponse.redirect(new URL('/login', process.env.NEXT_PUBLIC_APP_URL ?? process.env.NEXT_PUBLIC_BASE_URL ?? 'http://localhost:9002'));
 }

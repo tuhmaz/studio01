@@ -17,12 +17,12 @@ import type { DbJobAssignment, DbJobSite, DbUser } from '@/lib/db-types';
 
 export default function DashboardPage() {
   const router = useRouter();
-  const { userProfile, isUserLoading } = useAuth();
+  const { userProfile } = useAuth();
   const user = userProfile;
 
   const companyId   = userProfile?.companyId ?? '';
   const hasContext  = !!userProfile && !!companyId;
-  const isManagement = userProfile?.role === 'ADMIN' || userProfile?.role === 'LEADER';
+  const isManagement = ['SUPER_ADMIN', 'ADMIN', 'MANAGER', 'LEADER'].includes(userProfile?.role ?? '');
   const effectiveRole     = (userProfile?.role ?? 'WORKER') as UserRole;
   const effectiveUserName = userProfile?.name ?? '';
 

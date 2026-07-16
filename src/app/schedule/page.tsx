@@ -93,8 +93,8 @@ export default function SchedulePage() {
   const effectiveRole = (userProfile?.role ?? 'WORKER') as UserRole;
   const effectiveUserName = userProfile?.name ?? 'Benutzer';
   const effectiveCompanyId = companyId;
-  const canDeleteTours = effectiveRole === 'ADMIN' || effectiveRole === 'LEADER';
-  const isManagementView = effectiveRole === 'ADMIN' || effectiveRole === 'LEADER';
+  const canDeleteTours = ['SUPER_ADMIN', 'ADMIN', 'MANAGER', 'LEADER'].includes(effectiveRole);
+  const isManagementView = ['SUPER_ADMIN', 'ADMIN', 'MANAGER', 'LEADER'].includes(effectiveRole);
 
   const formattedDate = date?.toLocaleDateString('de-DE', {
     weekday: 'long',

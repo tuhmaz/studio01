@@ -406,7 +406,7 @@ function WorkerDetailDialog({
   const [editEnd, setEditEnd] = useState('');
   const [isEditing, setIsEditing] = useState(false);
 
-  const { user, entries, workMinutes, remoteBonusMinutes, billableMinutes, overtimeMinutes,
+  const { user, entries, remoteBonusMinutes, billableMinutes, overtimeMinutes,
           brutto, visitedSites } = stats;
   const payroll = simulatePayroll(user, brutto);
 
@@ -748,7 +748,7 @@ function WorkerDetailDialog({
                 try {
                   await onEditEntry(editingEntry.entry.id, editStart, editEnd);
                   setEditingEntry(null);
-                } catch (e) {
+                } catch {
                   // error handled in parent
                 } finally {
                   setIsEditing(false);
@@ -782,7 +782,7 @@ export default function ReportsPage() {
   const role = userProfile?.role ?? 'WORKER';
   const userName = userProfile?.name ?? '';
   const hasContext = !!userProfile && !!companyId;
-  const canManageTeam = role === 'ADMIN' || role === 'LEADER';
+  const canManageTeam = ['SUPER_ADMIN', 'ADMIN', 'MANAGER'].includes(role);
 
   useEffect(() => {
     return () => {

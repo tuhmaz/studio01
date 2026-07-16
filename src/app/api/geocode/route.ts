@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getSession } from '@/lib/auth-server';
 import sql from '@/lib/db';
+import { hasPermission } from '@/lib/permissions';
 
 /**
  * POST /api/geocode
@@ -11,17 +12,23 @@ import sql from '@/lib/db';
 export async function POST(req: NextRequest) {
   const session = await getSession();
   if (!session) return NextResponse.json({ error: 'Nicht authentifiziert' }, { status: 401 });
+  if (!hasPermission(session, 'job_sites.manage')) {
+    return NextResponse.json({ error: 'Keine Berechtigung' }, { status: 403 });
+  }
 
   const { siteIds } = await req.json().catch(() => ({}));
+  const requestedSiteIds = Array.isArray(siteIds)
+    ? siteIds.filter((id): id is string => typeof id === 'string' && id.trim().length > 0).slice(0, 50)
+    : [];
 
   // Fetch sites that need geocoding
   let sites;
-  if (siteIds?.length) {
+  if (requestedSiteIds.length) {
     sites = await sql`
       SELECT id, address, city, postal_code, lat, lng
       FROM public.job_sites
       WHERE company_id = ${session.companyId}
-        AND id = ANY(${siteIds}::text[])
+        AND id = ANY(${requestedSiteIds}::text[])
         AND (lat IS NULL OR lng IS NULL)
     `;
   } else {
@@ -111,6 +118,7 @@ export async function POST(req: NextRequest) {
             estimated_travel_time_minutes_from_hq = ${travelTimeMinutes},
             is_remote = ${isRemote}
         WHERE id = ${site.id}
+          AND company_id = ${session.companyId}
       `;
 
       results.push({ id: site.id, lat, lng, address: site.address });

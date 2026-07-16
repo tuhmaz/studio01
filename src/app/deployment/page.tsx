@@ -85,8 +85,7 @@ export default function DeploymentPage() {
   const [sonderTitle, setSonderTitle] = useState('');
   const [sonderAddress, setSonderAddress] = useState('');
   const { toast } = useToast();
-  const { userProfile, isUserLoading } = useAuth();
-  const user = userProfile;
+  const { userProfile } = useAuth();
 
   const companyId = userProfile?.companyId ?? '';
   const hasContext = !!userProfile && !!companyId;
@@ -94,7 +93,7 @@ export default function DeploymentPage() {
   const effectiveRole = (userProfile?.role ?? 'WORKER') as UserRole;
   const effectiveUserName = userProfile?.name ?? 'Benutzer';
   const effectiveCompanyId = companyId;
-  const isManagementView = effectiveRole === 'ADMIN' || effectiveRole === 'LEADER';
+  const isManagementView = ['SUPER_ADMIN', 'ADMIN', 'MANAGER', 'LEADER'].includes(effectiveRole);
 
   const [selectedDate, setSelectedDate] = useState<Date>(new Date());
   const selectedDateString = format(selectedDate, 'yyyy-MM-dd');

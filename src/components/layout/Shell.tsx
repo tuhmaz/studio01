@@ -37,38 +37,44 @@ export function Shell({ children, userRole, userName }: ShellProps) {
   const { toast } = useToast();
 
   const [isPasswordModalOpen, setIsPasswordModalOpen] = useState(false);
+  const [currentPassword, setCurrentPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [isUpdating, setIsUpdating] = useState(false);
 
   const navItems = [
-    { label: 'Übersicht',     icon: LayoutDashboard, href: '/dashboard',  roles: ['ADMIN', 'LEADER', 'WORKER'] },
-    { label: 'Tourplan',      icon: Calendar,        href: '/schedule',   roles: ['ADMIN', 'LEADER', 'WORKER'] },
-    { label: 'Einsatzplanung',icon: UserCheck,       href: '/deployment', roles: ['LEADER', 'ADMIN'] },
-    { label: 'Objekte',       icon: Briefcase,       href: '/jobs',       roles: ['ADMIN', 'LEADER'] },
-    { label: 'Zeiterfassung', icon: Clock,           href: '/tracking',   roles: ['WORKER', 'LEADER', 'ADMIN'] },
-    { label: 'Team',          icon: Users,           href: '/team',       roles: ['ADMIN', 'LEADER'] },
-    { label: 'Berichte',      icon: FileText,        href: '/reports',    roles: ['ADMIN', 'LEADER'] },
-    { label: 'Lohnabrechnung',icon: Wallet,          href: '/payroll',    roles: ['ADMIN', 'LEADER'] },
-    { label: 'Einstellungen', icon: Settings,        href: '/settings',   roles: ['ADMIN'] },
+    { label: 'Übersicht',     icon: LayoutDashboard, href: '/dashboard',  roles: ['SUPER_ADMIN', 'ADMIN', 'MANAGER', 'ACCOUNTANT', 'LEADER', 'WORKER'] },
+    { label: 'Tourplan',      icon: Calendar,        href: '/schedule',   roles: ['SUPER_ADMIN', 'ADMIN', 'MANAGER', 'ACCOUNTANT', 'LEADER', 'WORKER'] },
+    { label: 'Einsatzplanung',icon: UserCheck,       href: '/deployment', roles: ['SUPER_ADMIN', 'ADMIN', 'MANAGER', 'LEADER'] },
+    { label: 'Objekte',       icon: Briefcase,       href: '/jobs',       roles: ['SUPER_ADMIN', 'ADMIN', 'MANAGER', 'LEADER'] },
+    { label: 'Zeiterfassung', icon: Clock,           href: '/tracking',   roles: ['SUPER_ADMIN', 'ADMIN', 'MANAGER', 'ACCOUNTANT', 'LEADER', 'WORKER'] },
+    { label: 'Team',          icon: Users,           href: '/team',       roles: ['SUPER_ADMIN', 'ADMIN'] },
+    { label: 'Berichte',      icon: FileText,        href: '/reports',    roles: ['SUPER_ADMIN', 'ADMIN', 'MANAGER', 'ACCOUNTANT'] },
+    { label: 'Lohnabrechnung',icon: Wallet,          href: '/payroll',    roles: ['SUPER_ADMIN', 'ADMIN', 'MANAGER', 'ACCOUNTANT'] },
+    { label: 'Einstellungen', icon: Settings,        href: '/settings',   roles: ['SUPER_ADMIN', 'ADMIN'] },
   ];
 
   const filteredNavItems = navItems.filter(item => item.roles.includes(userRole));
 
   const handleChangePassword = async () => {
+    if (!currentPassword) {
+      toast({ variant: 'destructive', title: 'Fehler', description: 'Aktuelles Passwort erforderlich.' });
+      return;
+    }
     if (newPassword !== confirmPassword) {
       toast({ variant: 'destructive', title: 'Fehler', description: 'Passwörter stimmen nicht überein.' });
       return;
     }
-    if (newPassword.length < 6) {
-      toast({ variant: 'destructive', title: 'Fehler', description: 'Mindestens 6 Zeichen erforderlich.' });
+    if (newPassword.length < 12) {
+      toast({ variant: 'destructive', title: 'Fehler', description: 'Mindestens 12 Zeichen erforderlich.' });
       return;
     }
     setIsUpdating(true);
     try {
-      await changePassword(newPassword);
+      await changePassword(currentPassword, newPassword);
       toast({ title: 'Erfolg', description: 'Passwort aktualisiert.' });
       setIsPasswordModalOpen(false);
+      setCurrentPassword('');
       setNewPassword('');
       setConfirmPassword('');
     } catch (error) {
@@ -179,10 +185,18 @@ export function Shell({ children, userRole, userName }: ShellProps) {
           </DialogHeader>
           <div className="grid gap-4 py-4">
             <div className="grid gap-2">
+              <Label>Aktuelles Passwort</Label>
+              <div className="relative">
+                <Lock className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
+                <Input type="password" className="pl-10 h-12" placeholder="Aktuelles Passwort"
+                  value={currentPassword} onChange={(e) => setCurrentPassword(e.target.value)} />
+              </div>
+            </div>
+            <div className="grid gap-2">
               <Label>Neues Passwort</Label>
               <div className="relative">
                 <Lock className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
-                <Input type="password" className="pl-10 h-12" placeholder="Mind. 6 Zeichen"
+                <Input type="password" className="pl-10 h-12" placeholder="Mind. 12 Zeichen"
                   value={newPassword} onChange={(e) => setNewPassword(e.target.value)} />
               </div>
             </div>

@@ -534,7 +534,7 @@ function AddEditSiteDialog({ open, site, nextId, availableRegions, onSave, onClo
                       </button>
                     )}
                   </div>
-                  {!!site
+                  {site
                     ? <p className="text-[9px] text-muted-foreground font-medium">ID kann nach dem Erstellen nicht geändert werden.</p>
                     : <p className="text-[9px] text-primary/50 font-medium">Nächste verfügbare ID: <strong>{nextId}</strong></p>
                   }
@@ -783,8 +783,7 @@ export default function JobsPage() {
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const { toast } = useToast();
-  const { userProfile, isUserLoading } = useAuth();
-  const user = userProfile;
+  const { userProfile } = useAuth();
 
   const companyId = userProfile?.companyId ?? '';
   const hasContext = !!userProfile && !!companyId;

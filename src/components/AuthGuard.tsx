@@ -10,18 +10,21 @@ const PUBLIC_PATHS = ['/'];
 const AUTH_TIMEOUT_MS = 8000;
 
 const ROUTE_ROLE_ACCESS: Record<string, UserRole[]> = {
-  '/dashboard':  ['ADMIN', 'LEADER', 'WORKER'],
-  '/schedule':   ['ADMIN', 'LEADER', 'WORKER'],
-  '/tracking':   ['ADMIN', 'LEADER', 'WORKER'],
-  '/deployment': ['ADMIN', 'LEADER'],
-  '/jobs':       ['ADMIN', 'LEADER'],
-  '/team':       ['ADMIN'],
-  '/reports':    ['ADMIN'],
+  '/dashboard':  ['SUPER_ADMIN', 'ADMIN', 'MANAGER', 'ACCOUNTANT', 'LEADER', 'WORKER'],
+  '/schedule':   ['SUPER_ADMIN', 'ADMIN', 'MANAGER', 'ACCOUNTANT', 'LEADER', 'WORKER'],
+  '/tracking':   ['SUPER_ADMIN', 'ADMIN', 'MANAGER', 'ACCOUNTANT', 'LEADER', 'WORKER'],
+  '/deployment': ['SUPER_ADMIN', 'ADMIN', 'MANAGER', 'LEADER'],
+  '/jobs':       ['SUPER_ADMIN', 'ADMIN', 'MANAGER', 'LEADER'],
+  '/team':       ['SUPER_ADMIN', 'ADMIN'],
+  '/reports':    ['SUPER_ADMIN', 'ADMIN', 'MANAGER', 'ACCOUNTANT'],
+  '/payroll':    ['SUPER_ADMIN', 'ADMIN', 'MANAGER', 'ACCOUNTANT'],
+  '/settings':   ['SUPER_ADMIN', 'ADMIN'],
 };
 
 function getDefaultRouteForRole(role: UserRole | null): string {
   if (role === 'WORKER') return '/tracking';
   if (role === 'LEADER') return '/deployment';
+  if (role === 'ACCOUNTANT') return '/payroll';
   return '/dashboard';
 }
 

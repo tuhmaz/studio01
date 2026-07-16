@@ -337,7 +337,6 @@ export default function ProfileScreen() {
 
   const MONTH_NAMES = ['Januar','Februar','März','April','Mai','Juni','Juli','August','September','Oktober','November','Dezember'];
   const prevMonth   = month === 0 ? 11 : month - 1;
-  const prevYear    = month === 0 ? year - 1 : year;
   const periodLabel = `21. ${MONTH_NAMES[prevMonth]} – 20. ${MONTH_NAMES[month]} ${year}`;
 
   const handleSaveServer = async () => {

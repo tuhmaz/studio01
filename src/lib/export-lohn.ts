@@ -87,7 +87,33 @@ const OVERTIME_RATE = 1.25;
 const PRIMARY  = [0, 51, 102]    as [number, number, number]; // Dark blue - German official color
 const LIGHT_BG = [248, 249, 250] as [number, number, number]; // Light gray background
 const BORDER   = [200, 200, 200] as [number, number, number]; // Standard gray border
-const ORANGE   = [255, 102, 0]   as [number, number, number]; // Bright orange for highlights
+
+type PdfChromeTheme = {
+  background: [number, number, number];
+  accent: [number, number, number];
+  primaryText: [number, number, number];
+  secondaryText: [number, number, number];
+  tertiaryText: [number, number, number];
+  separator: [number, number, number];
+};
+
+const DEFAULT_CHROME_THEME: PdfChromeTheme = {
+  background: PRIMARY,
+  accent: [0, 30, 70],
+  primaryText: [255, 255, 255],
+  secondaryText: [200, 215, 240],
+  tertiaryText: [160, 185, 220],
+  separator: [0, 30, 70],
+};
+
+const PRINT_LIGHT_CHROME_THEME: PdfChromeTheme = {
+  background: [241, 243, 245],
+  accent: [154, 164, 178],
+  primaryText: [31, 41, 51],
+  secondaryText: [79, 91, 107],
+  tertiaryText: [104, 116, 132],
+  separator: [190, 196, 204],
+};
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -161,7 +187,7 @@ function addSignatureImage(
   const oy = (boxH - imgH) / 2;
   try {
     doc.addImage(dataUrl, 'PNG', boxX + ox, boxY + oy, imgW, imgH);
-  } catch (_) { /* Bild nicht verfügbar */ }
+  } catch { /* Bild nicht verfügbar */ }
 }
 
 /** Height of the page header band in mm — used by callers to position content below */
@@ -174,13 +200,14 @@ function drawHeader(
   monthLabel: string,
   _periodLabel: string,
   company: CompanySettings,
+  theme: PdfChromeTheme = DEFAULT_CHROME_THEME,
 ) {
-  fillRect(doc, 0, 0, W, HEADER_H, PRIMARY);
+  fillRect(doc, 0, 0, W, HEADER_H, theme.background);
 
   // ── Thin accent stripe at the bottom of the header ──
-  fillRect(doc, 0, HEADER_H - 1.5, W, 1.5, [0, 30, 70]);
+  fillRect(doc, 0, HEADER_H - 1.5, W, 1.5, theme.accent);
 
-  doc.setTextColor(255, 255, 255);
+  doc.setTextColor(...theme.primaryText);
 
   // ── LOGO (top-left, if provided) ─────────────────────────────────────────
   const LOGO_W = 20;
@@ -194,7 +221,7 @@ function drawHeader(
       const fmt = company.logoData.startsWith('data:image/png') ? 'PNG' : 'JPEG';
       doc.addImage(company.logoData, fmt, MARGIN, 5, LOGO_W, LOGO_H);
       textOffsetX = LOGO_W + 3;
-    } catch (_e) {
+    } catch {
       // Logo failed to render — continue without it
     }
   }
@@ -213,7 +240,7 @@ function drawHeader(
   if (addrLine) {
     doc.setFont('helvetica', 'normal');
     doc.setFontSize(7.5);
-    doc.setTextColor(200, 215, 240);
+    doc.setTextColor(...theme.secondaryText);
     doc.text(addrLine, textStartX + textOffsetX, ly);
     ly += 5;
   }
@@ -221,14 +248,14 @@ function drawHeader(
   const contactLine = [company.phone, company.email].filter(Boolean).join('  ·  ');
   if (contactLine) {
     doc.setFontSize(7);
-    doc.setTextColor(180, 200, 230);
+    doc.setTextColor(...theme.secondaryText);
     doc.text(contactLine, textStartX + textOffsetX, ly);
     ly += 5;
   }
 
   if (company.taxNumber) {
     doc.setFontSize(7);
-    doc.setTextColor(160, 185, 220);
+    doc.setTextColor(...theme.tertiaryText);
     doc.text(`St.-Nr.: ${company.taxNumber}`, textStartX + textOffsetX, ly);
   }
 
@@ -236,7 +263,7 @@ function drawHeader(
   const rx = W - MARGIN;
 
   // Month label (top-right, large)
-  doc.setTextColor(255, 255, 255);
+  doc.setTextColor(...theme.primaryText);
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(13);
   doc.text(monthLabel, rx, 10, { align: 'right' });
@@ -248,21 +275,27 @@ function drawHeader(
   // Subtitle (billing period)
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(7.5);
-  doc.setTextColor(200, 215, 240);
+  doc.setTextColor(...theme.secondaryText);
   doc.text(subtitle, rx, 25, { align: 'right' });
 }
 
-function drawFooter(doc: jsPDF, company: CompanySettings, workerName: string, periodLabel: string) {
+function drawFooter(
+  doc: jsPDF,
+  company: CompanySettings,
+  workerName: string,
+  periodLabel: string,
+  theme: PdfChromeTheme = DEFAULT_CHROME_THEME,
+) {
   // Footer band: 14mm tall, starts at y=283 (ends at y=297, within A4 297mm)
   const FY = 283;
-  fillRect(doc, 0, FY, W, 14, PRIMARY);
+  fillRect(doc, 0, FY, W, 14, theme.background);
 
   // Thin separator line between the two footer rows
-  doc.setDrawColor(0, 30, 70);
+  doc.setDrawColor(...theme.separator);
   doc.setLineWidth(0.2);
   doc.line(MARGIN, FY + 7, W - MARGIN, FY + 7);
 
-  doc.setTextColor(255, 255, 255);
+  doc.setTextColor(...theme.primaryText);
   doc.setFont('helvetica', 'normal');
 
   // ── Row 1: company name + website  |  page number ──
@@ -273,7 +306,7 @@ function drawFooter(doc: jsPDF, company: CompanySettings, workerName: string, pe
 
   // ── Row 2: creation date · worker · period (centered, slightly dimmed) ──
   doc.setFontSize(6.5);
-  doc.setTextColor(200, 215, 240);
+  doc.setTextColor(...theme.secondaryText);
   const centerText = `Erstellt: ${new Date().toLocaleDateString('de-DE')}  ·  ${workerName}  ·  ${periodLabel}`;
   doc.text(centerText, W / 2, FY + 12, { align: 'center' });
 }
@@ -298,15 +331,16 @@ export function generateArbeitszeitnachweis(params: LohnExportParams) {
     `Abrechnungszeitraum: ${periodLabel}`,
     monthLabel,
     '',
-    company
+    company,
+    PRINT_LIGHT_CHROME_THEME,
   );
 
   // ── Employee info box (no financial data) ──
-  let y = HEADER_H + 4;
-  fillRect(doc, MARGIN, y, CW, 20, LIGHT_BG);
+  let y = HEADER_H + 2;
+  fillRect(doc, MARGIN, y, CW, 10, LIGHT_BG);
   doc.setDrawColor(...BORDER);
   doc.setLineWidth(0.2);
-  doc.rect(MARGIN, y, CW, 20);
+  doc.rect(MARGIN, y, CW, 10);
 
   // Group entries by date
   const groupedEntriesMap = new Map<string, {
@@ -352,6 +386,10 @@ export function generateArbeitszeitnachweis(params: LohnExportParams) {
   });
 
   const groupedEntries = Array.from(groupedEntriesMap.values()).sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+  const compactLayout = groupedEntries.length > 22;
+  const compactRowHeight = compactLayout
+    ? Math.max(5.6, Math.min(6.5, (184 / Math.max(groupedEntries.length, 1))))
+    : 0;
 
   // Summen aus gruppierten Einträgen — korrekt auf max -60 Min/Tag begrenzt
   const totalWorkMin  = groupedEntries.reduce((s, e) => s + e.workMinutes, 0);
@@ -367,16 +405,19 @@ export function generateArbeitszeitnachweis(params: LohnExportParams) {
   fields.forEach((f, i) => {
     const x = MARGIN + 3 + i * (CW / 4);
     doc.setTextColor(80, 90, 110);
-    doc.setFont('helvetica', 'normal');
-    doc.setFontSize(8);
-    doc.text(f.label, x, y + 7);
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(6.5);
+    doc.text(`${f.label}:`, x, y + 6.5);
+    const labelW = doc.getTextWidth(`${f.label}: `);
     doc.setTextColor(...PRIMARY);
     doc.setFont('helvetica', 'bold');
-    doc.setFontSize(10);
-    doc.text(f.value, x, y + 15);
+    doc.setFontSize(7.3);
+    doc.text(f.value, x + labelW, y + 6.5, {
+      maxWidth: (CW / 4) - labelW - 4,
+    });
   });
 
-  y += 26;
+  y += compactLayout ? 12 : 14;
 
   // ── Table ──
   const tableHead = [[
@@ -396,7 +437,7 @@ export function generateArbeitszeitnachweis(params: LohnExportParams) {
     const siteStr = Array.from(e.siteNames)
       .map(site => site.replace(/Ø=ÜÍ\s*LR-\s*\d+/g, '').replace(/Ø=ÜÍ\s*LR\s*-\s*\d+/g, '').replace(/Ø=ÜÍ/g, '').replace(/LR\s*-\s*\d+/g, '').trim())
       .filter(Boolean)
-      .join('\n') || '—';
+      .join(compactLayout ? ', ' : '\n') || '—';
       const objStr = siteStr;
       // Join categories with a comma and space instead of newline to save vertical space
       const catStr = e.categories.size > 0 ? Array.from(e.categories).join(', ') : '—';
@@ -407,11 +448,20 @@ export function generateArbeitszeitnachweis(params: LohnExportParams) {
       { content: getWeekday(e.date), styles: { halign: 'center' as const } },
       {
         content: objStr,
-        styles: { fontSize: 7.5, cellPadding: 2 },
+        styles: {
+          fontSize: compactLayout ? 6.2 : 7.5,
+          cellPadding: compactLayout ? 0.9 : 2,
+          overflow: compactLayout ? 'ellipsize' as const : 'linebreak' as const,
+        },
       },
       {
         content: catStr,
-        styles: { fontSize: 6.5, textColor: [60, 80, 120] as [number,number,number], cellPadding: 2 },
+        styles: {
+          fontSize: compactLayout ? 6 : 6.5,
+          textColor: [60, 80, 120] as [number,number,number],
+          cellPadding: compactLayout ? 0.9 : 2,
+          overflow: compactLayout ? 'ellipsize' as const : 'linebreak' as const,
+        },
       },
       { content: fmtTime(e.clockIn),  styles: { halign: 'center' as const, fontStyle: 'bold' as const } },
       { content: fmtTime(e.clockOut), styles: { halign: 'center' as const, fontStyle: 'bold' as const } },
@@ -449,19 +499,20 @@ export function generateArbeitszeitnachweis(params: LohnExportParams) {
     tableWidth: CW,
     styles: {
       font: 'helvetica',
-      fontSize: 8,
-      cellPadding: 2,
+      fontSize: compactLayout ? 6.4 : 8,
+      cellPadding: compactLayout ? 0.9 : 2,
       lineColor: BORDER,
       lineWidth: 0.15,
-      overflow: 'linebreak',
+      overflow: compactLayout ? 'ellipsize' : 'linebreak',
+      minCellHeight: compactLayout ? compactRowHeight : 0,
     },
     headStyles: {
       fillColor: PRIMARY,
       textColor: [255, 255, 255],
       fontStyle: 'bold',
-      fontSize: 8,
+      fontSize: compactLayout ? 6.4 : 8,
       halign: 'center',
-      cellPadding: 2,
+      cellPadding: compactLayout ? 1 : 2,
     },
     alternateRowStyles: { fillColor: [250, 251, 255] },
     columnStyles: {
@@ -469,12 +520,12 @@ export function generateArbeitszeitnachweis(params: LohnExportParams) {
         1: { cellWidth: 18, halign: 'center' },  // Datum
         2: { cellWidth: 9,  halign: 'center' },  // Tag
         3: { cellWidth: 46 },                    // Objekt / Adresse
-        4: { cellWidth: 27 },                    // Tätigkeiten
+        4: { cellWidth: 39 },                    // Tätigkeiten
         5: { cellWidth: 13, halign: 'center' },  // Beginn
         6: { cellWidth: 13, halign: 'center' },  // Ende
         7: { cellWidth: 13, halign: 'center' },  // Std.
-        8: { cellWidth: 16, halign: 'center' },  // Fahrtzt.  ← wider for "-01:00"
-        9: { cellWidth: 32, halign: 'center' },  // Unterschrift
+        8: { cellWidth: 12, halign: 'center' },  // Fahrtzt.
+        9: { cellWidth: 24, halign: 'center' },  // Unterschrift
       },
     didParseCell: (data) => {
       if (data.row.index >= groupedEntries.length) {
@@ -498,39 +549,40 @@ export function generateArbeitszeitnachweis(params: LohnExportParams) {
 
   // ── Summary (hours only, no money) ──
   const finalY = (doc as any).lastAutoTable.finalY as number;
-  let sy = finalY + 6;
-  if (sy + 46 > 283) { doc.addPage(); sy = 20; }
+  const summaryH = 34;
+  let sy = finalY + (compactLayout ? 3 : 6);
+  if (sy + summaryH > 283) { doc.addPage(); sy = 20; }
 
-  fillRect(doc, MARGIN, sy, CW, 44, LIGHT_BG);
+  fillRect(doc, MARGIN, sy, CW, summaryH, LIGHT_BG);
   doc.setDrawColor(...BORDER);
   doc.setLineWidth(0.2);
-  doc.rect(MARGIN, sy, CW, 44);
+  doc.rect(MARGIN, sy, CW, summaryH);
 
   // Section title line
   doc.setDrawColor(...BORDER);
-  doc.line(MARGIN, sy + 10, MARGIN + CW, sy + 10);
+  doc.line(MARGIN, sy + 8, MARGIN + CW, sy + 8);
 
   doc.setTextColor(...PRIMARY);
   doc.setFont('helvetica', 'bold');
-  doc.setFontSize(8.5);
-  doc.text('STUNDEN-ZUSAMMENFASSUNG', MARGIN + 5, sy + 7);
+  doc.setFontSize(8);
+  doc.text('STUNDEN-ZUSAMMENFASSUNG', MARGIN + 5, sy + 5.8);
 
   // Vertical dividers
   const col2x = MARGIN + CW * 0.38;
   const col3x = MARGIN + CW * 0.66;
-  doc.line(col2x, sy + 1, col2x, sy + 44);
-  doc.line(col3x, sy + 1, col3x, sy + 44);
+  doc.line(col2x, sy + 1, col2x, sy + summaryH);
+  doc.line(col3x, sy + 1, col3x, sy + summaryH);
 
   // Left column
-  const rowH = 7.5;
-  let ry = sy + 17;
+  const rowH = 5.8;
+  let ry = sy + 14;
   const drawSummaryRow = (label: string, value: string, x: number, colW: number, accent?: [number,number,number]) => {
     doc.setTextColor(80, 95, 115);
     doc.setFont('helvetica', 'normal');
-    doc.setFontSize(8.5);
+    doc.setFontSize(7.2);
     doc.text(label, x + 4, ry);
     doc.setFont('helvetica', 'bold');
-    doc.setFontSize(9.5);
+    doc.setFontSize(8.2);
     doc.setTextColor(...(accent ?? PRIMARY));
     doc.text(value, x + colW - 4, ry, { align: 'right' });
   };
@@ -548,7 +600,7 @@ export function generateArbeitszeitnachweis(params: LohnExportParams) {
   drawSummaryRow('Vergütete Zeit (netto):', fmtHHMM(totalMin) + ' Std.', MARGIN, colW1);
 
   // Middle column
-  ry = sy + 17;
+  ry = sy + 14;
   drawSummaryRow('Sollstunden / Monat:', `${worker.monthlyTargetHours ?? 0} Std.`, col2x, colW2);
   ry += rowH;
   const overtimeMin = Math.max(0, totalMin - (worker.monthlyTargetHours ?? 0) * 60);
@@ -557,22 +609,22 @@ export function generateArbeitszeitnachweis(params: LohnExportParams) {
   drawSummaryRow('Überstunden:', fmtHHMM(overtimeMin) + ' Std.', col2x, colW2, [160, 50, 50]);
 
   // Right column: signature
-  ry = sy + 14;
+  ry = sy + 11.5;
   doc.setTextColor(80, 95, 115);
   doc.setFont('helvetica', 'normal');
-  doc.setFontSize(7);
+  doc.setFontSize(6.5);
   doc.text('Ort / Datum:', col3x + 4, ry);
   doc.setDrawColor(...BORDER);
-  doc.line(col3x + 4, ry + 6, col3x + colW3 - 6, ry + 6);
-  ry += 14;
+  doc.line(col3x + 4, ry + 4.8, col3x + colW3 - 6, ry + 4.8);
+  ry += 10.5;
   doc.text('Unterschrift Mitarbeiter:', col3x + 4, ry);
   // Digitale Unterschrift — Seitenverhältnis beibehalten
   if (worker.signatureData) {
-    addSignatureImage(doc, worker.signatureData, col3x + 4, ry + 1, colW3 - 10, 10);
+    addSignatureImage(doc, worker.signatureData, col3x + 4, ry + 0.5, colW3 - 10, 8);
   }
-  doc.line(col3x + 4, ry + 13, col3x + colW3 - 6, ry + 13);
+  doc.line(col3x + 4, ry + 10, col3x + colW3 - 6, ry + 10);
 
-  drawFooter(doc, company, worker.name, periodLabel);
+  drawFooter(doc, company, worker.name, periodLabel, PRINT_LIGHT_CHROME_THEME);
 
   const safeName = worker.name.replace(/\s+/g, '_');
   const monthName = new Date(year, month).toLocaleString('de-DE', { month: 'long' });
@@ -644,13 +696,11 @@ export function generateLohnzettel(params: LohnExportParams) {
   const overtimePay     = (overtimeMin / 60) * hourlyRate * OVERTIME_RATE;
   const bruttoTotal     = regularPay + overtimePay;
 
-  // Per-site aggregation — same daily cap logic as Arbeitszeitnachweis
+  // Per-site aggregation with the same daily cap used by Arbeitszeitnachweis.
   const siteMap = new Map<string, { name: string; address: string; visits: number; minutes: number; travelBonusMinutes: number }>();
+  const remoteMinutesBySiteAndDay = new Map<string, number>();
 
-  // siteVisitsPerDay: prevents double-counting same site on same day
-  // dayTravelUsed: ensures global -60 min/day cap across ALL sites (not per site)
   const siteVisitsPerDay = new Set<string>();
-  const dayTravelUsed    = new Set<string>();
 
   entries.forEach(e => {
     const day    = e.date.split('T')[0];
@@ -661,24 +711,46 @@ export function generateLohnzettel(params: LohnExportParams) {
     if (existing) {
       if (!siteVisitsPerDay.has(dayKey)) {
         existing.visits += 1;
-        // Fahrtabzug: max -60 Min pro Tag gesamt (nicht pro Standort)
-        if (e.travelBonusMinutes !== 0 && !dayTravelUsed.has(day)) {
-          existing.travelBonusMinutes += -60;
-          dayTravelUsed.add(day);
-        }
         siteVisitsPerDay.add(dayKey);
       }
       existing.minutes += e.workMinutes;
     } else {
-      const travel = e.travelBonusMinutes !== 0 && !dayTravelUsed.has(day) ? -60 : 0;
-      if (travel !== 0) dayTravelUsed.add(day);
       siteMap.set(key, {
         name: e.siteName, address: e.siteAddress,
         visits: 1, minutes: e.workMinutes,
-        travelBonusMinutes: travel,
+        travelBonusMinutes: 0,
       });
       siteVisitsPerDay.add(dayKey);
     }
+
+    if (e.travelBonusMinutes !== 0) {
+      const shareKey = `${day}__${key}`;
+      remoteMinutesBySiteAndDay.set(shareKey, (remoteMinutesBySiteAndDay.get(shareKey) ?? 0) + e.workMinutes);
+    }
+  });
+
+  groupedEntries.forEach(dayEntry => {
+    if (dayEntry.travelBonusMinutes === 0) return;
+    const day = dayEntry.date.split('T')[0];
+    const siteShares = Array.from(siteMap.entries())
+      .map(([key, site]) => ({
+        key,
+        minutes: remoteMinutesBySiteAndDay.get(`${day}__${key}`) ?? 0,
+        site,
+      }))
+      .filter(item => item.minutes > 0)
+      .sort((a, b) => b.minutes - a.minutes);
+
+    if (!siteShares.length) return;
+    const totalRemoteMinutes = siteShares.reduce((sum, item) => sum + item.minutes, 0);
+    let distributed = 0;
+    siteShares.forEach((item, idx) => {
+      const part = idx === siteShares.length - 1
+        ? dayEntry.travelBonusMinutes - distributed
+        : Math.round((dayEntry.travelBonusMinutes * item.minutes) / totalRemoteMinutes);
+      distributed += part;
+      item.site.travelBonusMinutes += part;
+    });
   });
 
   const doc = makeDoc();
@@ -695,11 +767,11 @@ export function generateLohnzettel(params: LohnExportParams) {
   );
 
   // ── Employee info box ──
-  let y = HEADER_H + 3;
-  fillRect(doc, MARGIN, y, CW, 24, LIGHT_BG);
+  let y = HEADER_H + 2;
+  fillRect(doc, MARGIN, y, CW, 14, LIGHT_BG);
   doc.setDrawColor(...BORDER);
   doc.setLineWidth(0.2);
-  doc.rect(MARGIN, y, CW, 24);
+  doc.rect(MARGIN, y, CW, 14);
 
   // Row 1
   const infoFields1 = [
@@ -711,13 +783,14 @@ export function generateLohnzettel(params: LohnExportParams) {
   infoFields1.forEach((f, i) => {
     const x = MARGIN + 3 + i * (CW / 4);
     doc.setTextColor(80, 90, 110);
-    doc.setFont('helvetica', 'normal');
-    doc.setFontSize(7);
-    doc.text(f.label, x, y + 5);
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(6);
+    doc.text(`${f.label}:`, x, y + 5);
+    const labelW = doc.getTextWidth(`${f.label}: `);
     doc.setTextColor(...PRIMARY);
     doc.setFont('helvetica', 'bold');
-    doc.setFontSize(9);
-    doc.text(f.value, x, y + 10);
+    doc.setFontSize(7);
+    doc.text(f.value, x + labelW, y + 5, { maxWidth: (CW / 4) - labelW - 4 });
   });
 
   // Row 2
@@ -730,28 +803,31 @@ export function generateLohnzettel(params: LohnExportParams) {
   infoFields2.forEach((f, i) => {
     const x = MARGIN + 3 + i * (CW / 4);
     doc.setTextColor(80, 90, 110);
-    doc.setFont('helvetica', 'normal');
-    doc.setFontSize(7);
-    doc.text(f.label, x, y + 15);
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(6);
+    doc.text(`${f.label}:`, x, y + 11);
+    const labelW = doc.getTextWidth(`${f.label}: `);
     if (i === 2) { doc.setTextColor(30, 130, 60); } else { doc.setTextColor(...PRIMARY); }
     doc.setFont('helvetica', 'bold');
-    doc.setFontSize(9);
-    doc.text(f.value, x, y + 20);
+    doc.setFontSize(7);
+    doc.text(f.value, x + labelW, y + 11, { maxWidth: (CW / 4) - labelW - 4 });
   });
 
-  y += 28;
+  y += 17;
 
   // ── Site list ──
   doc.setTextColor(...PRIMARY);
   doc.setFont('helvetica', 'bold');
-  doc.setFontSize(7.5);
+  doc.setFontSize(7);
   doc.text('EINSATZ-ÜBERSICHT', MARGIN, y + 4);
-  y += 8;
+  y += 6;
 
-  const siteBody: any[] = Array.from(siteMap.values()).map((s, i) => [
+  const siteRows = Array.from(siteMap.values()).sort((a, b) => (b.minutes + b.travelBonusMinutes) - (a.minutes + a.travelBonusMinutes));
+  const compactLohnLayout = siteRows.length > 6;
+  const siteBody: any[] = siteRows.map((s, i) => [
     { content: String(i + 1), styles: { halign: 'center' as const, textColor: [110,120,140] as [number,number,number] } },
-    { content: s.name || s.address || '—' },
-    { content: s.address || '—', styles: { fontSize: 7, textColor: [80,95,115] as [number,number,number] } },
+    { content: s.name || s.address || '—', styles: { overflow: 'ellipsize' as const } },
+    { content: s.address || '—', styles: { fontSize: compactLohnLayout ? 5.5 : 6.5, textColor: [80,95,115] as [number,number,number], overflow: 'ellipsize' as const } },
     { content: String(s.visits), styles: { halign: 'center' as const, fontStyle: 'bold' as const } },
     { content: fmtHHMM(s.minutes) + ' h', styles: { halign: 'center' as const, fontStyle: 'bold' as const, textColor: PRIMARY } },
     {
@@ -777,8 +853,23 @@ export function generateLohnzettel(params: LohnExportParams) {
     body: siteBody,
     margin: { left: MARGIN, right: MARGIN },
     tableWidth: CW,
-    styles: { font: 'helvetica', fontSize: 7.5, cellPadding: 1.5, lineColor: BORDER, lineWidth: 0.15 },
-    headStyles: { fillColor: PRIMARY, textColor: [255,255,255], fontStyle: 'bold', fontSize: 7.5, cellPadding: 1.5, halign: 'center' },
+    styles: {
+      font: 'helvetica',
+      fontSize: compactLohnLayout ? 5.8 : 6.8,
+      cellPadding: compactLohnLayout ? 0.7 : 1.1,
+      lineColor: BORDER,
+      lineWidth: 0.15,
+      overflow: 'ellipsize',
+      minCellHeight: compactLohnLayout ? 4.6 : 5.4,
+    },
+    headStyles: {
+      fillColor: PRIMARY,
+      textColor: [255,255,255],
+      fontStyle: 'bold',
+      fontSize: compactLohnLayout ? 5.8 : 6.8,
+      cellPadding: compactLohnLayout ? 0.8 : 1.1,
+      halign: 'center',
+    },
     alternateRowStyles: { fillColor: [250, 251, 255] },
     columnStyles: {
         0: { cellWidth: 8, halign: 'center' },
@@ -792,37 +883,43 @@ export function generateLohnzettel(params: LohnExportParams) {
 
   // ── Pay calculation box ──
   const finalY = (doc as any).lastAutoTable.finalY as number;
-  let sy = finalY + 6;
-  if (sy + 110 > 283) { doc.addPage(); sy = 20; }
+  const signatureH = 16;
+  let sy = finalY + 4;
+  const availablePayBoxH = 283 - sy - signatureH - 2;
+  const payBoxH = Math.max(68, Math.min(82, availablePayBoxH));
+  const tightPayLayout = payBoxH < 78;
 
-  fillRect(doc, MARGIN, sy, CW, 100, LIGHT_BG);
+  fillRect(doc, MARGIN, sy, CW, payBoxH, LIGHT_BG);
   doc.setDrawColor(...BORDER);
   doc.setLineWidth(0.2);
-  doc.rect(MARGIN, sy, CW, 100);
+  doc.rect(MARGIN, sy, CW, payBoxH);
 
   // Dividers
   const midX = MARGIN + CW * 0.5;
-  doc.line(midX, sy + 1, midX, sy + 100);
-  doc.line(MARGIN, sy + 8, MARGIN + CW, sy + 8);
+  doc.line(midX, sy + 1, midX, sy + payBoxH);
+  doc.line(MARGIN, sy + 7, MARGIN + CW, sy + 7);
 
   // Titles
   doc.setTextColor(...PRIMARY);
   doc.setFont('helvetica', 'bold');
-  doc.setFontSize(8);
-  doc.text('STUNDEN-AUFSCHLÜSSELUNG', MARGIN + 5, sy + 6);
-  doc.text('LOHN-BERECHNUNG (SACHSEN-ANHALT)', midX + 5, sy + 6);
+  doc.setFontSize(7.2);
+  doc.text('STUNDEN-AUFSCHLÜSSELUNG', MARGIN + 5, sy + 5.2);
+  doc.text('LOHN-BERECHNUNG (SACHSEN-ANHALT)', midX + 5, sy + 5.2);
 
-  const rowH = 6.5;
+  const rowH = tightPayLayout ? 4.6 : 5.1;
+  const highlightH = tightPayLayout ? 5.8 : 7;
+  const nettoH = tightPayLayout ? 7.5 : 9;
+  const highlightGap = tightPayLayout ? 1.2 : 1.7;
 
   // Left: hours
-  let ry = sy + 14;
+  let ry = sy + 12;
   const drawRow = (label: string, value: string, x: number, colW: number, accent?: [number,number,number], isBoldLabel?: boolean) => {
     doc.setTextColor(80, 95, 115);
     doc.setFont('helvetica', isBoldLabel ? 'bold' : 'normal');
-    doc.setFontSize(7.5);
+    doc.setFontSize(tightPayLayout ? 6 : 6.4);
     doc.text(label, x + 3, ry);
     doc.setFont('helvetica', 'bold');
-    doc.setFontSize(8.5);
+    doc.setFontSize(tightPayLayout ? 6.8 : 7.2);
     doc.setTextColor(...(accent ?? PRIMARY));
     doc.text(value, x + colW - 3, ry, { align: 'right' });
   };
@@ -845,11 +942,11 @@ export function generateLohnzettel(params: LohnExportParams) {
   drawRow(`Überstunden (×${OVERTIME_RATE}):`, fmtHHMM(overtimeMin) + ' Std.', MARGIN, halfW, [160, 50, 50]);
 
   // Extra employee details
-  ry += rowH * 1.2;
-  doc.line(MARGIN, ry - 3, midX, ry - 3);
+  ry += rowH * 0.8;
+  doc.line(MARGIN, ry - 2.4, midX, ry - 2.4);
   doc.setTextColor(...PRIMARY);
   doc.setFont('helvetica', 'bold');
-  doc.setFontSize(7.5);
+  doc.setFontSize(6.6);
   doc.text('MITARBEITER-DETAILS', MARGIN + 4, ry);
   ry += rowH;
   drawRow('SV-Nr.:', worker.svNr || '—', MARGIN, halfW);
@@ -861,23 +958,23 @@ export function generateLohnzettel(params: LohnExportParams) {
   drawRow('Kinderfreibeträge:', String(worker.kinder ?? 0), MARGIN, halfW);
 
   // Right: money and deductions
-  ry = sy + 17;
+  ry = sy + 12;
   drawRow('Stundensatz:', fmtCurrency(hourlyRate) + '/h', midX, rightW);
   ry += rowH;
   drawRow('Reguläre Vergütung:', fmtCurrency(regularPay), midX, rightW);
   ry += rowH;
   drawRow(`Überstunden-Vergütung (×${OVERTIME_RATE}):`, fmtCurrency(overtimePay), midX, rightW, [160, 50, 50]);
-  ry += rowH * 1.2;
+  ry += rowH * highlightGap;
 
   // Brutto highlight
-  fillRect(doc, midX + 2, ry - 5, rightW - 4, 8, PRIMARY);
+  fillRect(doc, midX + 2, ry - 4.2, rightW - 4, highlightH, PRIMARY);
   doc.setTextColor(255, 255, 255);
   doc.setFont('helvetica', 'bold');
-  doc.setFontSize(8);
+  doc.setFontSize(7.2);
   doc.text('BRUTTO-LOHN:', midX + 5, ry);
   doc.text(fmtCurrency(bruttoTotal), midX + rightW - 5, ry, { align: 'right' });
 
-  ry += rowH * 1.1;
+  ry += rowH * highlightGap;
 
   // ── Payroll via simulatePayroll (EStG §32a + korrekte SV-Sätze 2025/2026) ──
   const payroll = simulatePayroll({
@@ -917,37 +1014,36 @@ export function generateLohnzettel(params: LohnExportParams) {
   ry += rowH;
 
   // Netto highlight
-  fillRect(doc, midX + 2, ry - 3, rightW - 4, 12, [40, 160, 80]);
+  fillRect(doc, midX + 2, ry - 2.4, rightW - 4, nettoH, [40, 160, 80]);
   doc.setTextColor(255, 255, 255);
   doc.setFont('helvetica', 'bold');
-  doc.setFontSize(10);
-  doc.text('NETTO-VERDIENST:', midX + 5, ry + 4);
-  doc.text(fmtCurrency(payroll.netto), midX + rightW - 5, ry + 4, { align: 'right' });
+  doc.setFontSize(8.4);
+  doc.text('NETTO-VERDIENST:', midX + 5, ry + 3.2);
+  doc.text(fmtCurrency(payroll.netto), midX + rightW - 5, ry + 3.2, { align: 'right' });
 
   // ── Signature strip ──
-  sy += 110;
-  if (sy + 23 > 283) { doc.addPage(); sy = 20; }
+  sy += payBoxH + 2;
 
-  fillRect(doc, MARGIN, sy, CW, 21, [252, 252, 255]);
+  fillRect(doc, MARGIN, sy, CW, signatureH, [252, 252, 255]);
   doc.setDrawColor(...BORDER);
-  doc.rect(MARGIN, sy, CW, 21);
+  doc.rect(MARGIN, sy, CW, signatureH);
 
   const sigCols = 3;
   const sigW = CW / sigCols;
   const sigLabels = ['Ort / Datum', 'Unterschrift Mitarbeiter', 'Unterschrift Vorgesetzter'];
   sigLabels.forEach((label, i) => {
     const x = MARGIN + i * sigW;
-    if (i > 0) doc.line(x, sy + 1, x, sy + 21);
+    if (i > 0) doc.line(x, sy + 1, x, sy + signatureH);
     doc.setTextColor(80, 95, 115);
     doc.setFont('helvetica', 'normal');
-    doc.setFontSize(7);
-    doc.text(label + ':', x + 3, sy + 5);
+    doc.setFontSize(6.4);
+    doc.text(label + ':', x + 3, sy + 4.2);
     // Digitale Unterschrift Mitarbeiter (i === 1) — Seitenverhältnis beibehalten, transparent
     if (i === 1 && worker.signatureData) {
-      addSignatureImage(doc, worker.signatureData, x + 3, sy + 5, sigW - 8, 10);
+      addSignatureImage(doc, worker.signatureData, x + 3, sy + 4.5, sigW - 8, 7.5);
     }
     doc.setDrawColor(...BORDER);
-    doc.line(x + 3, sy + 17, x + sigW - 5, sy + 17);
+    doc.line(x + 3, sy + 12.5, x + sigW - 5, sy + 12.5);
   });
 
   drawFooter(doc, company, worker.name, periodLabel);

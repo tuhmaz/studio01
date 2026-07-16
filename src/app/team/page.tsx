@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { Shell } from '@/components/layout/Shell';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -46,9 +46,12 @@ const BUNDESLAENDER = [
   { code: 'SH', name: 'Schleswig-Holstein', churchTax: 9 },
   { code: 'TH', name: 'Thüringen', churchTax: 9 },
 ];
-const MIN_PASSWORD_LENGTH = 6;
+const MIN_PASSWORD_LENGTH = 12;
 const MANAGED_ROLE_OPTIONS: Record<UserRole, UserRole[]> = {
-  ADMIN: ['WORKER', 'LEADER', 'ADMIN'],
+  SUPER_ADMIN: ['WORKER', 'LEADER', 'ACCOUNTANT', 'MANAGER', 'ADMIN'],
+  ADMIN: ['WORKER', 'LEADER', 'ACCOUNTANT', 'MANAGER', 'ADMIN'],
+  MANAGER: ['WORKER', 'LEADER'],
+  ACCOUNTANT: ['WORKER'],
   LEADER: ['WORKER'],
   WORKER: ['WORKER'],
 };
@@ -76,6 +79,7 @@ export default function TeamPage() {
   const effectiveRole = (userProfile?.role ?? 'WORKER') as UserRole;
   const effectiveUserName = userProfile?.name ?? 'Admin';
   const effectiveCompanyId = companyId;
+  const canManageUsers = effectiveRole === 'SUPER_ADMIN' || effectiveRole === 'ADMIN';
   const allowedManagedRoles = MANAGED_ROLE_OPTIONS[effectiveRole ?? 'WORKER'] ?? ['WORKER'];
 
   const { data: teamRaw, isLoading, refresh: refreshTeam } = useQuery({
@@ -168,7 +172,7 @@ export default function TeamPage() {
       }
     }
 
-    if (editingUser && effectiveRole === 'ADMIN' && formData.password) {
+    if (editingUser && canManageUsers && formData.password) {
       if (formData.password.length > 0 && formData.password.length < MIN_PASSWORD_LENGTH) {
         toast({
           variant: "destructive",
@@ -203,7 +207,6 @@ export default function TeamPage() {
               id: inviteId,
               company_id: effectiveCompanyId,
               email: normalizedEmail,
-              name: trimmedName,
               role: requestedRole,
               created_by: user?.id ?? null,
             },
@@ -304,7 +307,7 @@ export default function TeamPage() {
   };
 
   const handleEdit = (member: UserType) => {
-    if (effectiveRole !== 'ADMIN' && member.role !== 'WORKER') {
+    if (!canManageUsers && member.role !== 'WORKER') {
       toast({
         variant: 'destructive',
         title: 'Kein Zugriff',
@@ -327,7 +330,7 @@ export default function TeamPage() {
   };
 
   const handleDelete = async (id: string) => {
-    if (effectiveRole !== 'ADMIN') {
+    if (!canManageUsers) {
       toast({ variant: 'destructive', title: 'Kein Zugriff', description: 'Nur Administratoren können Konten entfernen.' });
       return;
     }
@@ -383,7 +386,7 @@ export default function TeamPage() {
                   <Select
                     value={formData.role || allowedManagedRoles[0] || 'WORKER'}
                     onValueChange={(val: UserRole) => setFormData({...formData, role: val})}
-                    disabled={!!editingUser && effectiveRole !== 'ADMIN'}
+                    disabled={!!editingUser && !canManageUsers}
                   >
                     <SelectTrigger className="h-12"><SelectValue/></SelectTrigger>
                     <SelectContent>
@@ -395,7 +398,7 @@ export default function TeamPage() {
                 </div>
 
                 <div className="space-y-2">
-                  <Label>{editingUser ? (effectiveRole === 'ADMIN' ? 'Neues Passwort' : 'Login-Status') : 'Temporäres Passwort'}</Label>
+                  <Label>{editingUser ? (canManageUsers ? 'Neues Passwort' : 'Login-Status') : 'Temporäres Passwort'}</Label>
                   <div className="relative">
                     <Lock className="absolute left-3 top-4 h-4 w-4 text-muted-foreground" />
                     <Input
@@ -403,14 +406,14 @@ export default function TeamPage() {
                       type="password"
                       value={formData.password}
                       onChange={e => setFormData({...formData, password: e.target.value})}
-                      placeholder={editingUser ? (effectiveRole === 'ADMIN' ? 'Neues Passwort leer lassen' : 'Bereits eingerichtet') : 'Mindestens 6 Zeichen'}
-                      disabled={!!editingUser && effectiveRole !== 'ADMIN'}
+                      placeholder={editingUser ? (canManageUsers ? 'Neues Passwort leer lassen' : 'Bereits eingerichtet') : `Mindestens ${MIN_PASSWORD_LENGTH} Zeichen`}
+                      disabled={!!editingUser && !canManageUsers}
                     />
                   </div>
                 </div>
                 <div className="space-y-2">
-                  <Label>{editingUser ? (effectiveRole === 'ADMIN' ? 'Passwort bestätigen' : 'Hinweis') : 'Passwort bestätigen'}</Label>
-                  {editingUser && effectiveRole !== 'ADMIN' ? (
+                  <Label>{editingUser ? (canManageUsers ? 'Passwort bestätigen' : 'Hinweis') : 'Passwort bestätigen'}</Label>
+                  {editingUser && !canManageUsers ? (
                     <div className="h-12 rounded-xl border bg-muted/30 px-4 flex items-center text-sm font-medium text-muted-foreground">
                       Passwort-Reset erfolgt derzeit über ein neues Konto oder direkt durch den Mitarbeiter.
                     </div>
@@ -560,7 +563,7 @@ export default function TeamPage() {
                   </div>
                   <div className="flex flex-col gap-1">
                     <Button variant="ghost" size="icon" className="h-8 w-8 rounded-full hover:bg-primary/5 text-primary" onClick={() => handleEdit(member)}><Edit className="w-4 h-4"/></Button>
-                    {effectiveRole === 'ADMIN' && (
+                    {canManageUsers && (
                       <Button variant="ghost" size="icon" className="h-8 w-8 rounded-full hover:bg-destructive/5 text-destructive" onClick={() => handleDelete(member.id)}><Trash2 className="w-4 h-4"/></Button>
                     )}
                   </div>

@@ -22,8 +22,8 @@ function createPool() {
   return postgres({
     host,
     port:     Number(process.env.DB_PORT ?? 5432),
-    database: process.env.DB_DATABASE!,
-    username: process.env.DB_USERNAME!,
+    database: (process.env.DB_DATABASE ?? process.env.DB_NAME)!,
+    username: (process.env.DB_USERNAME ?? process.env.DB_USER)!,
     password: process.env.DB_PASSWORD!,
     ssl:      false,
     max:      10,

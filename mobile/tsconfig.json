@@ -1,8 +1,12 @@
 {
-  "extends": "expo/tsconfig.base",
+  "extends": "expo/tsconfig.base.json",
   "compilerOptions": {
     "strict": true,
+    "ignoreDeprecations": "6.0",
     "baseUrl": ".",
+    "typeRoots": [
+      "./node_modules/@types"
+    ],
     "paths": {
       "@/*": [
         "src/*"

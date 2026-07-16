@@ -3,7 +3,7 @@
 // Leaflet CSS must be imported here — the whole component is loaded with ssr:false
 import 'leaflet/dist/leaflet.css';
 import L from 'leaflet';
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 import { MapContainer, TileLayer, Marker, Popup, useMap } from 'react-leaflet';
 import { Loader2, MapPin, RefreshCw, AlertCircle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -103,6 +103,141 @@ function FitBounds({ positions }: { positions: [number, number][] }) {
   return null;
 }
 
+function escapeHtml(value: unknown): string {
+  return String(value ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+function renderPopup(site: MapSite, color: string, label: string): string {
+  const monthlyCount = site.monthlyCompletions ?? 0;
+  const monthlyBadge = monthlyCount > 0
+    ? `<span style="background:rgba(0,0,0,.15);border-radius:999px;padding:1px 7px;font-size:10px;font-weight:900;">${monthlyCount}&times; diesen Monat</span>`
+    : '';
+
+  const monthlyDates = site.monthlyDates && site.monthlyDates.length > 0
+    ? `<div style="margin-bottom:10px;">
+        <p style="font-size:9px;font-weight:900;color:#94a3b8;text-transform:uppercase;letter-spacing:.08em;margin:0 0 4px;">
+          Erledigte Eins&auml;tze diesen Monat
+        </p>
+        <div style="display:flex;flex-wrap:wrap;gap:3px;">
+          ${site.monthlyDates.map(d => `
+            <span style="background:#dcfce7;color:#166534;font-size:9px;font-weight:800;padding:2px 7px;border-radius:999px;">
+              ${escapeHtml(new Date(d).toLocaleDateString('de-DE', { day: '2-digit', month: 'short' }))}
+            </span>
+          `).join('')}
+        </div>
+      </div>`
+    : '';
+
+  const categories = site.categories && site.categories.length > 0
+    ? `<div style="display:flex;flex-wrap:wrap;gap:4px;margin-bottom:8px;">
+        ${site.categories.map(c => `
+          <span style="background:#f1f5f9;color:#475569;font-size:9px;font-weight:800;padding:2px 8px;border-radius:999px;text-transform:uppercase;">
+            ${escapeHtml(c)}
+          </span>
+        `).join('')}
+      </div>`
+    : '';
+
+  const workers = site.workers && site.workers.length > 0
+    ? `<p style="font-size:11px;color:#94a3b8;font-weight:600;margin:0;">Person: ${escapeHtml(site.workers.join(', '))}</p>`
+    : '';
+
+  return `
+    <div style="font-family:system-ui,sans-serif;min-width:220px;">
+      <div style="background:${color};color:#fff;padding:7px 12px;border-radius:8px 8px 0 0;margin:-8px -12px 12px;font-size:10px;font-weight:900;text-transform:uppercase;letter-spacing:.1em;display:flex;align-items:center;justify-content:space-between;">
+        <span>${escapeHtml(label)}</span>
+        ${monthlyBadge}
+      </div>
+      <p style="font-weight:900;font-size:14px;margin:0 0 3px;">${escapeHtml(site.name)}</p>
+      <p style="font-size:12px;color:#64748b;margin:0 0 10px;">${escapeHtml(site.address)}, ${escapeHtml(site.city)}</p>
+      ${monthlyDates}
+      ${categories}
+      ${workers}
+    </div>
+  `;
+}
+
+function LeafletMap({
+  sites,
+  positions,
+  defaultCenter,
+}: {
+  sites: MapSite[];
+  positions: [number, number][];
+  defaultCenter: [number, number];
+}) {
+  const containerRef = useRef<HTMLDivElement | null>(null);
+  const mapRef = useRef<L.Map | null>(null);
+
+  useEffect(() => {
+    const container = containerRef.current;
+    if (!container) return;
+
+    if (mapRef.current) {
+      mapRef.current.remove();
+      mapRef.current = null;
+    }
+
+    // Leaflet marks initialized containers. During HMR or tab remounts that
+    // marker can outlive the old map instance briefly enough to break init.
+    if ((container as HTMLDivElement & { _leaflet_id?: number })._leaflet_id) {
+      delete (container as HTMLDivElement & { _leaflet_id?: number })._leaflet_id;
+    }
+
+    const map = L.map(container, {
+      center: defaultCenter,
+      zoom: 10,
+      zoomControl: true,
+      scrollWheelZoom: true,
+    });
+    mapRef.current = map;
+
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
+      maxZoom: 19,
+    }).addTo(map);
+
+    sites.forEach(site => {
+      if (site.lat == null || site.lng == null) return;
+      const key = resolveKey(site);
+      const color = STATUS_COLOR[key];
+      const label = STATUS_LABEL[key];
+
+      L.marker([site.lat, site.lng], {
+        icon: makeIcon(color, site.routeCode || site.name.slice(0, 14)),
+      })
+        .bindPopup(renderPopup(site, color, label), {
+          maxWidth: 300,
+          className: 'leaflet-popup-custom',
+        })
+        .addTo(map);
+    });
+
+    if (positions.length > 0) {
+      try {
+        map.fitBounds(positions, { padding: [48, 48], maxZoom: 14 });
+      } catch { /* ignore */ }
+    }
+
+    setTimeout(() => map.invalidateSize(), 0);
+
+    return () => {
+      map.remove();
+      mapRef.current = null;
+      if ((container as HTMLDivElement & { _leaflet_id?: number })._leaflet_id) {
+        delete (container as HTMLDivElement & { _leaflet_id?: number })._leaflet_id;
+      }
+    };
+  }, [defaultCenter, positions, sites]);
+
+  return <div ref={containerRef} style={{ height: '100%', width: '100%' }} />;
+}
+
 // ── Main component ─────────────────────────────────────────────────────────────
 
 export default function LiveMap({ sites, onGeocode, isGeocoding = false }: LiveMapProps) {
@@ -168,6 +303,7 @@ export default function LiveMap({ sites, onGeocode, isGeocoding = false }: LiveM
             </div>
           </div>
         ) : (
+          typeof window === 'undefined' ? (
           <MapContainer
             center={defaultCenter}
             zoom={10}
@@ -262,6 +398,13 @@ export default function LiveMap({ sites, onGeocode, isGeocoding = false }: LiveM
               );
             })}
           </MapContainer>
+          ) : (
+            <LeafletMap
+              sites={locatedSites}
+              positions={positions}
+              defaultCenter={defaultCenter}
+            />
+          )
         )}
 
         {/* Geocoding overlay */}

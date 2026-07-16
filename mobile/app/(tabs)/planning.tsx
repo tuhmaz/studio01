@@ -2,13 +2,13 @@
  * Einsatzplanung — mobile version mirroring the web deployment page.
  * Flow: pick date → pick site (shows monthly due services) → pick team → save
  */
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useCallback, useMemo } from 'react';
 import {
   View, Text, ScrollView, StyleSheet, TouchableOpacity,
   Alert, ActivityIndicator, Modal, FlatList, RefreshControl, TextInput,
 } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
-import { useFocusEffect, router } from 'expo-router';
+import { useFocusEffect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { format } from 'date-fns';
 import { de } from 'date-fns/locale';
@@ -148,7 +148,7 @@ export default function PlanningScreen() {
   );
 
   const todayDeployments = useMemo(
-    () => deployments.filter(d => true), // already filtered by date in query
+    () => deployments, // already filtered by date in query
     [deployments],
   );
 
@@ -163,7 +163,7 @@ export default function PlanningScreen() {
       if (deployments.some(d => d.jobSiteId === site.id)) return false;
 
       // Check if has due services this month
-      const hasDue = site.services ? Object.values(site.services).some((s: any) => isServiceDue(s, currentMonth)) : false;
+      const hasDue = site.services ? Object.values(site.services).some(s => isServiceDue(s, currentMonth)) : false;
       if (!hasDue) return false;
 
       // Distance <= 25km
