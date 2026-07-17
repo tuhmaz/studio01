@@ -450,9 +450,9 @@ export function generateArbeitszeitnachweis(params: LohnExportParams) {
   });
 
   const groupedEntries = Array.from(groupedEntriesMap.values()).sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
-  const compactLayout = groupedEntries.length > 22;
+  const compactLayout = groupedEntries.length >= 18;
   const compactRowHeight = compactLayout
-    ? Math.max(5.6, Math.min(6.5, (184 / Math.max(groupedEntries.length, 1))))
+    ? Math.max(4.5, Math.min(5.8, (150 / Math.max(groupedEntries.length, 1))))
     : 0;
 
   // Summen aus gruppierten Einträgen — korrekt auf max -60 Min/Tag begrenzt
@@ -490,11 +490,11 @@ export function generateArbeitszeitnachweis(params: LohnExportParams) {
     { content: 'Tag',             styles: { halign: 'center' as const } },
     { content: 'Objekt / Adresse', styles: { halign: 'left' as const } },
     { content: 'Tätigkeiten',     styles: { halign: 'left' as const } },
-    { content: 'Beginn',          styles: { halign: 'center' as const } },
-    { content: 'Ende',            styles: { halign: 'center' as const } },
-    { content: 'Std.',            styles: { halign: 'center' as const } },
-    { content: 'Fahrtzt.',        styles: { halign: 'center' as const } },
-    { content: 'Unterschrift',    styles: { halign: 'center' as const } },
+    { content: compactLayout ? 'Von' : 'Beginn', styles: { halign: 'center' as const } },
+    { content: compactLayout ? 'Bis' : 'Ende', styles: { halign: 'center' as const } },
+    { content: compactLayout ? 'Arb.' : 'Std.', styles: { halign: 'center' as const } },
+    { content: compactLayout ? 'Fahrt' : 'Fahrtzt.', styles: { halign: 'center' as const } },
+    { content: compactLayout ? 'Signatur' : 'Unterschrift', styles: { halign: 'center' as const } },
   ]];
 
   const tableBody: any[] = groupedEntries.map((e, idx) => {
@@ -513,17 +513,17 @@ export function generateArbeitszeitnachweis(params: LohnExportParams) {
       {
         content: objStr,
         styles: {
-          fontSize: compactLayout ? 6.2 : 7.5,
-          cellPadding: compactLayout ? 0.9 : 2,
+          fontSize: compactLayout ? 5.5 : 7.5,
+          cellPadding: compactLayout ? 0.55 : 2,
           overflow: compactLayout ? 'ellipsize' as const : 'linebreak' as const,
         },
       },
       {
         content: catStr,
         styles: {
-          fontSize: compactLayout ? 6 : 6.5,
+          fontSize: compactLayout ? 5.4 : 6.5,
           textColor: [60, 80, 120] as [number,number,number],
-          cellPadding: compactLayout ? 0.9 : 2,
+          cellPadding: compactLayout ? 0.55 : 2,
           overflow: compactLayout ? 'ellipsize' as const : 'linebreak' as const,
         },
       },
@@ -563,8 +563,8 @@ export function generateArbeitszeitnachweis(params: LohnExportParams) {
     tableWidth: CW,
     styles: {
       font: 'helvetica',
-      fontSize: compactLayout ? 6.4 : 8,
-      cellPadding: compactLayout ? 0.9 : 2,
+      fontSize: compactLayout ? 5.8 : 8,
+      cellPadding: compactLayout ? 0.55 : 2,
       lineColor: BORDER,
       lineWidth: 0.15,
       overflow: compactLayout ? 'ellipsize' : 'linebreak',
@@ -574,9 +574,9 @@ export function generateArbeitszeitnachweis(params: LohnExportParams) {
       fillColor: PRIMARY,
       textColor: [255, 255, 255],
       fontStyle: 'bold',
-      fontSize: compactLayout ? 6.4 : 8,
+      fontSize: compactLayout ? 5.8 : 8,
       halign: 'center',
-      cellPadding: compactLayout ? 1 : 2,
+      cellPadding: compactLayout ? 0.75 : 2,
     },
     alternateRowStyles: { fillColor: [250, 251, 255] },
     columnStyles: {
@@ -613,8 +613,8 @@ export function generateArbeitszeitnachweis(params: LohnExportParams) {
 
   // ── Summary (hours only, no money) ──
   const finalY = (doc as any).lastAutoTable.finalY as number;
-  const summaryH = 34;
-  let sy = finalY + (compactLayout ? 3 : 6);
+  const summaryH = compactLayout ? 28 : 34;
+  let sy = finalY + (compactLayout ? 2 : 6);
   if (sy + summaryH > 283) { doc.addPage(); sy = 20; }
 
   fillRect(doc, MARGIN, sy, CW, summaryH, LIGHT_BG);
@@ -628,7 +628,7 @@ export function generateArbeitszeitnachweis(params: LohnExportParams) {
 
   doc.setTextColor(...PRIMARY);
   doc.setFont('helvetica', 'bold');
-  doc.setFontSize(8);
+  doc.setFontSize(compactLayout ? 7.2 : 8);
   doc.text('STUNDEN-ZUSAMMENFASSUNG', MARGIN + 5, sy + 5.8);
 
   // Vertical dividers
@@ -638,15 +638,15 @@ export function generateArbeitszeitnachweis(params: LohnExportParams) {
   doc.line(col3x, sy + 1, col3x, sy + summaryH);
 
   // Left column
-  const rowH = 5.8;
-  let ry = sy + 14;
+  const rowH = compactLayout ? 4.7 : 5.8;
+  let ry = sy + (compactLayout ? 12 : 14);
   const drawSummaryRow = (label: string, value: string, x: number, colW: number, accent?: [number,number,number]) => {
     doc.setTextColor(80, 95, 115);
     doc.setFont('helvetica', 'normal');
-    doc.setFontSize(7.2);
+    doc.setFontSize(compactLayout ? 6.3 : 7.2);
     doc.text(label, x + 4, ry);
     doc.setFont('helvetica', 'bold');
-    doc.setFontSize(8.2);
+    doc.setFontSize(compactLayout ? 7.2 : 8.2);
     doc.setTextColor(...(accent ?? PRIMARY));
     doc.text(value, x + colW - 4, ry, { align: 'right' });
   };
@@ -664,7 +664,7 @@ export function generateArbeitszeitnachweis(params: LohnExportParams) {
   drawSummaryRow('Vergütete Zeit (netto):', fmtHHMM(totalMin) + ' Std.', MARGIN, colW1);
 
   // Middle column
-  ry = sy + 14;
+  ry = sy + (compactLayout ? 12 : 14);
   drawSummaryRow('Sollstunden / Monat:', `${worker.monthlyTargetHours ?? 0} Std.`, col2x, colW2);
   ry += rowH;
   const overtimeMin = Math.max(0, totalMin - (worker.monthlyTargetHours ?? 0) * 60);
@@ -673,20 +673,20 @@ export function generateArbeitszeitnachweis(params: LohnExportParams) {
   drawSummaryRow('Überstunden:', fmtHHMM(overtimeMin) + ' Std.', col2x, colW2, [160, 50, 50]);
 
   // Right column: signature
-  ry = sy + 11.5;
+  ry = sy + (compactLayout ? 10 : 11.5);
   doc.setTextColor(80, 95, 115);
   doc.setFont('helvetica', 'normal');
-  doc.setFontSize(6.5);
+  doc.setFontSize(compactLayout ? 5.8 : 6.5);
   doc.text('Ort / Datum:', col3x + 4, ry);
   doc.setDrawColor(...BORDER);
-  doc.line(col3x + 4, ry + 4.8, col3x + colW3 - 6, ry + 4.8);
-  ry += 10.5;
+  doc.line(col3x + 4, ry + (compactLayout ? 4 : 4.8), col3x + colW3 - 6, ry + (compactLayout ? 4 : 4.8));
+  ry += compactLayout ? 8.4 : 10.5;
   doc.text('Unterschrift Mitarbeiter:', col3x + 4, ry);
   // Digitale Unterschrift — Seitenverhältnis beibehalten
   if (worker.signatureData) {
-    addSignatureImage(doc, worker.signatureData, col3x + 4, ry + 0.5, colW3 - 10, 8);
+    addSignatureImage(doc, worker.signatureData, col3x + 4, ry + 0.5, colW3 - 10, compactLayout ? 6.5 : 8);
   }
-  doc.line(col3x + 4, ry + 10, col3x + colW3 - 6, ry + 10);
+  doc.line(col3x + 4, ry + (compactLayout ? 8 : 10), col3x + colW3 - 6, ry + (compactLayout ? 8 : 10));
 
   drawFooter(doc, company, worker.name, periodLabel, PRINT_LIGHT_CHROME_THEME);
 
