@@ -6,7 +6,9 @@ import {
 import { StatusBar } from 'expo-status-bar';
 import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
-import { Audio } from 'expo-av';
+import {
+  useAudioRecorder, RecordingPresets, AudioModule, setAudioModeAsync,
+} from 'expo-audio';
 import { useFocusEffect } from 'expo-router';
 import { useAuth } from '@/context/AuthContext';
 import { apiData } from '@/api/client';
@@ -24,7 +26,8 @@ export default function NotesScreen() {
   const [textInput,    setTextInput]    = useState('');
   const [loading,      setLoading]      = useState(true);
   const [saving,       setSaving]       = useState(false);
-  const [recording,    setRecording]    = useState<Audio.Recording | null>(null);
+  const audioRecorder = useAudioRecorder(RecordingPresets.HIGH_QUALITY);
+  const [isRecording,  setIsRecording]  = useState(false);
   const [recSeconds,   setRecSeconds]   = useState(0);
   const [recTimer,     setRecTimer]     = useState<ReturnType<typeof setInterval> | null>(null);
   const [activeTab,    setActiveTab]    = useState<'all' | 'photo' | 'voice' | 'text'>('all');
@@ -92,23 +95,24 @@ export default function NotesScreen() {
   };
 
   const startRecording = async () => {
-    const perm = await Audio.requestPermissionsAsync();
+    const perm = await AudioModule.requestRecordingPermissionsAsync();
     if (!perm.granted) { Alert.alert('Berechtigung fehlt', 'Mikrofonzugriff erlauben'); return; }
-    await Audio.setAudioModeAsync({ allowsRecordingIOS: true, playsInSilentModeIOS: true });
-    const { recording: rec } = await Audio.Recording.createAsync(Audio.RecordingOptionsPresets.HIGH_QUALITY);
-    setRecording(rec);
+    await setAudioModeAsync({ allowsRecording: true, playsInSilentMode: true });
+    await audioRecorder.prepareToRecordAsync();
+    audioRecorder.record();
+    setIsRecording(true);
     setRecSeconds(0);
     const t = setInterval(() => setRecSeconds(s => s + 1), 1000);
     setRecTimer(t);
   };
 
   const stopRecording = async () => {
-    if (!recording) return;
+    if (!isRecording) return;
     if (recTimer) { clearInterval(recTimer); setRecTimer(null); }
-    await recording.stopAndUnloadAsync();
-    const uri  = recording.getURI();
+    await audioRecorder.stop();
+    const uri  = audioRecorder.uri;
     const secs = recSeconds;
-    setRecording(null);
+    setIsRecording(false);
     setRecSeconds(0);
     if (!uri) return;
     const res  = await fetch(uri);
@@ -160,12 +164,12 @@ export default function NotesScreen() {
           <Text style={styles.actionText}>Galerie</Text>
         </TouchableOpacity>
         <TouchableOpacity
-          style={[styles.actionBtn, { backgroundColor: recording ? COLORS.accent : '#3b82f6' }]}
-          onPress={recording ? stopRecording : startRecording}
+          style={[styles.actionBtn, { backgroundColor: isRecording ? COLORS.accent : '#3b82f6' }]}
+          onPress={isRecording ? stopRecording : startRecording}
           disabled={saving}
         >
-          <Ionicons name={recording ? 'stop-circle' : 'mic'} size={20} color="#fff" />
-          <Text style={styles.actionText}>{recording ? `${recSeconds}s` : 'Audio'}</Text>
+          <Ionicons name={isRecording ? 'stop-circle' : 'mic'} size={20} color="#fff" />
+          <Text style={styles.actionText}>{isRecording ? `${recSeconds}s` : 'Audio'}</Text>
         </TouchableOpacity>
       </View>
 

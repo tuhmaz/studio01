@@ -52,14 +52,14 @@
           "cameraPermission": "Für Objektfotos und Dokumentation"
         }
       ],
+      "expo-font",
+      "expo-status-bar",
       [
-        "expo-av",
+        "expo-audio",
         {
           "microphonePermission": "Für Sprachnotizen am Objekt"
         }
-      ],
-      "expo-font",
-      "expo-status-bar"
+      ]
     ],
     "experiments": {
       "typedRoutes": true
