@@ -1,11 +1,13 @@
 import { Tabs } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { COLORS } from '@/utils/constants';
 import { useAuth } from '@/context/AuthContext';
 import { isManagement } from '@/utils/roles';
 
 export default function TabLayout() {
   const { user } = useAuth();
+  const insets = useSafeAreaInsets();
   const isLeader = isManagement(user?.role);
 
   return (
@@ -18,8 +20,10 @@ export default function TabLayout() {
           backgroundColor: '#fff',
           borderTopWidth:  1,
           borderTopColor:  COLORS.border,
-          height:          64,
-          paddingBottom:   8,
+          // Add the bottom safe-area inset (Android nav bar / gesture area) so
+          // the tabs aren't hidden behind the system navigation in edge-to-edge.
+          height:          64 + insets.bottom,
+          paddingBottom:   8 + insets.bottom,
           paddingTop:      6,
         },
         tabBarLabelStyle: { fontSize: 10, fontWeight: '700' },
