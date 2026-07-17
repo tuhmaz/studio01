@@ -49,7 +49,8 @@ export const ROLE_PERMISSIONS: Record<Role, Permission[]> = {
     'payroll.view', 'payroll.manage', 'reports.export',
   ],
   LEADER: [
-    'companies.view', 'users.view', 'job_sites.view', 'assignments.view',
+    'companies.view', 'users.view', 'job_sites.view',
+    'assignments.view', 'assignments.manage',
     'time_entries.view', 'time_entries.manage', 'work_logs.view', 'work_logs.create',
   ],
   WORKER: [
