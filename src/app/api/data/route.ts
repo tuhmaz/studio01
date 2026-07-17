@@ -3,6 +3,7 @@ import { SessionPayload } from '@/lib/auth-server';
 import sql from '@/lib/db';
 import { getRequestSession } from '@/lib/request-context';
 import { hasPermission, normalizeRole, Role } from '@/lib/permissions';
+import { ALWAYS_FORBIDDEN_WRITE_FIELDS } from '@/lib/security';
 
 type FilterValue = string | number | boolean | null;
 type Filters = Record<string, FilterValue>;
@@ -76,6 +77,14 @@ const COMPANY_SCOPED_TABLES = new Set<TableName>([
   'users',
   'work_log_entries',
 ]);
+
+// Status values a non-approver (worker/leader) may set on their own time entries.
+// Setting 'APPROVED' or 'REJECTED' requires the 'time_entries.approve' permission.
+const SELF_SETTABLE_TIME_ENTRY_STATUSES = new Set(['OPEN', 'PENDING', 'SUBMITTED']);
+
+// Roles that may be assigned via the data API. SUPER_ADMIN is intentionally
+// excluded — only an existing SUPER_ADMIN may grant it (see assertRoleAssignment).
+const ASSIGNABLE_ROLES = new Set<Role>(['ADMIN', 'MANAGER', 'ACCOUNTANT', 'LEADER', 'WORKER']);
 
 function err(msg: string, status = 400) {
   return NextResponse.json({ error: msg }, { status });
@@ -232,6 +241,33 @@ function canWrite(table: TableName, action: string, data: unknown, session: Sess
   return false;
 }
 
+// Reject privileged time-entry status transitions (e.g. self-approval) for
+// writers that lack the approval permission. Called for every time_entries write.
+function assertTimeEntryStatusAllowed(rows: Record<string, unknown>[], session: SessionPayload) {
+  if (hasPermission(session, 'time_entries.approve')) return;
+  for (const row of rows) {
+    if (!Object.prototype.hasOwnProperty.call(row, 'status')) continue;
+    const status = row.status;
+    if (status != null && !SELF_SETTABLE_TIME_ENTRY_STATUSES.has(String(status))) {
+      throw new Error('Keine Berechtigung');
+    }
+  }
+}
+
+// Prevent privilege escalation via the `role` column on users writes.
+// Only a SUPER_ADMIN may assign SUPER_ADMIN; any other value must be a known role.
+function assertRoleAssignment(rows: Record<string, unknown>[], session: SessionPayload) {
+  for (const row of rows) {
+    if (!Object.prototype.hasOwnProperty.call(row, 'role')) continue;
+    const target = String(row.role ?? '').toUpperCase();
+    if (target === 'SUPER_ADMIN') {
+      if (roleOf(session) !== 'SUPER_ADMIN') throw new Error('Keine Berechtigung');
+      continue;
+    }
+    if (!ASSIGNABLE_ROLES.has(target as Role)) throw new Error('Keine Berechtigung');
+  }
+}
+
 function sanitizeRows(table: TableName, data: unknown, session: SessionPayload) {
   const rows = Array.isArray(data) ? data : [data];
   const role = roleOf(session);
@@ -242,6 +278,12 @@ function sanitizeRows(table: TableName, data: unknown, session: SessionPayload) 
     }
     const clean = { ...(row as Record<string, unknown>) };
     for (const key of Object.keys(clean)) assertColumn(table, key);
+
+    // Strip fields the client may never set directly (audit/ownership columns).
+    // company_id is re-applied from the session below for company-scoped tables.
+    for (const key of Object.keys(clean)) {
+      if (ALWAYS_FORBIDDEN_WRITE_FIELDS.has(key.toLowerCase())) delete clean[key];
+    }
 
     if (COMPANY_SCOPED_TABLES.has(table)) {
       const companyColumn = table === 'companies' ? 'id' : 'company_id';
@@ -415,7 +457,7 @@ export async function POST(req: NextRequest) {
         assertColumn(table, column);
         const filters = scopedFilters(table, normalizeFilters(table, body.extraFilters), session);
 
-        let query = sql`SELECT * FROM ${sql(table)} WHERE ${sql(column)} @> ${sql.array([body.value])}`;
+        let query = sql`SELECT ${selectFragment(table, body.select, session, filters)} FROM ${sql(table)} WHERE ${sql(column)} @> ${sql.array([body.value])}`;
         const conditions = filterConditions(table, filters);
         if (conditions.length > 0) {
           query = sql`${query} AND ${conditions.reduce((a, b) => sql`${a} AND ${b}`)}`;
@@ -434,8 +476,10 @@ export async function POST(req: NextRequest) {
         if (!canWrite(table, action, body.data, session)) return err('Keine Berechtigung', 403);
         const rows = sanitizeRows(table, body.data, session);
         if (table === 'time_entries') {
+          assertTimeEntryStatusAllowed(rows, session);
           rows.forEach(row => normalizeTimeEntryRow(row));
         }
+        if (table === 'users') assertRoleAssignment(rows, session);
         const inserted = await sql`INSERT INTO ${sql(table)} ${sql(rows)} RETURNING *`;
         return NextResponse.json({ data: inserted });
       }
@@ -444,12 +488,18 @@ export async function POST(req: NextRequest) {
         if (!canWrite(table, action, body.data, session)) return err('Keine Berechtigung', 403);
         const rows = sanitizeRows(table, body.data, session);
         if (table === 'time_entries') {
+          assertTimeEntryStatusAllowed(rows, session);
           rows.forEach(row => normalizeTimeEntryRow(row));
         }
+        if (table === 'users') assertRoleAssignment(rows, session);
         const updateColumns = Object.keys(rows[0]).filter(key => key !== 'id');
+        // Scope the conflict update so a client can never overwrite (and thereby
+        // take over) a row that belongs to a different company.
+        const scopeColumn = table === 'companies' ? 'id' : 'company_id';
         const upserted = await sql`
           INSERT INTO ${sql(table)} ${sql(rows)}
           ON CONFLICT (id) DO UPDATE SET ${sql(rows[0], ...updateColumns)}
+          WHERE ${sql(table)}.${sql(scopeColumn)} = ${session.companyId}
           RETURNING *
         `;
         return NextResponse.json({ data: upserted });
@@ -466,7 +516,9 @@ export async function POST(req: NextRequest) {
           await assertAssignedJobAccess(filters, session);
         }
         const rows = sanitizeRows(table, body.data, session);
+        if (table === 'users') assertRoleAssignment(rows, session);
         if (table === 'time_entries') {
+          assertTimeEntryStatusAllowed(rows, session);
           const id = filters.id;
           let existing: { clock_in_datetime?: string | null; clock_out_datetime?: string | null } | undefined;
           if (typeof id === 'string') {

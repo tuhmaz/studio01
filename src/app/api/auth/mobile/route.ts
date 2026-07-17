@@ -5,7 +5,7 @@
  */
 import { NextRequest, NextResponse } from 'next/server';
 import bcrypt from 'bcryptjs';
-import { createTokenString, verifyTokenString } from '@/lib/auth-server';
+import { createTokenString, verifyTokenString, revokeUserSessions } from '@/lib/auth-server';
 import { writeAuditLog } from '@/lib/audit';
 import sql from '@/lib/db';
 import { getRequestIp, getUserAgent } from '@/lib/request-context';
@@ -157,6 +157,32 @@ export async function GET(req: NextRequest) {
     });
   } catch (err) {
     console.error('[mobile/me]', err);
+    return NextResponse.json({ error: 'Serverfehler' }, { status: 500 });
+  }
+}
+
+/**
+ * DELETE /api/auth/mobile - logout: server-side revocation of the bearer token
+ * (and all other sessions for this user). The client also discards its token.
+ */
+export async function DELETE(req: NextRequest) {
+  try {
+    const authHeader = req.headers.get('authorization') ?? '';
+    const token = authHeader.startsWith('Bearer ') ? authHeader.slice(7).trim() : null;
+    if (!token) {
+      return NextResponse.json({ error: 'Kein Token' }, { status: 401 });
+    }
+
+    const session = await verifyTokenString(token);
+    if (!session) {
+      // Token already invalid — nothing to revoke, treat as success.
+      return NextResponse.json({ ok: true });
+    }
+
+    await revokeUserSessions(session.userId);
+    return NextResponse.json({ ok: true });
+  } catch (err) {
+    console.error('[mobile/logout]', err);
     return NextResponse.json({ error: 'Serverfehler' }, { status: 500 });
   }
 }

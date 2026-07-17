@@ -40,7 +40,7 @@ async function validateSessionPayload(payload: RawSessionPayload): Promise<Sessi
   if (!payload.userId || !payload.companyId) return null;
 
   const [user] = await sql`
-    SELECT id, company_id, role, name, email, password_changed_at
+    SELECT id, company_id, role, name, email, password_changed_at, sessions_revoked_at
       FROM public.users
      WHERE id = ${payload.userId}
      LIMIT 1
@@ -51,8 +51,14 @@ async function validateSessionPayload(payload: RawSessionPayload): Promise<Sessi
   const passwordChangedAtMs = user.password_changed_at
     ? new Date(user.password_changed_at).getTime()
     : 0;
+  const sessionsRevokedAtMs = user.sessions_revoked_at
+    ? new Date(user.sessions_revoked_at).getTime()
+    : 0;
 
-  if (passwordChangedAtMs && issuedAtMs + 1000 < passwordChangedAtMs) {
+  // Reject tokens issued before an explicit password change or logout/revocation.
+  // The 1s slack absorbs clock granularity between JWT iat (seconds) and DB timestamps.
+  const invalidatedBeforeMs = Math.max(passwordChangedAtMs, sessionsRevokedAtMs);
+  if (invalidatedBeforeMs && issuedAtMs + 1000 < invalidatedBeforeMs) {
     return null;
   }
 
@@ -96,6 +102,18 @@ export async function getSession(): Promise<SessionPayload | null> {
   } catch {
     return null;
   }
+}
+
+/**
+ * Server-side revocation: invalidates every JWT issued to this user before now
+ * (all devices — web cookie and mobile bearer tokens). Used on logout.
+ */
+export async function revokeUserSessions(userId: string): Promise<void> {
+  await sql`
+    UPDATE public.users
+       SET sessions_revoked_at = date_trunc('second', NOW())
+     WHERE id = ${userId}
+  `;
 }
 
 /** Clear the session cookie */

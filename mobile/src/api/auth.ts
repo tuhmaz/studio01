@@ -35,5 +35,11 @@ export async function verifySession(token: string): Promise<MobileUser | null> {
 }
 
 export async function logout(): Promise<void> {
+  // Best-effort server-side revocation; always clear the local token afterwards.
+  try {
+    await apiFetch('/api/auth/mobile', { method: 'DELETE' });
+  } catch {
+    // Offline or already-invalid token — local logout still proceeds.
+  }
   await clearToken();
 }
