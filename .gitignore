@@ -43,6 +43,12 @@ next-env.d.ts
 .genkit/*
 .modified
 
+# archives / build bundles (never commit — bloats the repo)
+*.zip
+
+# local editor/tooling settings (machine-specific, may contain local creds)
+.claude/settings.local.json
+
 # firebase debug
 firebase-debug.log
 firestore-debug.log
