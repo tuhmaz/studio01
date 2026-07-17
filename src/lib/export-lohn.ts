@@ -622,80 +622,54 @@ export function generateArbeitszeitnachweis(params: LohnExportParams) {
 
   // ── Summary (hours only, no money) ──
   const finalY = (doc as any).lastAutoTable.finalY as number;
-  const summaryH = compactLayout ? 28 : 34;
-  let sy = finalY + (compactLayout ? 2 : 6);
+  const summaryH = compactLayout ? 19 : 22;
+  let sy = finalY + (compactLayout ? 1.8 : 4);
   if (sy + summaryH > 283) { doc.addPage(); sy = 20; }
 
   fillRect(doc, MARGIN, sy, CW, summaryH, LIGHT_BG);
   doc.setDrawColor(...BORDER);
   doc.setLineWidth(0.2);
   doc.rect(MARGIN, sy, CW, summaryH);
-
-  // Section title line
-  doc.setDrawColor(...BORDER);
-  doc.line(MARGIN, sy + 8, MARGIN + CW, sy + 8);
+  fillRect(doc, MARGIN, sy, 2, summaryH, PRIMARY);
 
   doc.setTextColor(...PRIMARY);
   doc.setFont('helvetica', 'bold');
-  doc.setFontSize(compactLayout ? 7.2 : 8);
-  doc.text('STUNDEN-ZUSAMMENFASSUNG', MARGIN + 5, sy + 5.8);
+  doc.setFontSize(compactLayout ? 7 : 7.8);
+  doc.text('STUNDEN-ZUSAMMENFASSUNG', MARGIN + 5, sy + 6);
 
-  // Vertical dividers
-  const col2x = MARGIN + CW * 0.38;
-  const col3x = MARGIN + CW * 0.66;
-  doc.line(col2x, sy + 1, col2x, sy + summaryH);
-  doc.line(col3x, sy + 1, col3x, sy + summaryH);
+  const signatureX = MARGIN + CW * 0.68;
+  const signatureW = MARGIN + CW - signatureX;
+  doc.setDrawColor(...BORDER);
+  doc.line(signatureX - 4, sy + 2.5, signatureX - 4, sy + summaryH - 2.5);
 
-  // Left column
-  const rowH = compactLayout ? 4.7 : 5.8;
-  let ry = sy + (compactLayout ? 12 : 14);
-  const drawSummaryRow = (label: string, value: string, x: number, colW: number, accent?: [number,number,number]) => {
+  const statY = sy + (compactLayout ? 13.5 : 15);
+  const drawInlineStat = (label: string, value: string, x: number, accent: [number, number, number] = PRIMARY) => {
     doc.setTextColor(80, 95, 115);
     doc.setFont('helvetica', 'normal');
-    doc.setFontSize(compactLayout ? 6.3 : 7.2);
-    doc.text(label, x + 4, ry);
+    doc.setFontSize(compactLayout ? 6.2 : 6.7);
+    doc.text(label, x, statY);
+    doc.setTextColor(...accent);
     doc.setFont('helvetica', 'bold');
-    doc.setFontSize(compactLayout ? 7.2 : 8.2);
-    doc.setTextColor(...(accent ?? PRIMARY));
-    doc.text(value, x + colW - 4, ry, { align: 'right' });
+    doc.setFontSize(compactLayout ? 7.1 : 7.8);
+    doc.text(value, x + doc.getTextWidth(label) + 2, statY);
   };
 
-  const colW1 = col2x - MARGIN;
-  const colW2 = col3x - col2x;
-  const colW3 = MARGIN + CW - col3x;
-
-  drawSummaryRow('Reine Arbeitszeit:', fmtHHMM(totalWorkMin) + ' Std.', MARGIN, colW1);
-  ry += rowH;
+  drawInlineStat('Arbeitszeit:', `${fmtHHMM(totalWorkMin)} Std.`, MARGIN + 5);
   if (totalBonusMin !== 0) {
-    drawSummaryRow('Fahrtabzug (Fernstandorte):', `-${fmtHHMM(Math.abs(totalBonusMin))} Std.`, MARGIN, colW1, [180, 40, 40]);
-    ry += rowH;
+    drawInlineStat('Fahrt:', `-${fmtHHMM(Math.abs(totalBonusMin))} Std.`, MARGIN + 53, [180, 40, 40]);
   }
-  drawSummaryRow('Vergütete Zeit (netto):', fmtHHMM(totalMin) + ' Std.', MARGIN, colW1);
+  drawInlineStat('Netto:', `${fmtHHMM(totalMin)} Std.`, MARGIN + (totalBonusMin !== 0 ? 93 : 61));
 
-  // Middle column
-  ry = sy + (compactLayout ? 12 : 14);
-  drawSummaryRow('Sollstunden / Monat:', `${worker.monthlyTargetHours ?? 0} Std.`, col2x, colW2);
-  ry += rowH;
-  const overtimeMin = Math.max(0, totalMin - (worker.monthlyTargetHours ?? 0) * 60);
-  drawSummaryRow('Reguläre Stunden:', fmtHHMM(totalMin - overtimeMin) + ' Std.', col2x, colW2);
-  ry += rowH;
-  drawSummaryRow('Überstunden:', fmtHHMM(overtimeMin) + ' Std.', col2x, colW2, [160, 50, 50]);
-
-  // Right column: signature
-  ry = sy + (compactLayout ? 10 : 11.5);
   doc.setTextColor(80, 95, 115);
   doc.setFont('helvetica', 'normal');
-  doc.setFontSize(compactLayout ? 5.8 : 6.5);
-  doc.text('Ort / Datum:', col3x + 4, ry);
-  doc.setDrawColor(...BORDER);
-  doc.line(col3x + 4, ry + (compactLayout ? 4 : 4.8), col3x + colW3 - 6, ry + (compactLayout ? 4 : 4.8));
-  ry += compactLayout ? 8.4 : 10.5;
-  doc.text('Unterschrift Mitarbeiter:', col3x + 4, ry);
-  // Digitale Unterschrift — Seitenverhältnis beibehalten
+  doc.setFontSize(compactLayout ? 5.8 : 6.3);
+  doc.text('Ort / Datum', signatureX, sy + 5.5);
+  doc.line(signatureX + 24, sy + 5.5, signatureX + signatureW - 4, sy + 5.5);
+  doc.text('Unterschrift Mitarbeiter', signatureX, sy + (compactLayout ? 13 : 14.5));
   if (worker.signatureData) {
-    addSignatureImage(doc, worker.signatureData, col3x + 4, ry + 0.5, colW3 - 10, compactLayout ? 6.5 : 8);
+    addSignatureImage(doc, worker.signatureData, signatureX + 38, sy + 8.5, signatureW - 42, compactLayout ? 5.8 : 7);
   }
-  doc.line(col3x + 4, ry + (compactLayout ? 8 : 10), col3x + colW3 - 6, ry + (compactLayout ? 8 : 10));
+  doc.line(signatureX + 38, sy + summaryH - 4, signatureX + signatureW - 4, sy + summaryH - 4);
 
   drawFooter(doc, company, worker.name, periodLabel, PRINT_LIGHT_CHROME_THEME);
 
