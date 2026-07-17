@@ -2,10 +2,11 @@ import { Tabs } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { COLORS } from '@/utils/constants';
 import { useAuth } from '@/context/AuthContext';
+import { isManagement } from '@/utils/roles';
 
 export default function TabLayout() {
   const { user } = useAuth();
-  const isLeader = user?.role === 'LEADER' || user?.role === 'ADMIN';
+  const isLeader = isManagement(user?.role);
 
   return (
     <Tabs

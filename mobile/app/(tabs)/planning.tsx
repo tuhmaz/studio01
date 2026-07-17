@@ -14,6 +14,7 @@ import { format } from 'date-fns';
 import { de } from 'date-fns/locale';
 import { useAuth } from '@/context/AuthContext';
 import { apiData } from '@/api/client';
+import { isManagement, isFieldRole } from '@/utils/roles';
 import { COLORS } from '@/utils/constants';
 import { randomId, gpsDistance } from '@/utils/helpers';
 
@@ -190,7 +191,7 @@ export default function PlanningScreen() {
         }),
       ]);
       setSites(sRes.data ?? []);
-      setWorkers((wRes.data ?? []).filter((w: any) => w.role === 'WORKER' || w.role === 'LEADER'));
+      setWorkers((wRes.data ?? []).filter((w: any) => isFieldRole(w.role)));
       setDeployments(
         (dRes.data ?? []).map((r: any) => ({
           id: r.id,
@@ -300,7 +301,7 @@ export default function PlanningScreen() {
   };
 
   // ── Access guard ──
-  if (!user || (user.role !== 'LEADER' && user.role !== 'ADMIN')) {
+  if (!user || !isManagement(user.role)) {
     return (
       <View style={s.center}>
         <Ionicons name="lock-closed" size={44} color={COLORS.textMuted} />

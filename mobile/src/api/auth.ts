@@ -1,20 +1,33 @@
 import { apiFetch, clearToken } from './client';
+import { normalizeRole, type Role } from '@/utils/roles';
 
 export interface MobileUser {
   id: string;
   name: string;
   email: string;
-  role: 'ADMIN' | 'LEADER' | 'WORKER';
+  role: Role;
   companyId: string;
   companyName?: string;
 }
 
+interface LoginResponse {
+  token: string;
+  user: {
+    id: string; name: string; email: string;
+    role: string; companyId: string; companyName?: string;
+  };
+}
+
 export async function login(email: string, password: string): Promise<{ token: string; user: MobileUser }> {
-  return apiFetch('/api/auth/mobile', {
+  const res = await apiFetch<LoginResponse>('/api/auth/mobile', {
     method: 'POST',
     body:   { email, password },
     token:  null, // no token yet
   });
+  return {
+    token: res.token,
+    user: { ...res.user, role: normalizeRole(res.user.role) },
+  };
 }
 
 export async function verifySession(token: string): Promise<MobileUser | null> {
@@ -26,7 +39,7 @@ export async function verifySession(token: string): Promise<MobileUser | null> {
       id:        data.userId,
       name:      data.name,
       email:     data.email,
-      role:      data.role as MobileUser['role'],
+      role:      normalizeRole(data.role),
       companyId: data.companyId,
     };
   } catch {

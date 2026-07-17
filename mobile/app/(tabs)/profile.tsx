@@ -9,10 +9,14 @@ import Svg, { Path } from 'react-native-svg';
 import * as SecureStore from 'expo-secure-store';
 import { useFocusEffect } from 'expo-router';
 import { useAuth } from '@/context/AuthContext';
+import Constants from 'expo-constants';
 import { apiData, apiFetch } from '@/api/client';
 import { SERVER_KEY, DEFAULT_URL } from '@/api/client';
+import { roleLabel as resolveRoleLabel } from '@/utils/roles';
 import { COLORS } from '@/utils/constants';
 import { formatDuration, formatDate } from '@/utils/helpers';
+
+const APP_VERSION = Constants.expoConfig?.version ?? '1.0.0';
 
 interface MonthEntry {
   actual_work_minutes: number;
@@ -396,7 +400,7 @@ export default function ProfileScreen() {
     );
   };
 
-  const roleLabel = user?.role === 'ADMIN' ? 'Administrator' : user?.role === 'LEADER' ? 'Teamleiter' : 'Mitarbeiter';
+  const roleLabel = resolveRoleLabel(user?.role);
   const initials  = user?.name.split(' ').map(w => w[0]).join('').toUpperCase().slice(0, 2) ?? '?';
 
   return (
@@ -541,7 +545,7 @@ export default function ProfileScreen() {
           <Text style={styles.logoutText}>Abmelden</Text>
         </TouchableOpacity>
 
-        <Text style={styles.version}>Hausmeister Pro v1.0.0</Text>
+        <Text style={styles.version}>Hausmeister Pro v{APP_VERSION}</Text>
       </ScrollView>
 
       {/* Signature Pad Modal */}

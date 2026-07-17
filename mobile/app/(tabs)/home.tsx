@@ -8,6 +8,7 @@ import { StatusBar } from 'expo-status-bar';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '@/context/AuthContext';
 import { apiData } from '@/api/client';
+import { isManagement as isManagementRole, isFieldRole } from '@/utils/roles';
 import { COLORS, CATEGORY_LABELS } from '@/utils/constants';
 import { formatDate, formatDateFull, formatTime, elapsedMinutes, formatDuration } from '@/utils/helpers';
 
@@ -82,7 +83,7 @@ const STATUS_LABEL: Record<string, string> = {
 
 export default function HomeScreen() {
   const { user } = useAuth();
-  const isManagement = user?.role === 'ADMIN' || user?.role === 'LEADER';
+  const isManagement = isManagementRole(user?.role);
 
   // Live clock — updates every minute
   const [now, setNow] = useState(new Date());
@@ -174,7 +175,7 @@ export default function HomeScreen() {
         setSites(map);
         setActiveEntry(null);
         setActiveAssign(null);
-        setWorkers((wRes.data ?? []).filter((w: any) => w.role === 'WORKER' || w.role === 'LEADER'));
+        setWorkers((wRes.data ?? []).filter((w: any) => isFieldRole(w.role)));
       } else {
         // WORKER: only their published assignments (today + overdue open)
         const [aRes, sRes, eRes, pRes, allAssignRes] = await Promise.all([

@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
-import { getToken, setToken, clearToken } from '@/api/client';
+import { getToken, setToken, clearToken, setUnauthorizedHandler } from '@/api/client';
 import { login as apiLogin, logout as apiLogout, verifySession, MobileUser } from '@/api/auth';
 
 interface AuthState {
@@ -19,6 +19,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user,    setUser]    = useState<MobileUser | null>(null);
   const [token,   setTokenState] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+
+  // Drop the session locally when any authenticated request returns 401
+  // (token expired or revoked server-side). RootLayoutNav then routes to /login.
+  useEffect(() => {
+    setUnauthorizedHandler(() => {
+      clearToken().catch(() => {});
+      setTokenState(null);
+      setUser(null);
+    });
+    return () => setUnauthorizedHandler(null);
+  }, []);
 
   // Restore session on app start
   useEffect(() => {
