@@ -463,7 +463,7 @@ export function generateArbeitszeitnachweis(params: LohnExportParams) {
   const bodyFontSize = compactLayout ? 6.7 : balancedLayout ? 7.2 : 8;
   const bodyPadding = compactLayout ? 0.85 : balancedLayout ? 1.15 : 2;
   const objectFontSize = compactLayout ? 6.3 : balancedLayout ? 6.9 : 7.5;
-  const categoryFontSize = compactLayout ? 6.1 : balancedLayout ? 6.6 : 6.5;
+  const categoryFontSize = compactLayout ? 5.1 : balancedLayout ? 5.6 : 5.5;
 
   // Summen aus gruppierten Einträgen — korrekt auf max -60 Min/Tag begrenzt
   const totalWorkMin  = groupedEntries.reduce((s, e) => s + e.workMinutes, 0);
@@ -593,11 +593,11 @@ export function generateArbeitszeitnachweis(params: LohnExportParams) {
         1: { cellWidth: 18, halign: 'center' },  // Datum
         2: { cellWidth: 9,  halign: 'center' },  // Tag
         3: { cellWidth: 46 },                    // Objekt / Adresse
-        4: { cellWidth: 39 },                    // Tätigkeiten
-        5: { cellWidth: 13, halign: 'center' },  // Beginn
-        6: { cellWidth: 13, halign: 'center' },  // Ende
-        7: { cellWidth: 13, halign: 'center' },  // Std.
-        8: { cellWidth: 12, halign: 'center' },  // Fahrtzt.
+        4: { cellWidth: 45 },                    // Tätigkeiten
+        5: { cellWidth: 12, halign: 'center' },  // Beginn
+        6: { cellWidth: 12, halign: 'center' },  // Ende
+        7: { cellWidth: 11, halign: 'center' },  // Std.
+        8: { cellWidth: 10, halign: 'center' },  // Fahrtzt.
         9: { cellWidth: 24, halign: 'center' },  // Unterschrift
       },
     didParseCell: (data) => {
