@@ -21,11 +21,14 @@ const sql = postgres({
 async function run() {
   console.log('Applying database migration to local database...');
   try {
+    // Migration 013: session revocation column (required by auth-server.ts).
     await sql`
-      ALTER TABLE public.users 
-      ADD COLUMN IF NOT EXISTS sv_nr TEXT,
-      ADD COLUMN IF NOT EXISTS steuer_id TEXT,
-      ADD COLUMN IF NOT EXISTS status_taetigkeit TEXT;
+      ALTER TABLE public.users
+      ADD COLUMN IF NOT EXISTS sessions_revoked_at TIMESTAMPTZ;
+    `;
+    await sql`
+      CREATE INDEX IF NOT EXISTS users_sessions_revoked_at_idx
+        ON public.users(sessions_revoked_at);
     `;
     console.log('Migration applied successfully.');
   } catch (err) {
