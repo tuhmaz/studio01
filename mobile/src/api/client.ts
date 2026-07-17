@@ -7,7 +7,10 @@ import * as Network from 'expo-network';
 
 export const TOKEN_KEY   = 'hp_token';
 export const SERVER_KEY  = 'hp_server_url';
-export const DEFAULT_URL = process.env.EXPO_PUBLIC_API_URL || 'http://10.0.2.2:9002';
+// Production server by default. Override per-install via the login-screen
+// settings gear, or at build time with EXPO_PUBLIC_API_URL (e.g. a LAN dev URL
+// like http://10.0.2.2:9002 for the Android emulator against a local server).
+export const DEFAULT_URL = process.env.EXPO_PUBLIC_API_URL || 'https://mbj.news';
 
 // ── Global 401 handler ────────────────────────────────────────────────────────
 // Registered by AuthContext. Fired when an *authenticated* request is rejected

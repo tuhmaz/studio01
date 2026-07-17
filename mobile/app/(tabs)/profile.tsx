@@ -525,7 +525,7 @@ export default function ProfileScreen() {
                 style={styles.urlInput}
                 value={tempUrl}
                 onChangeText={setTempUrl}
-                placeholder="http://152.53.31.61:9002"
+                placeholder="https://mbj.news"
                 placeholderTextColor={COLORS.textLight}
                 autoCapitalize="none"
                 autoCorrect={false}

@@ -151,7 +151,7 @@ export default function LoginScreen() {
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
             <Text style={styles.modalTitle}>Server-Einstellungen</Text>
-            <Text style={styles.modalSub}>Backend-URL eingeben (z.B. http://192.168.1.100:3000)</Text>
+            <Text style={styles.modalSub}>Backend-URL eingeben (z.B. https://mbj.news)</Text>
             
             <TextInput
               style={styles.modalInput}
