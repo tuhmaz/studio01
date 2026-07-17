@@ -91,7 +91,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     } finally {
       setUserProfile(null);
       clearLocalStorage();
-      window.location.href = '/login';
+      window.location.href = '/';
     }
   }
 
