@@ -119,11 +119,6 @@ const PRINT_LIGHT_CHROME_THEME: PdfChromeTheme = {
 
 function pad2(n: number) { return String(n).padStart(2, '0'); }
 
-function fmtDate(iso: string): string {
-  const d = new Date(iso);
-  return `${pad2(d.getDate())}.${pad2(d.getMonth() + 1)}.${d.getFullYear()}`;
-}
-
 function fmtTime(iso: string): string {
   const d = new Date(iso);
   return `${pad2(d.getHours())}:${pad2(d.getMinutes())}`;
@@ -137,10 +132,6 @@ function fmtHHMM(minutes: number): string {
 
 function fmtCurrency(val: number): string {
   return Number(val).toFixed(2).replace('.', ',') + ' €';
-}
-
-function getWeekday(iso: string): string {
-  return WEEKDAY_SHORT_DE[new Date(iso).getDay()];
 }
 
 function getBillingPeriod(month: number, year: number) {
@@ -164,6 +155,16 @@ function isInBillingPeriod(entry: LohnExportEntry, start: Date, end: Date): bool
 
 function fmtPeriodRange(start: Date, end: Date): string {
   return `${pad2(start.getDate())}.${pad2(start.getMonth() + 1)}.${start.getFullYear()} - ${pad2(end.getDate())}.${pad2(end.getMonth() + 1)}.${end.getFullYear()}`;
+}
+
+function fmtDateKey(value: string): string {
+  const [year, month, day] = value.split('-');
+  return `${day}.${month}.${year}`;
+}
+
+function getWeekdayFromDateKey(value: string): string {
+  const [year, month, day] = value.split('-').map(Number);
+  return WEEKDAY_SHORT_DE[new Date(year, month - 1, day).getDay()];
 }
 
 
@@ -408,6 +409,7 @@ export function generateArbeitszeitnachweis(params: LohnExportParams) {
 
   // Group entries by date
   const groupedEntriesMap = new Map<string, {
+    dateKey: string;
     date: string;
     siteNames: Set<string>;
     regions: Set<string>;
@@ -422,6 +424,7 @@ export function generateArbeitszeitnachweis(params: LohnExportParams) {
     const d = e.date.split('T')[0];
     if (!groupedEntriesMap.has(d)) {
       groupedEntriesMap.set(d, {
+        dateKey: d,
         date: e.date, // keep original for display if needed, but wait, fmtDate might expect a valid date string. Let's just use e.date or d
         siteNames: new Set(e.siteName || e.siteAddress
           ? [e.siteAddress ? `${e.siteName} - ${e.siteAddress}` : e.siteName]
@@ -449,11 +452,18 @@ export function generateArbeitszeitnachweis(params: LohnExportParams) {
     }
   });
 
-  const groupedEntries = Array.from(groupedEntriesMap.values()).sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
-  const compactLayout = groupedEntries.length >= 18;
-  const compactRowHeight = compactLayout
-    ? Math.max(4.5, Math.min(5.8, (150 / Math.max(groupedEntries.length, 1))))
+  const groupedEntries = Array.from(groupedEntriesMap.values()).sort((a, b) => a.dateKey.localeCompare(b.dateKey));
+  const MIN_ROWS = 14;
+  const rowCount = Math.max(groupedEntries.length, MIN_ROWS);
+  const compactLayout = rowCount >= 24;
+  const balancedLayout = rowCount >= 18;
+  const rowHeight = balancedLayout
+    ? Math.max(6.6, Math.min(8.2, (194 / rowCount)))
     : 0;
+  const bodyFontSize = compactLayout ? 6.7 : balancedLayout ? 7.2 : 8;
+  const bodyPadding = compactLayout ? 0.85 : balancedLayout ? 1.15 : 2;
+  const objectFontSize = compactLayout ? 6.3 : balancedLayout ? 6.9 : 7.5;
+  const categoryFontSize = compactLayout ? 6.1 : balancedLayout ? 6.6 : 6.5;
 
   // Summen aus gruppierten Einträgen — korrekt auf max -60 Min/Tag begrenzt
   const totalWorkMin  = groupedEntries.reduce((s, e) => s + e.workMinutes, 0);
@@ -481,7 +491,7 @@ export function generateArbeitszeitnachweis(params: LohnExportParams) {
     });
   });
 
-  y += compactLayout ? 12 : 14;
+  y += balancedLayout ? 12 : 14;
 
   // ── Table ──
   const tableHead = [[
@@ -508,22 +518,22 @@ export function generateArbeitszeitnachweis(params: LohnExportParams) {
 
     return [
       { content: String(idx + 1), styles: { halign: 'center' as const, textColor: [110,120,140] as [number,number,number] } },
-      { content: fmtDate(e.date), styles: { halign: 'center' as const } },
-      { content: getWeekday(e.date), styles: { halign: 'center' as const } },
+      { content: fmtDateKey(e.dateKey), styles: { halign: 'center' as const } },
+      { content: getWeekdayFromDateKey(e.dateKey), styles: { halign: 'center' as const } },
       {
         content: objStr,
         styles: {
-          fontSize: compactLayout ? 5.5 : 7.5,
-          cellPadding: compactLayout ? 0.55 : 2,
+          fontSize: objectFontSize,
+          cellPadding: bodyPadding,
           overflow: compactLayout ? 'ellipsize' as const : 'linebreak' as const,
         },
       },
       {
         content: catStr,
         styles: {
-          fontSize: compactLayout ? 5.4 : 6.5,
+          fontSize: categoryFontSize,
           textColor: [60, 80, 120] as [number,number,number],
-          cellPadding: compactLayout ? 0.55 : 2,
+          cellPadding: bodyPadding,
           overflow: compactLayout ? 'ellipsize' as const : 'linebreak' as const,
         },
       },
@@ -546,7 +556,6 @@ export function generateArbeitszeitnachweis(params: LohnExportParams) {
   });
 
   // Filler rows up to MIN_ROWS
-  const MIN_ROWS = 14;
   while (tableBody.length < MIN_ROWS) {
     tableBody.push(
       Array(10).fill(null).map((_, i) =>
@@ -563,20 +572,20 @@ export function generateArbeitszeitnachweis(params: LohnExportParams) {
     tableWidth: CW,
     styles: {
       font: 'helvetica',
-      fontSize: compactLayout ? 5.8 : 8,
-      cellPadding: compactLayout ? 0.55 : 2,
+      fontSize: bodyFontSize,
+      cellPadding: bodyPadding,
       lineColor: BORDER,
       lineWidth: 0.15,
       overflow: compactLayout ? 'ellipsize' : 'linebreak',
-      minCellHeight: compactLayout ? compactRowHeight : 0,
+      minCellHeight: balancedLayout ? rowHeight : 0,
     },
     headStyles: {
       fillColor: PRIMARY,
       textColor: [255, 255, 255],
       fontStyle: 'bold',
-      fontSize: compactLayout ? 5.8 : 8,
+      fontSize: compactLayout ? 6.7 : balancedLayout ? 7.2 : 8,
       halign: 'center',
-      cellPadding: compactLayout ? 0.75 : 2,
+      cellPadding: compactLayout ? 1 : balancedLayout ? 1.25 : 2,
     },
     alternateRowStyles: { fillColor: [250, 251, 255] },
     columnStyles: {
@@ -592,7 +601,7 @@ export function generateArbeitszeitnachweis(params: LohnExportParams) {
         9: { cellWidth: 24, halign: 'center' },  // Unterschrift
       },
     didParseCell: (data) => {
-      if (data.row.index >= groupedEntries.length) {
+      if (data.section === 'body' && data.row.index >= groupedEntries.length) {
         data.cell.styles.fillColor = [248, 249, 252];
         data.cell.styles.textColor = [210, 215, 225];
       }
