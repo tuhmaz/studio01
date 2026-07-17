@@ -153,6 +153,19 @@ function getBillingPeriod(month: number, year: number) {
   return { start, end, label };
 }
 
+function dateKey(date: Date): string {
+  return `${date.getFullYear()}-${pad2(date.getMonth() + 1)}-${pad2(date.getDate())}`;
+}
+
+function isInBillingPeriod(entry: LohnExportEntry, start: Date, end: Date): boolean {
+  const value = entry.date.split('T')[0];
+  return value >= dateKey(start) && value <= dateKey(end);
+}
+
+function fmtPeriodRange(start: Date, end: Date): string {
+  return `${pad2(start.getDate())}.${pad2(start.getMonth() + 1)}.${start.getFullYear()} - ${pad2(end.getDate())}.${pad2(end.getMonth() + 1)}.${end.getFullYear()}`;
+}
+
 
 
 // ─── Shared PDF utilities ─────────────────────────────────────────────────────
@@ -192,6 +205,7 @@ function addSignatureImage(
 
 /** Height of the page header band in mm — used by callers to position content below */
 const HEADER_H = 32;
+const ARBEITSZEIT_HEADER_H = 22;
 
 function drawHeader(
   doc: jsPDF,
@@ -311,6 +325,61 @@ function drawFooter(
   doc.text(centerText, W / 2, FY + 12, { align: 'center' });
 }
 
+function drawArbeitszeitHeader(
+  doc: jsPDF,
+  monthLabel: string,
+  periodRange: string,
+  company: CompanySettings,
+) {
+  fillRect(doc, 0, 0, W, ARBEITSZEIT_HEADER_H, PRINT_LIGHT_CHROME_THEME.background);
+  fillRect(doc, 0, ARBEITSZEIT_HEADER_H - 1.1, W, 1.1, PRINT_LIGHT_CHROME_THEME.accent);
+
+  const logoSize = 13;
+  let textOffsetX = 0;
+  if (company.logoData) {
+    try {
+      const fmt = company.logoData.startsWith('data:image/png') ? 'PNG' : 'JPEG';
+      doc.addImage(company.logoData, fmt, MARGIN, 4, logoSize, logoSize);
+      textOffsetX = logoSize + 3;
+    } catch {
+      textOffsetX = 0;
+    }
+  }
+
+  const leftX = MARGIN + textOffsetX;
+  doc.setTextColor(...PRINT_LIGHT_CHROME_THEME.primaryText);
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(8.6);
+  doc.text((company.name || '').toUpperCase(), leftX, 7.5);
+
+  const companyLine = [
+    company.address,
+    [company.postalCode, company.city].filter(Boolean).join(' '),
+    company.email,
+  ].filter(Boolean).join('  |  ');
+  if (companyLine) {
+    doc.setTextColor(...PRINT_LIGHT_CHROME_THEME.secondaryText);
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(6.4);
+    doc.text(companyLine, leftX, 12.5, { maxWidth: 108 });
+  }
+
+  const rightX = W - MARGIN;
+  doc.setTextColor(...PRIMARY);
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(10.5);
+  doc.text('ARBEITSZEITNACHWEIS', rightX, 7.5, { align: 'right' });
+
+  doc.setTextColor(75, 88, 104);
+  doc.setFontSize(7);
+  doc.text(monthLabel, rightX, 12.5, { align: 'right' });
+
+  doc.setTextColor(92, 104, 120);
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(6.5);
+  doc.text(`Zeitraum: ${periodRange}`, rightX, 17, { align: 'right' });
+}
+
 // ─── 1. ARBEITSZEITNACHWEIS ───────────────────────────────────────────────────
 //     Stundennachweis ohne Geldbeträge
 
@@ -318,25 +387,20 @@ export function generateArbeitszeitnachweis(params: LohnExportParams) {
   const { worker, month, year } = params;
   const company: CompanySettings = params.company ?? { name: params.companyName ?? 'Meine Firma' };
 
-  const { label: periodLabel } = getBillingPeriod(month, year);
-  const entries = params.entries.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+  const { start: periodStart, end: periodEnd, label: periodLabel } = getBillingPeriod(month, year);
+  const periodRange = fmtPeriodRange(periodStart, periodEnd);
+  const entries = params.entries
+    .filter(entry => isInBillingPeriod(entry, periodStart, periodEnd))
+    .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
 
   const doc = makeDoc();
   const monthLabel = `${MONTH_NAMES_DE[month].toUpperCase()} ${year}`;
 
   // ── Header ──
-  drawHeader(
-    doc,
-    'ARBEITSZEITNACHWEIS',
-    `Abrechnungszeitraum: ${periodLabel}`,
-    monthLabel,
-    '',
-    company,
-    PRINT_LIGHT_CHROME_THEME,
-  );
+  drawArbeitszeitHeader(doc, monthLabel, periodRange, company);
 
   // ── Employee info box (no financial data) ──
-  let y = HEADER_H + 2;
+  let y = ARBEITSZEIT_HEADER_H + 3;
   fillRect(doc, MARGIN, y, CW, 10, LIGHT_BG);
   doc.setDrawColor(...BORDER);
   doc.setLineWidth(0.2);
@@ -396,11 +460,11 @@ export function generateArbeitszeitnachweis(params: LohnExportParams) {
   const totalBonusMin = groupedEntries.reduce((s, e) => s + e.travelBonusMinutes, 0);
   const totalMin      = totalWorkMin + totalBonusMin;
 
-  const fields = [
-    { label: 'MITARBEITER',  value: worker.name },
-    { label: 'VERTRAGSART',  value: CONTRACT_LABELS[worker.contractType ?? ''] ?? '—' },
-    { label: 'STUNDENSATZ',  value: worker.hourlyRate ? fmtCurrency(worker.hourlyRate) + '/h' : '—' },
-    { label: 'EINTRÄGE',     value: String(groupedEntries.length) },
+  const fields: Array<{ label: string; value: string }> = [
+    { label: 'MITARBEITER', value: worker.name },
+    { label: 'ZEITRAUM', value: periodRange },
+    { label: 'ARBEITSTAGE', value: String(groupedEntries.length) },
+    { label: 'GESAMT ARBEIT', value: `${fmtHHMM(totalWorkMin)} Std.` },
   ];
   fields.forEach((f, i) => {
     const x = MARGIN + 3 + i * (CW / 4);
