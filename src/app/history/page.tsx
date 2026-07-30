@@ -8,6 +8,7 @@ import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import {
   MapPin, Search, Loader2, Clock, CalendarDays, ChevronDown, ChevronRight,
   History, FileText, Image as ImageIcon, Mic, CheckCircle2, Users, Timer, Building2,
@@ -106,6 +107,8 @@ export default function HistoryPage() {
   const [selectedEmployee, setSelectedEmployee] = useState<string>('all');
   const [expandedEntry, setExpandedEntry] = useState<string | null>(null);
   const [logsByEntry, setLogsByEntry] = useState<Record<string, WorkLogRow[] | 'loading'>>({});
+  const [previewOpen, setPreviewOpen] = useState(false);
+  const [pdf, setPdf] = useState<{ url: string; filename: string } | null>(null);
 
   const enabled = hasContext && canView;
 
@@ -196,10 +199,9 @@ export default function HistoryPage() {
     return { visits: siteEntries.length, totalMinutes, workers: workers.size, months: monthsActive.size };
   }, [siteEntries]);
 
-  const handlePrint = useCallback(() => { window.print(); }, []);
-
-  const exportPdf = useCallback(() => {
-    if (!selectedSite) return;
+  // Build the report PDF (same layout for preview, download and print).
+  const buildReportDoc = useCallback((): { doc: jsPDF; filename: string } | null => {
+    if (!selectedSite) return null;
     const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
     const MARGIN = 14;
     let y = 16;
@@ -246,8 +248,50 @@ export default function HistoryPage() {
     });
 
     const safeName = selectedSite.name.replace(/[^\w\-]+/g, '_').slice(0, 40);
-    doc.save(`Objekt-Verlauf_${safeName}_${new Date().toISOString().slice(0, 10)}.pdf`);
+    return { doc, filename: `Objekt-Verlauf_${safeName}_${new Date().toISOString().slice(0, 10)}.pdf` };
   }, [selectedSite, selectedEmployee, siteEntries, stats.totalMinutes, usersMap, assignmentsMap]);
+
+  // Open an in-app preview (blob in an iframe) before the user downloads.
+  const openPreview = useCallback(() => {
+    const built = buildReportDoc();
+    if (!built) return;
+    const url = URL.createObjectURL(built.doc.output('blob'));
+    setPdf(prev => { if (prev) URL.revokeObjectURL(prev.url); return { url, filename: built.filename }; });
+    setPreviewOpen(true);
+  }, [buildReportDoc]);
+
+  const downloadPdf = useCallback(() => {
+    if (!pdf) return;
+    const a = document.createElement('a');
+    a.href = pdf.url; a.download = pdf.filename;
+    document.body.appendChild(a); a.click(); document.body.removeChild(a);
+  }, [pdf]);
+
+  const closePreview = useCallback(() => {
+    setPreviewOpen(false);
+    setPdf(prev => { if (prev) URL.revokeObjectURL(prev.url); return null; });
+  }, []);
+
+  // Print the PDF report itself (not the web page) via a hidden iframe.
+  const printReport = useCallback(() => {
+    const built = buildReportDoc();
+    if (!built) return;
+    built.doc.autoPrint();
+    const url = URL.createObjectURL(built.doc.output('blob'));
+    const iframe = document.createElement('iframe');
+    iframe.style.position = 'fixed';
+    iframe.style.right = '0';
+    iframe.style.bottom = '0';
+    iframe.style.width = '0';
+    iframe.style.height = '0';
+    iframe.style.border = '0';
+    iframe.src = url;
+    document.body.appendChild(iframe);
+    iframe.onload = () => {
+      setTimeout(() => { iframe.contentWindow?.focus(); iframe.contentWindow?.print(); }, 300);
+    };
+    setTimeout(() => { document.body.removeChild(iframe); URL.revokeObjectURL(url); }, 60000);
+  }, [buildReportDoc]);
 
   const toggleEntry = useCallback(async (entryId: string) => {
     if (expandedEntry === entryId) { setExpandedEntry(null); return; }
@@ -374,33 +418,37 @@ export default function HistoryPage() {
             </Card>
 
             {/* Controls: employee filter + export/print */}
-            <div className="flex flex-col sm:flex-row sm:items-center gap-3 print:hidden">
-              <div className="flex items-center gap-2">
-                <Users className="w-4 h-4 text-muted-foreground" />
-                <Select
-                  value={selectedEmployee}
-                  onValueChange={(v) => { setSelectedEmployee(v); setExpandedEntry(null); }}
-                >
-                  <SelectTrigger className="w-60 h-10 rounded-xl">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">Alle Mitarbeiter</SelectItem>
-                    {siteEmployees.map(emp => (
-                      <SelectItem key={emp.id} value={emp.id}>{emp.name}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="sm:ml-auto flex gap-2">
-                <Button variant="outline" className="rounded-xl h-10" onClick={handlePrint}>
-                  <Printer className="w-4 h-4 mr-2" /> Drucken
-                </Button>
-                <Button className="rounded-xl h-10" onClick={exportPdf} disabled={siteEntries.length === 0}>
-                  <FileDown className="w-4 h-4 mr-2" /> PDF export
-                </Button>
-              </div>
-            </div>
+            <Card className="border-none shadow-lg rounded-2xl print:hidden">
+              <CardContent className="p-4 flex flex-col md:flex-row md:items-end gap-4">
+                <div className="flex-1 min-w-0">
+                  <label className="text-[11px] font-black uppercase tracking-widest text-primary flex items-center gap-1.5 mb-1.5">
+                    <Users className="w-3.5 h-3.5" /> Nach Mitarbeiter filtern
+                  </label>
+                  <Select
+                    value={selectedEmployee}
+                    onValueChange={(v) => { setSelectedEmployee(v); setExpandedEntry(null); }}
+                  >
+                    <SelectTrigger className="w-full md:w-80 h-11 rounded-xl border-2 border-primary/20 font-bold bg-primary/5">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">Alle Mitarbeiter ({siteEmployees.length})</SelectItem>
+                      {siteEmployees.map(emp => (
+                        <SelectItem key={emp.id} value={emp.id}>{emp.name}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="flex gap-2 shrink-0">
+                  <Button variant="outline" className="rounded-xl h-11" onClick={printReport} disabled={siteEntries.length === 0}>
+                    <Printer className="w-4 h-4 mr-2" /> Drucken
+                  </Button>
+                  <Button className="rounded-xl h-11" onClick={openPreview} disabled={siteEntries.length === 0}>
+                    <FileDown className="w-4 h-4 mr-2" /> PDF-Vorschau
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
 
             {/* Timeline */}
             {entriesLoading ? (
@@ -500,6 +548,30 @@ export default function HistoryPage() {
           </>
         )}
       </div>
+
+      {/* PDF preview dialog */}
+      <Dialog open={previewOpen} onOpenChange={(o) => { if (!o) closePreview(); }}>
+        <DialogContent className="max-w-4xl w-[96vw] rounded-2xl">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <FileDown className="w-5 h-5 text-primary" /> PDF-Vorschau
+            </DialogTitle>
+          </DialogHeader>
+          {pdf && (
+            <iframe
+              src={pdf.url}
+              title="PDF-Vorschau"
+              className="w-full h-[65vh] rounded-lg border bg-muted"
+            />
+          )}
+          <DialogFooter className="gap-2">
+            <Button variant="outline" className="rounded-xl" onClick={closePreview}>Schließen</Button>
+            <Button className="rounded-xl" onClick={downloadPdf}>
+              <FileDown className="w-4 h-4 mr-2" /> Herunterladen &amp; speichern
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </Shell>
   );
 }
