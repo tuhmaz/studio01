@@ -7,10 +7,14 @@ import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import {
   MapPin, Search, Loader2, Clock, CalendarDays, ChevronDown, ChevronRight,
   History, FileText, Image as ImageIcon, Mic, CheckCircle2, Users, Timer, Building2,
+  Printer, FileDown,
 } from 'lucide-react';
+import jsPDF from 'jspdf';
+import autoTable from 'jspdf-autotable';
 import { useAuth } from '@/db/provider';
 import { useQuery } from '@/db/use-query';
 import { db } from '@/db';
@@ -99,6 +103,7 @@ export default function HistoryPage() {
 
   const [search, setSearch] = useState('');
   const [selectedSiteId, setSelectedSiteId] = useState<string | null>(null);
+  const [selectedEmployee, setSelectedEmployee] = useState<string>('all');
   const [expandedEntry, setExpandedEntry] = useState<string | null>(null);
   const [logsByEntry, setLogsByEntry] = useState<Record<string, WorkLogRow[] | 'loading'>>({});
 
@@ -149,14 +154,29 @@ export default function HistoryPage() {
     e.job_site_id ?? (e.job_assignment_id ? assignmentsMap[e.job_assignment_id]?.job_site_id ?? null : null)
   ), [assignmentsMap]);
 
-  const siteEntries = useMemo(() => {
+  // All visits for the selected site, oldest → newest.
+  const siteEntriesAll = useMemo(() => {
     if (!selectedSiteId) return [];
     return (entriesRaw ?? [])
       .filter(e => !!e.clock_in_datetime && siteIdOfEntry(e) === selectedSiteId)
-      .sort((a, b) => (b.clock_in_datetime ?? '').localeCompare(a.clock_in_datetime ?? ''));
+      .sort((a, b) => (a.clock_in_datetime ?? '').localeCompare(b.clock_in_datetime ?? ''));
   }, [entriesRaw, selectedSiteId, siteIdOfEntry]);
 
-  // Group entries by calendar month (newest first)
+  // Distinct employees who have visited this site (for the filter dropdown).
+  const siteEmployees = useMemo(() => {
+    const ids = Array.from(new Set(siteEntriesAll.map(e => e.employee_id)));
+    return ids
+      .map(id => ({ id, name: usersMap[id]?.name ?? 'Unbekannt' }))
+      .sort((a, b) => a.name.localeCompare(b.name));
+  }, [siteEntriesAll, usersMap]);
+
+  const siteEntries = useMemo(() => (
+    selectedEmployee === 'all'
+      ? siteEntriesAll
+      : siteEntriesAll.filter(e => e.employee_id === selectedEmployee)
+  ), [siteEntriesAll, selectedEmployee]);
+
+  // Group entries by calendar month (oldest → newest)
   const monthGroups = useMemo(() => {
     const map = new Map<string, EntryRow[]>();
     for (const e of siteEntries) {
@@ -164,7 +184,7 @@ export default function HistoryPage() {
       const key = `${d.getFullYear()}-${String(d.getMonth()).padStart(2, '0')}`;
       (map.get(key) ?? map.set(key, []).get(key)!).push(e);
     }
-    return Array.from(map.entries()).sort((a, b) => b[0].localeCompare(a[0]));
+    return Array.from(map.entries()).sort((a, b) => a[0].localeCompare(b[0]));
   }, [siteEntries]);
 
   const stats = useMemo(() => {
@@ -175,6 +195,59 @@ export default function HistoryPage() {
     }));
     return { visits: siteEntries.length, totalMinutes, workers: workers.size, months: monthsActive.size };
   }, [siteEntries]);
+
+  const handlePrint = useCallback(() => { window.print(); }, []);
+
+  const exportPdf = useCallback(() => {
+    if (!selectedSite) return;
+    const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+    const MARGIN = 14;
+    let y = 16;
+
+    doc.setFont('helvetica', 'bold'); doc.setFontSize(16);
+    doc.text('Objekt-Verlauf', MARGIN, y); y += 7;
+    doc.setFontSize(12);
+    doc.text(selectedSite.name, MARGIN, y); y += 5;
+
+    doc.setFont('helvetica', 'normal'); doc.setFontSize(9);
+    const addr = [
+      selectedSite.address,
+      [selectedSite.postal_code, selectedSite.city].filter(Boolean).join(' '),
+      selectedSite.region, selectedSite.route_code,
+    ].filter(Boolean).join('  ·  ');
+    if (addr) { doc.text(addr, MARGIN, y); y += 5; }
+
+    const empLabel = selectedEmployee === 'all' ? 'Alle Mitarbeiter' : (usersMap[selectedEmployee]?.name ?? '—');
+    doc.text(`Mitarbeiter: ${empLabel}   ·   Besuche: ${siteEntries.length}   ·   Arbeitszeit: ${fmtDur(stats.totalMinutes)}`, MARGIN, y); y += 4.5;
+    doc.setTextColor(120); doc.text(`Erstellt: ${new Date().toLocaleString('de-DE')}`, MARGIN, y); y += 4;
+    doc.setTextColor(0);
+
+    const body = siteEntries.map(e => {
+      const assignment = e.job_assignment_id ? assignmentsMap[e.job_assignment_id] : null;
+      const cats = (assignment?.categories ?? []).map(c => SERVICE_LABELS[c] ?? c).join(', ');
+      return [
+        new Date(e.clock_in_datetime!).toLocaleDateString('de-DE'),
+        `${fmtTime(e.clock_in_datetime)}–${fmtTime(e.clock_out_datetime)}`,
+        usersMap[e.employee_id]?.name ?? 'Unbekannt',
+        fmtDur(entryMinutes(e)),
+        cats || '—',
+        STATUS_LABELS[e.status]?.label ?? e.status,
+      ];
+    });
+
+    autoTable(doc, {
+      startY: y,
+      head: [['Datum', 'Zeit', 'Mitarbeiter', 'Dauer', 'Leistungen', 'Status']],
+      body,
+      margin: { left: MARGIN, right: MARGIN },
+      styles: { font: 'helvetica', fontSize: 8, cellPadding: 1.6, overflow: 'linebreak', lineColor: [220, 224, 230], lineWidth: 0.15 },
+      headStyles: { fillColor: [15, 40, 80], textColor: [255, 255, 255], fontStyle: 'bold', halign: 'center' },
+      columnStyles: { 3: { halign: 'center' }, 5: { halign: 'center' } },
+    });
+
+    const safeName = selectedSite.name.replace(/[^\w\-]+/g, '_').slice(0, 40);
+    doc.save(`Objekt-Verlauf_${safeName}_${new Date().toISOString().slice(0, 10)}.pdf`);
+  }, [selectedSite, selectedEmployee, siteEntries, stats.totalMinutes, usersMap, assignmentsMap]);
 
   const toggleEntry = useCallback(async (entryId: string) => {
     if (expandedEntry === entryId) { setExpandedEntry(null); return; }
@@ -223,7 +296,7 @@ export default function HistoryPage() {
         </div>
 
         {/* Site picker */}
-        <Card className="border-none shadow-lg rounded-3xl">
+        <Card className="border-none shadow-lg rounded-3xl print:hidden">
           <CardContent className="p-5">
             <div className="relative">
               <Search className="absolute left-3 top-3.5 h-4 w-4 text-muted-foreground" />
@@ -245,7 +318,7 @@ export default function HistoryPage() {
                 {filteredSites.map(s => (
                   <button
                     key={s.id}
-                    onClick={() => { setSelectedSiteId(s.id); setExpandedEntry(null); }}
+                    onClick={() => { setSelectedSiteId(s.id); setExpandedEntry(null); setSelectedEmployee('all'); }}
                     className={`text-left p-3 rounded-xl border transition-all ${
                       selectedSiteId === s.id
                         ? 'border-primary bg-primary/5 shadow-inner'
@@ -299,6 +372,35 @@ export default function HistoryPage() {
                 <Stat icon={<History className="w-4 h-4" />} value={stats.months} label="Aktive Monate" />
               </CardContent>
             </Card>
+
+            {/* Controls: employee filter + export/print */}
+            <div className="flex flex-col sm:flex-row sm:items-center gap-3 print:hidden">
+              <div className="flex items-center gap-2">
+                <Users className="w-4 h-4 text-muted-foreground" />
+                <Select
+                  value={selectedEmployee}
+                  onValueChange={(v) => { setSelectedEmployee(v); setExpandedEntry(null); }}
+                >
+                  <SelectTrigger className="w-60 h-10 rounded-xl">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">Alle Mitarbeiter</SelectItem>
+                    {siteEmployees.map(emp => (
+                      <SelectItem key={emp.id} value={emp.id}>{emp.name}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="sm:ml-auto flex gap-2">
+                <Button variant="outline" className="rounded-xl h-10" onClick={handlePrint}>
+                  <Printer className="w-4 h-4 mr-2" /> Drucken
+                </Button>
+                <Button className="rounded-xl h-10" onClick={exportPdf} disabled={siteEntries.length === 0}>
+                  <FileDown className="w-4 h-4 mr-2" /> PDF export
+                </Button>
+              </div>
+            </div>
 
             {/* Timeline */}
             {entriesLoading ? (
