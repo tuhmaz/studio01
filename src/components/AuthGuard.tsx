@@ -15,6 +15,7 @@ const ROUTE_ROLE_ACCESS: Record<string, UserRole[]> = {
   '/tracking':   ['SUPER_ADMIN', 'ADMIN', 'MANAGER', 'ACCOUNTANT', 'LEADER', 'WORKER'],
   '/deployment': ['SUPER_ADMIN', 'ADMIN', 'MANAGER', 'LEADER'],
   '/jobs':       ['SUPER_ADMIN', 'ADMIN', 'MANAGER', 'LEADER'],
+  '/history':    ['SUPER_ADMIN', 'ADMIN', 'MANAGER', 'LEADER'],
   '/team':       ['SUPER_ADMIN', 'ADMIN'],
   '/reports':    ['SUPER_ADMIN', 'ADMIN', 'MANAGER', 'ACCOUNTANT'],
   '/payroll':    ['SUPER_ADMIN', 'ADMIN', 'MANAGER', 'ACCOUNTANT'],
