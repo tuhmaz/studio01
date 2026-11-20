@@ -99,6 +99,12 @@ export async function POST(req: NextRequest) {
     }
 
     clearAttempts(key);
+    if (String(user.role).toUpperCase() === 'CLIENT') {
+      return NextResponse.json(
+        { error: 'Dieses Konto ist ein Kundenportal-Zugang. Bitte im Browser anmelden.' },
+        { status: 403 },
+      );
+    }
     await sql`UPDATE public.users SET last_login = NOW() WHERE id = ${user.id}`;
 
     const token = await createTokenString({

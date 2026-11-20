@@ -25,7 +25,12 @@ export const SERVICE_CATALOG: Record<string, CatalogEntry> = {
   Gartenpflege:   { label: 'Gartenpflege',  category: 'Garten' },
   Baeume_Pruefen: { label: 'Bäume Prüfen',  category: 'Sicherheit' },
   VEG_Laub:       { label: 'Laub VEG',      category: 'Saison' },
+  // Aufgaben aus Mängelmeldungen des Kundenportals (nicht für Objekte wählbar).
+  MAENGEL:        { label: 'Mängelbeseitigung', category: 'Mängel' },
 };
+
+/** Kategorie der Tourplan-Aufgaben, die aus einer Mängelmeldung entstehen. */
+export const DEFECT_CATEGORY = 'MAENGEL';
 
 /** Categories that are documented elsewhere and are not part of the checklist. */
 export const NON_CHECKLIST_CATEGORIES = new Set(['WINTERDIENST']);

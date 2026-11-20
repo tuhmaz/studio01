@@ -54,6 +54,7 @@ const MANAGED_ROLE_OPTIONS: Record<UserRole, UserRole[]> = {
   ACCOUNTANT: ['WORKER'],
   LEADER: ['WORKER'],
   WORKER: ['WORKER'],
+  CLIENT: [],
 };
 
 type TeamMemberFormData = Partial<UserType> & {

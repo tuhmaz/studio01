@@ -3,7 +3,7 @@
 import React, { useState } from 'react';
 import {
   LayoutDashboard, Calendar, MapPin, Users, FileText, LogOut,
-  Clock, Briefcase, UserCheck, Settings, Lock, Loader2, Wallet, History, Snowflake, ClipboardCheck
+  Clock, Briefcase, UserCheck, Settings, Lock, Loader2, Wallet, History, Snowflake, ClipboardCheck, Building2
 } from 'lucide-react';
 import {
   Sidebar, SidebarContent, SidebarFooter, SidebarHeader,
@@ -52,6 +52,7 @@ export function Shell({ children, userRole, userName }: ShellProps) {
     { label: 'Objekt-Verlauf',icon: History,         href: '/history',    roles: ['SUPER_ADMIN', 'ADMIN', 'MANAGER', 'LEADER'] },
     { label: 'Winterdienst',  icon: Snowflake,       href: '/winter',     roles: ['SUPER_ADMIN', 'ADMIN', 'MANAGER', 'LEADER'] },
     { label: 'Leistungsnachweis', icon: ClipboardCheck, href: '/leistungsnachweis', roles: ['SUPER_ADMIN', 'ADMIN', 'MANAGER', 'ACCOUNTANT'] },
+    { label: 'Hausverwaltungen', icon: Building2,   href: '/kunden',     roles: ['SUPER_ADMIN', 'ADMIN', 'MANAGER'] },
     { label: 'Zeiterfassung', icon: Clock,           href: '/tracking',   roles: ['SUPER_ADMIN', 'ADMIN', 'MANAGER', 'ACCOUNTANT', 'LEADER', 'WORKER'] },
     { label: 'Team',          icon: Users,           href: '/team',       roles: ['SUPER_ADMIN', 'ADMIN'] },
     { label: 'Berichte',      icon: FileText,        href: '/reports',    roles: ['SUPER_ADMIN', 'ADMIN', 'MANAGER', 'ACCOUNTANT'] },
