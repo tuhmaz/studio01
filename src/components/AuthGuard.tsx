@@ -6,7 +6,7 @@ import { useAuth } from '@/db/provider';
 import { Loader2 } from 'lucide-react';
 import { UserRole } from '@/lib/types';
 
-const PUBLIC_PATHS = ['/'];
+const PUBLIC_PATHS = ['/', '/register'];
 const AUTH_TIMEOUT_MS = 8000;
 
 const ROUTE_ROLE_ACCESS: Record<string, UserRole[]> = {

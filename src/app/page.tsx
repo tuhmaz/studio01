@@ -2,7 +2,8 @@
 
 import { Button } from '@/components/ui/button';
 import { MapPin, Loader2, Mail, Lock } from 'lucide-react';
-import { useState } from 'react';
+import Link from 'next/link';
+import { useEffect, useState } from 'react';
 import { useAuth } from '@/db/provider';
 import { useToast } from '@/hooks/use-toast';
 import { Input } from '@/components/ui/input';
@@ -14,6 +15,14 @@ export default function EntryPage() {
   const [isLoading, setIsLoading] = useState(false);
   const [email,    setEmail]    = useState('');
   const [password, setPassword] = useState('');
+  const [signupEnabled, setSignupEnabled] = useState(false);
+
+  useEffect(() => {
+    fetch('/api/auth/register')
+      .then(r => r.json())
+      .then(info => setSignupEnabled(info?.enabled === true))
+      .catch(() => setSignupEnabled(false));
+  }, []);
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -77,10 +86,15 @@ export default function EntryPage() {
             {isLoading ? <Loader2 className="w-6 h-6 animate-spin" /> : 'Anmelden'}
           </Button>
         </form>
+        {signupEnabled && (
+          <p className="mt-6 text-center text-sm text-muted-foreground">
+            Neu hier? <Link href="/register" className="font-bold text-primary hover:underline">Unternehmen registrieren</Link>
+          </p>
+        )}
       </div>
 
       <p className="mt-12 text-sm text-muted-foreground font-bold uppercase tracking-widest">
-        Internes System — Nur für autorisierte Mitarbeiter
+        {signupEnabled ? 'Betriebsführung für Hausmeisterdienste' : 'Internes System — Nur für autorisierte Mitarbeiter'}
       </p>
     </div>
   );
