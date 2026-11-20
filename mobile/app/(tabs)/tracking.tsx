@@ -10,8 +10,9 @@ import * as Location from 'expo-location';
 import * as Haptics from 'expo-haptics';
 import { useAuth } from '@/context/AuthContext';
 import { apiData } from '@/api/client';
-import { COLORS, CATEGORY_LABELS, GPS_RADIUS_METERS } from '@/utils/constants';
+import { COLORS, categoryLabel, GPS_RADIUS_METERS } from '@/utils/constants';
 import { gpsDistance, formatDuration, formatTime, elapsedMinutes, randomId } from '@/utils/helpers';
+import { ChecklistModal } from '@/components/Checklist';
 
 interface Assignment { id: string; title: string; status: string; scheduled_date: string; job_site_id: string | null; categories: string[]; assigned_worker_ids: string[]; }
 interface JobSite    {
@@ -49,6 +50,8 @@ export default function TrackingScreen() {
   const [refreshing,   setRefreshing]   = useState(false);
   const [errorMsg,     setErrorMsg]     = useState<string | null>(null);
   const [gpsStatus,    setGpsStatus]    = useState<'idle' | 'checking' | 'ok' | 'far'>('idle');
+  const [checklistOpen, setChecklistOpen] = useState(false);
+  const [checklistProgress, setChecklistProgress] = useState<{ done: number; total: number } | null>(null);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const load = useCallback(async (silent = false) => {
@@ -291,6 +294,14 @@ export default function TrackingScreen() {
                 Eingestempelt: {formatTime(activeEntry.clock_in_datetime)} — {formatDuration(elapsed)} gearbeitet
               </Text>
             </View>
+            {activeAssign.categories.some(c => c !== 'WINTERDIENST') && (
+              <TouchableOpacity style={styles.checklistBtn} onPress={() => setChecklistOpen(true)} activeOpacity={0.85}>
+                <Ionicons name="list-circle-outline" size={20} color="#fff" />
+                <Text style={styles.checklistText}>
+                  Checkliste{checklistProgress ? ` (${checklistProgress.done}/${checklistProgress.total})` : ''}
+                </Text>
+              </TouchableOpacity>
+            )}
             <TouchableOpacity
               style={[styles.clockOutBtn, clocking && { opacity: 0.6 }]}
               onPress={clockOut}
@@ -306,6 +317,13 @@ export default function TrackingScreen() {
               }
             </TouchableOpacity>
           </View>
+        )}
+
+        {checklistOpen && activeAssign && (
+          <ChecklistModal
+            assignmentId={activeAssign.id}
+            onClose={(done, total) => { setChecklistOpen(false); if (total) setChecklistProgress({ done, total }); }}
+          />
         )}
 
         {/* Assignment list to clock in */}
@@ -331,7 +349,7 @@ export default function TrackingScreen() {
                     <View style={styles.catRow}>
                       {a.categories.slice(0, 3).map(c => (
                         <View key={c} style={styles.catChip}>
-                          <Text style={styles.catText}>{CATEGORY_LABELS[c] ?? c}</Text>
+                          <Text style={styles.catText}>{categoryLabel(c)}</Text>
                         </View>
                       ))}
                     </View>
@@ -358,6 +376,8 @@ export default function TrackingScreen() {
 }
 
 const styles = StyleSheet.create({
+  checklistBtn:  { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, borderRadius: 14, paddingVertical: 12, marginBottom: 10, backgroundColor: 'rgba(255,255,255,0.18)' },
+  checklistText: { color: '#fff', fontWeight: '900', fontSize: 14 },
   container:    { flex: 1, backgroundColor: COLORS.bg },
   header:       {
     backgroundColor: COLORS.primary, paddingTop: 56, paddingBottom: 20,

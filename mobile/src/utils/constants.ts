@@ -25,13 +25,36 @@ export const STATUS_COLORS: Record<string, string> = {
 };
 
 export const CATEGORY_LABELS: Record<string, string> = {
+  // Service catalog of the web app (src/lib/services.ts)
+  AR_Oeffen:       'Außengehwege',
+  AR_Hof:          'Hofbereich',
+  Gullis:          'Gullis',
+  Ablaufrinnen:    'Ablaufrinnen',
+  AR_Laub:         'Laub AR',
+  Rasen_Fl1:       'Rasen Fl. 1',
+  Rasen_Fl2:       'Rasen Fl. 2',
+  Gittersteine:    'Gittersteine',
+  Gartenpflege:    'Gartenpflege',
+  Baeume_Pruefen:  'Bäume prüfen',
+  VEG_Laub:        'Laub VEG',
+  WINTERDIENST:    'Winterdienst',
+  // Older codes
   AUSSENREINIGUNG: 'Außenreinigung',
   GULLIS:          'Gullis',
   RASSEN_MAEHEN:   'Rasen mähen',
   GARTEN_PFLEGE:   'Gartenpflege',
   BAEUME_PRUEFEN:  'Bäume prüfen',
   LAUBAUFNAHME:    'Laubaufnahme',
-  WINTERDIENST:    'Winterdienst',
 };
+
+/** Display name of a service code, including company-defined "custom_…" services. */
+export function categoryLabel(code: string): string {
+  if (CATEGORY_LABELS[code]) return CATEGORY_LABELS[code];
+  if (code.startsWith('custom_')) {
+    const words = code.slice('custom_'.length).replace(/_/g, ' ');
+    return words.charAt(0).toUpperCase() + words.slice(1);
+  }
+  return code;
+}
 
 export const GPS_RADIUS_METERS = 300;
