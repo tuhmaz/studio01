@@ -52,7 +52,7 @@ import {
 import { Separator } from '@/components/ui/separator';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { useToast } from '@/hooks/use-toast';
-import { serviceLabel } from '@/lib/services';
+import { DEFECT_CATEGORY, serviceLabel } from '@/lib/services';
 import { useAuth } from '@/db/provider';
 import { useQuery } from '@/db/use-query';
 import { UserRole, JobSite } from '@/lib/types';
@@ -463,6 +463,9 @@ export default function SchedulePage() {
                                     {!task.jobSiteId ? (task.title || 'Sonderauftrag') : (site?.name || 'Unbekanntes Objekt')}
                                     <ArrowUpRight className="w-5 h-5 text-primary opacity-50" />
                                   </h3>
+                                  {task.jobSiteId && task.categories?.includes(DEFECT_CATEGORY) && (
+                                    <p className="text-sm font-bold text-amber-700">{task.title}</p>
+                                  )}
                                   <div className="flex flex-wrap gap-2 mt-2">
                                     {task.categories?.map((cat: string) => (
                                       <Badge key={cat} variant="secondary" className="text-[8px] py-0.5 px-3 bg-gray-100 border-none font-black text-muted-foreground uppercase">

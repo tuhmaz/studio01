@@ -1,5 +1,5 @@
 
-export type UserRole = 'SUPER_ADMIN' | 'ADMIN' | 'MANAGER' | 'ACCOUNTANT' | 'LEADER' | 'WORKER';
+export type UserRole = 'SUPER_ADMIN' | 'ADMIN' | 'MANAGER' | 'ACCOUNTANT' | 'LEADER' | 'WORKER' | 'CLIENT';
 
 export type ContractType = 'MINIJOB' | 'MIDIJOB' | 'VOLLZEIT' | 'TEILZEIT';
 

@@ -38,6 +38,7 @@ export const CATEGORY_LABELS: Record<string, string> = {
   Baeume_Pruefen:  'Bäume prüfen',
   VEG_Laub:        'Laub VEG',
   WINTERDIENST:    'Winterdienst',
+  MAENGEL:         'Mängelbeseitigung',
   // Older codes
   AUSSENREINIGUNG: 'Außenreinigung',
   GULLIS:          'Gullis',

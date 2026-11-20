@@ -22,9 +22,12 @@ const ROUTE_ROLE_ACCESS: Record<string, UserRole[]> = {
   '/reports':    ['SUPER_ADMIN', 'ADMIN', 'MANAGER', 'ACCOUNTANT'],
   '/payroll':    ['SUPER_ADMIN', 'ADMIN', 'MANAGER', 'ACCOUNTANT'],
   '/settings':   ['SUPER_ADMIN', 'ADMIN'],
+  '/kunden':     ['SUPER_ADMIN', 'ADMIN', 'MANAGER'],
+  '/portal':     ['CLIENT'],
 };
 
 function getDefaultRouteForRole(role: UserRole | null): string {
+  if (role === 'CLIENT') return '/portal';
   if (role === 'WORKER') return '/tracking';
   if (role === 'LEADER') return '/deployment';
   if (role === 'ACCOUNTANT') return '/payroll';
@@ -41,7 +44,11 @@ export function AuthGuard({ children }: { children: React.ReactNode }) {
 
   const allowedRoles = Object.entries(ROUTE_ROLE_ACCESS)
     .find(([route]) => pathname.startsWith(route))?.[1] ?? null;
-  const isRoleAllowed = !allowedRoles || (userRole !== null && allowedRoles.includes(userRole));
+  // Kundenportal-Zugänge dürfen ausschließlich /portal öffnen – auch keine
+  // Seiten, die (noch) nicht in ROUTE_ROLE_ACCESS stehen.
+  const isRoleAllowed = userRole === 'CLIENT'
+    ? pathname.startsWith('/portal')
+    : !allowedRoles || (userRole !== null && allowedRoles.includes(userRole));
 
   const [timedOut, setTimedOut] = useState(false);
 
