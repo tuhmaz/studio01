@@ -1,7 +1,8 @@
 import type { Metadata } from "next";
 import "./globals.css";
 import { ThemeProvider } from "@/components/ThemeProvider";
-import { Toaster } from "sonner";
+import { Toaster as SonnerToaster } from "sonner";
+import { Toaster } from "@/components/ui/toaster";
 import { AppProvider } from "@/db/provider";
 import { AuthGuard } from "@/components/AuthGuard";
 
@@ -42,7 +43,9 @@ export default function RootLayout({
             <AuthGuard>
               {children}
             </AuthGuard>
-            <Toaster richColors />
+            {/* Die App nutzt useToast (shadcn) – ohne diesen Toaster bleiben alle Meldungen unsichtbar. */}
+            <Toaster />
+            <SonnerToaster richColors />
           </ThemeProvider>
         </AppProvider>
       </body>
