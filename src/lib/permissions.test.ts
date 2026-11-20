@@ -54,6 +54,7 @@ describe('hasPermission', () => {
     ['time_entries.approve', ['ADMIN', 'MANAGER']],
     ['settings.manage', ['ADMIN']],
     ['audit_logs.view', ['ADMIN']],
+    ['winter.manage', ['ADMIN', 'MANAGER']],
   ];
   const roles: Role[] = ['ADMIN', 'MANAGER', 'ACCOUNTANT', 'LEADER', 'WORKER'];
 

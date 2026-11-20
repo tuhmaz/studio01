@@ -24,6 +24,7 @@ const TABLE_COLUMNS = {
     'id', 'company_id', 'name', 'address', 'city', 'postal_code', 'region',
     'route_code', 'is_remote', 'distance_from_hq', 'travel_time_from_hq',
     'estimated_travel_time_minutes_from_hq', 'lat', 'lng', 'services', 'created_at',
+    'winter_service_enabled', 'winter_areas', 'winter_notes',
   ]),
   time_entries: new Set([
     'id', 'company_id', 'employee_id', 'job_assignment_id', 'job_site_id',
