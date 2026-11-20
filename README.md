@@ -48,6 +48,19 @@ Use `withTenant` for any new query that touches company data. RLS does not
 apply to superusers or `BYPASSRLS` roles, so the app must connect as a normal
 application role (see `deploy/fix_database_permissions.sql`).
 
+## New companies
+
+With `ALLOW_SIGNUP=true`, `/register` lets a company create its own account:
+company + first ADMIN, signed in right away, then the settings page guides
+through setup (profile, headquarters, job sites, team, first plan).
+Off by default. Link your terms and privacy policy with `TERMS_URL` and
+`PRIVACY_URL`. Without sign-up, create companies and admins with
+`scripts/create-admin.mjs`.
+
+Each company sets its own headquarters and remote-site rule
+(Einstellungen → Standort & Fahrzeiten); all travel times are computed on
+the server from these.
+
 ## Photos and voice notes
 
 Media is stored as files, not in the database. `STORAGE_DRIVER` picks where:
