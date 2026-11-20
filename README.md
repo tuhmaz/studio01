@@ -48,6 +48,23 @@ Use `withTenant` for any new query that touches company data. RLS does not
 apply to superusers or `BYPASSRLS` roles, so the app must connect as a normal
 application role (see `deploy/fix_database_permissions.sql`).
 
+## Photos and voice notes
+
+Media is stored as files, not in the database. `STORAGE_DRIVER` picks where:
+
+- `local` (default): the app server's disk, under `STORAGE_LOCAL_DIR` (default `./storage`). Include that folder in your backups.
+- `s3`: any S3-compatible bucket (Hetzner Object Storage, MinIO, AWS). Set `S3_ENDPOINT`, `S3_REGION`, `S3_BUCKET`, `S3_ACCESS_KEY_ID`, `S3_SECRET_ACCESS_KEY` and, for most non-AWS providers, `S3_FORCE_PATH_STYLE=true`. Keep the bucket private; the app hands out 5-minute signed links.
+
+Clients still send photos and voice notes as data URLs to `/api/data`. The
+API checks the bytes (only JPEG/PNG/WebP/GIF images and common audio
+formats, max 15 MB), stores the file, and saves `/api/media/<id>` in
+`work_log_entries.content`. Older app versions keep working unchanged.
+`GET /api/media/<id>` serves a file only to its own company (workers: only
+their own uploads).
+
+Existing Base64 media can be moved with `npm run media:migrate`
+(`-- --dry-run` to count first). It is resumable and skips entries it cannot validate.
+
 ## Tests
 
 ```bash
