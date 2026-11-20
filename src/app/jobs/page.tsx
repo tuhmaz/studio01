@@ -27,13 +27,14 @@ import {
   MapPin, Upload, Loader2, Building2, FileSpreadsheet,
   Trash2, Search, Waves, Leaf, TreePine, CheckCircle2,
   Table as TableIcon, CalendarDays, Info, Clock, Navigation,
-  Plus, Pencil, Snowflake,
+  Plus, Pencil, Snowflake, ClipboardCheck,
 } from 'lucide-react';
 import { parseExcelDirect } from '@/ai/flows/parse-excel-direct';
 import { GERMAN_MONTHS } from '@/ai/flows/parse-excel-plan-shared';
 import { useToast } from '@/hooks/use-toast';
 import * as XLSX from 'xlsx';
 import { UserRole, JobSite } from '@/lib/types';
+import { customServiceCode, isCustomService, serviceLabel } from '@/lib/services';
 import { useAuth } from '@/db/provider';
 import { useQuery } from '@/db/use-query';
 
@@ -62,6 +63,8 @@ interface ServiceForm {
   isActive: boolean;
   frequency: string;
   months: string[];
+  /** Name of a company-defined service (codes starting with "custom_"). */
+  label?: string;
 }
 
 interface SiteForm {
@@ -104,11 +107,12 @@ const emptyForm = (): SiteForm => ({
 function siteToForm(site: any): SiteForm {
   const services = emptyServices();
   Object.entries(site.services || {}).forEach(([k, v]: [string, any]) => {
-    if (services[k]) {
+    if (services[k] || isCustomService(k)) {
       services[k] = {
         isActive: v.isActive || false,
         frequency: v.frequency || '',
         months: v.months || [],
+        ...(isCustomService(k) ? { label: v.label || serviceLabel(k) } : {}),
       };
     }
   });
@@ -140,8 +144,14 @@ function formToSiteData(form: SiteForm): any {
   const hasCoordinates = Number.isFinite(lat) && Number.isFinite(lng);
   const services: Record<string, any> = {};
   Object.entries(form.services).forEach(([k, v]) => {
-    if (v.isActive) {
-      services[k] = { isActive: true, frequency: v.frequency || null, months: v.months };
+    // Company-defined services are kept even while switched off, so their name is not lost.
+    if (v.isActive || isCustomService(k)) {
+      services[k] = {
+        isActive: v.isActive,
+        frequency: v.frequency || null,
+        months: v.months,
+        ...(isCustomService(k) ? { label: v.label } : {}),
+      };
     }
   });
   // Return ONLY valid snake_case DB column names to avoid "column does not exist" errors
@@ -481,6 +491,37 @@ function AddEditSiteDialog({ open, site, nextId, availableRegions, onSave, onClo
 
   const canSave = form.id.trim() && form.city.trim();
 
+  const [newServiceLabel, setNewServiceLabel] = useState('');
+  const serviceRows: Array<[string, { label: string; icon: React.ReactNode; color: string; category: string }]> = [
+    ...Object.entries(SERVICE_LABELS),
+    ...Object.entries(form.services)
+      .filter(([code]) => isCustomService(code))
+      .map(([code, svc]) => [code, {
+        label: svc.label || serviceLabel(code),
+        icon: <ClipboardCheck className="w-3 h-3" />,
+        color: 'bg-violet-50 text-violet-700 border-violet-200',
+        category: 'Eigene Leistung',
+      }] as [string, { label: string; icon: React.ReactNode; color: string; category: string }]),
+  ];
+
+  const addCustomService = () => {
+    const label = newServiceLabel.trim().slice(0, 60);
+    if (!label) return;
+    const code = customServiceCode(label);
+    setForm(f => f.services[code] ? f : {
+      ...f,
+      services: { ...f.services, [code]: { isActive: true, frequency: '', months: [], label } },
+    });
+    setNewServiceLabel('');
+  };
+
+  const removeCustomService = (code: string) =>
+    setForm(f => {
+      const services = { ...f.services };
+      delete services[code];
+      return { ...f, services };
+    });
+
   return (
     <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
       <DialogContent aria-describedby="job-form-description" className="sm:max-w-5xl rounded-[2rem] border-none shadow-2xl p-0 overflow-hidden max-h-[95vh] flex flex-col">
@@ -713,7 +754,7 @@ function AddEditSiteDialog({ open, site, nextId, availableRegions, onSave, onClo
                     </tr>
                   </thead>
                   <tbody>
-                    {Object.entries(SERVICE_LABELS).map(([code, info]) => {
+                    {serviceRows.map(([code, info]) => {
                       const svc = form.services[code];
                       const isActive = svc?.isActive || false;
                       return (
@@ -728,6 +769,16 @@ function AddEditSiteDialog({ open, site, nextId, availableRegions, onSave, onClo
                                 <p className="font-black text-[9px] uppercase text-muted-foreground">{info.category}</p>
                                 <p className="font-black text-[10px] uppercase">{info.label}</p>
                               </div>
+                              {isCustomService(code) && (
+                                <button
+                                  type="button"
+                                  onClick={() => removeCustomService(code)}
+                                  className="ml-1 text-muted-foreground hover:text-red-600"
+                                  title="Leistung entfernen"
+                                >
+                                  <Trash2 className="w-3.5 h-3.5" />
+                                </button>
+                              )}
                             </div>
                           </td>
                           <td className="px-3 py-3 text-center">
@@ -763,6 +814,19 @@ function AddEditSiteDialog({ open, site, nextId, availableRegions, onSave, onClo
                     })}
                   </tbody>
                 </table>
+              </div>
+              <div className="flex items-center gap-2 mt-4 px-1">
+                <Input
+                  value={newServiceLabel}
+                  onChange={e => setNewServiceLabel(e.target.value)}
+                  onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); addCustomService(); } }}
+                  placeholder="Eigene Leistung, z. B. Treppenhaus reinigen"
+                  className="rounded-xl h-9 text-xs font-bold max-w-sm"
+                />
+                <Button type="button" variant="outline" size="sm" className="rounded-xl h-9 font-black gap-1" onClick={addCustomService} disabled={!newServiceLabel.trim()}>
+                  <Plus className="w-3.5 h-3.5" /> Hinzufügen
+                </Button>
+                <p className="text-[10px] text-muted-foreground ml-2">Aktive Leistungen eines Monats erscheinen bei jedem Einsatz als Checkliste in der App.</p>
               </div>
             </TabsContent>
           </Tabs>

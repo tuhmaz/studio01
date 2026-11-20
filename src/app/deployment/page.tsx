@@ -32,6 +32,7 @@ import {
 } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { useToast } from '@/hooks/use-toast';
+import { serviceLabel } from '@/lib/services';
 import { useAuth } from '@/db/provider';
 import { useQuery } from '@/db/use-query';
 import { UserRole, JobSite } from '@/lib/types';
@@ -419,10 +420,10 @@ export default function DeploymentPage() {
                             <Hammer className="w-3 h-3" /> Fällige Leistungen {currentMonth}
                           </p>
                           <div className="flex flex-wrap gap-1.5">
-                            {dueServices.length > 0 ? dueServices.map(([key]) => (
-                                <div key={key} className={`flex items-center gap-1.5 px-3 py-1 rounded-full border text-[9px] font-black ${SERVICE_LABELS[key]?.color || 'bg-gray-50'}`}>
+                            {dueServices.length > 0 ? dueServices.map(([key, details]) => (
+                                <div key={key} className={`flex items-center gap-1.5 px-3 py-1 rounded-full border text-[9px] font-black ${SERVICE_LABELS[key]?.color || 'bg-violet-50 text-violet-700 border-violet-200'}`}>
                                   {SERVICE_LABELS[key]?.icon}
-                                  {SERVICE_LABELS[key]?.label || key}
+                                  {SERVICE_LABELS[key]?.label || (details as { label?: string })?.label || serviceLabel(key)}
                                 </div>
                               )) : (
                                 <span className="text-[10px] font-bold text-muted-foreground">
