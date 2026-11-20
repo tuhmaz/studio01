@@ -71,7 +71,6 @@ export default function TeamPage() {
   const [isSaving, setIsSaving] = useState(false);
   const { toast } = useToast();
   const { userProfile, isUserLoading } = useAuth();
-  const user = userProfile;
 
   const companyId = userProfile?.companyId ?? '';
   const hasContext = !!userProfile && !!companyId;
@@ -195,25 +194,6 @@ export default function TeamPage() {
       setIsSaving(true);
 
       if (!editingUser) {
-        // Create invite record
-        const inviteId = `invite-${crypto.randomUUID()}`;
-        await fetch('/api/data', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            action: 'insert',
-            table: 'account_invites',
-            data: {
-              id: inviteId,
-              company_id: effectiveCompanyId,
-              email: normalizedEmail,
-              role: requestedRole,
-              created_by: user?.id ?? null,
-            },
-          }),
-        });
-
-        // Provision user via API route (uses service role key server-side)
         const response = await fetch('/api/provision-user', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -222,17 +202,24 @@ export default function TeamPage() {
             password: formData.password,
             name: trimmedName,
             role: requestedRole,
-            companyId: effectiveCompanyId,
+            hourlyRate: formData.hourlyRate ?? 15,
+            contractType: formData.contractType || 'VOLLZEIT',
+            taxClass: formData.taxClass || 1,
+            kinder: formData.kinder || 0,
+            hasChurchTax: !!formData.hasChurchTax,
+            bundesland: formData.bundesland || 'ST',
+            svNr: formData.svNr || null,
+            steuerId: formData.steuerId || null,
+            statusTaetigkeit: formData.statusTaetigkeit || null,
+            kvZusatzRate: formData.kvZusatzRate ?? 1.7,
           }),
         });
         if (!response.ok) {
-          // Attempt to clean up invite on failure
-          await fetch('/api/data', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ action: 'delete', table: 'account_invites', filters: { id: inviteId } }),
-          });
-          throw new Error((await response.json()).error ?? 'Fehler beim Erstellen des Benutzerkontos');
+          const payload = await response.json().catch(() => null);
+          throw new Error(
+            payload?.error
+              ?? `Benutzerkonto konnte nicht erstellt werden (HTTP ${response.status}).`,
+          );
         }
 
         toast({
@@ -410,6 +397,11 @@ export default function TeamPage() {
                       disabled={!!editingUser && !canManageUsers}
                     />
                   </div>
+                  {!editingUser && (
+                    <p className={`text-xs font-medium ${(formData.password?.length ?? 0) >= MIN_PASSWORD_LENGTH ? 'text-emerald-600' : 'text-muted-foreground'}`}>
+                      {formData.password?.length ?? 0}/{MIN_PASSWORD_LENGTH} Zeichen – der Mitarbeiter meldet sich damit an und kann es später ändern.
+                    </p>
+                  )}
                 </div>
                 <div className="space-y-2">
                   <Label>{editingUser ? (canManageUsers ? 'Passwort bestätigen' : 'Hinweis') : 'Passwort bestätigen'}</Label>

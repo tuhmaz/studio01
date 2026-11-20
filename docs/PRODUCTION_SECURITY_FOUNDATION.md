@@ -12,7 +12,7 @@ This update hardens the current MVP without replacing the existing UI flow.
 - Hardened `/api/provision-user` using `session.companyId` only.
 - Safe `/api/health` response in production.
 - Environment-driven cookie domain and CORS origins.
-- New migration: `db/migrations/010_production_security_foundation.sql`.
+- New migration: now part of `db/migrations/0001_baseline.sql`.
 
 ## Required server action before deployment
 
@@ -22,7 +22,7 @@ This update hardens the current MVP without replacing the existing UI flow.
    - Together AI key
    - SMTP/API credentials if used
 2. Create a real `.env.production` on the server from `.env.example`.
-3. Apply `db/migrations/010_production_security_foundation.sql`.
+3. Run `npm run db:migrate` (the former `db/migrations/010_production_security_foundation.sql` is now part of `db/migrations/0001_baseline.sql`).
 4. Restart the app.
 5. Test login, team management, tracking, payroll, and mobile login.
 
