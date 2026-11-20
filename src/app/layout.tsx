@@ -7,7 +7,7 @@ import { AuthGuard } from "@/components/AuthGuard";
 
 
 export const metadata: Metadata = {
-  title: "Tuhmaz Hausmeister Pro",
+  title: "Hausmeister Pro",
   description: "Internes Betriebsführungssystem",
   robots: {
     index: false,

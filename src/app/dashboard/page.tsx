@@ -14,8 +14,10 @@ import { useRouter } from 'next/navigation';
 import { useAuth } from '@/db/provider';
 import { useQuery } from '@/db/use-query';
 import type { DbJobAssignment, DbJobSite, DbUser } from '@/lib/db-types';
+import { useCompanyBranding } from '@/hooks/use-company';
 
 export default function DashboardPage() {
+  const { productName, companyName } = useCompanyBranding();
   const router = useRouter();
   const { userProfile } = useAuth();
   const user = userProfile;
@@ -88,7 +90,7 @@ export default function DashboardPage() {
   const stats = isManagement
     ? [
         { label: 'Aktive Objekte',  value: `${jobSites?.length ?? 0}`,            icon: MapPin,       color: 'text-blue-600',   sub: 'Gesamt im System' },
-        { label: 'Remote Bonus',    value: `${remoteSitesCount}`,                  icon: TrendingUp,   color: 'text-purple-600', sub: 'Objekte mit +1h Bonus' },
+        { label: 'Remote Bonus',    value: `${remoteSitesCount}`,                  icon: TrendingUp,   color: 'text-purple-600', sub: 'Fernobjekte mit Zusatzzeit' },
         { label: 'Einsätze heute',  value: `${todayAssignments?.length ?? 0}`,     icon: Calendar,     color: 'text-orange-600', sub: `${completedToday} abgeschlossen` },
         { label: 'Team',            value: `${employees?.length ?? 0}`,            icon: Users,        color: 'text-green-600',  sub: 'Mitarbeiter aktiv' },
       ]
@@ -104,7 +106,7 @@ export default function DashboardPage() {
       <div className="space-y-8 animate-in fade-in duration-700">
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
           <div className="space-y-1">
-            <h1 className="text-4xl font-black tracking-tight text-primary uppercase">Tuhmaz Hausmeister Pro</h1>
+            <h1 className="text-4xl font-black tracking-tight text-primary uppercase">{companyName || productName}</h1>
             <p className="text-muted-foreground font-medium flex items-center gap-2">
               <Clock className="w-4 h-4 text-primary" />{formattedDate}
             </p>
@@ -247,7 +249,7 @@ export default function DashboardPage() {
                   <CardTitle className="text-white text-xl font-black flex items-center gap-2">
                     <TrendingUp className="w-6 h-6" /> Routen-Übersicht
                   </CardTitle>
-                  <CardDescription className="text-white/70 font-medium">LR 39 &amp; LR 38 — Heute</CardDescription>
+                  <CardDescription className="text-white/70 font-medium">Alle Touren — Heute</CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-3 relative z-10">
                   {[

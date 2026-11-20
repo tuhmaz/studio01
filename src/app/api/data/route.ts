@@ -14,6 +14,7 @@ const TABLE_COLUMNS = {
   companies: new Set([
     'id', 'name', 'site_name', 'address', 'city', 'postal_code', 'tax_number',
     'phone', 'email', 'website', 'logo_data', 'created_at',
+    'hq_lat', 'hq_lng', 'remote_threshold_km', 'remote_bonus_minutes',
   ]),
   job_assignments: new Set([
     'id', 'company_id', 'job_site_id', 'title', 'scheduled_date', 'status',
@@ -96,6 +97,8 @@ function err(msg: string, status = 400) {
 
 function safeDataError(error: unknown): { message: string; status: number } {
   if (error instanceof MediaError) return { message: error.message, status: 400 };
+  // A database CHECK constraint rejected a value (e.g. an out-of-range setting).
+  if ((error as { code?: string })?.code === '23514') return { message: 'Ungültiger Wert', status: 400 };
   const message = error instanceof Error ? error.message : String(error);
   if (message === 'Keine Berechtigung') return { message, status: 403 };
   if (

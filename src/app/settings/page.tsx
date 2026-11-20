@@ -5,7 +5,6 @@ import { Shell } from '@/components/layout/Shell';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
 import { Separator } from '@/components/ui/separator';
 import {
   Building2, Phone, Mail, Globe, FileText, Image as ImageIcon,
@@ -15,6 +14,12 @@ import {
 import { useAuth } from '@/db/provider';
 import { useToast } from '@/hooks/use-toast';
 import { UserRole } from '@/lib/types';
+import { Field, Section } from '@/components/settings/SettingsSection';
+import { refreshCompanyBranding } from '@/hooks/use-company';
+import {
+  SetupChecklist, SystemStatus, TravelSettings, fetchOverview,
+  type SettingsOverview, type TravelForm,
+} from '@/components/settings/OperationsSettings';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -37,51 +42,6 @@ const EMPTY: CompanyForm = {
   website: '', logoData: '',
 };
 
-// ─── Section wrapper ──────────────────────────────────────────────────────────
-
-function Section({
-  icon: Icon,
-  title,
-  description,
-  children,
-}: {
-  icon: React.ElementType;
-  title: string;
-  description: string;
-  children: React.ReactNode;
-}) {
-  return (
-    <div className="grid grid-cols-1 lg:grid-cols-[280px_1fr] gap-6 py-8 first:pt-0">
-      <div>
-        <div className="flex items-center gap-2 mb-1">
-          <div className="p-2 bg-primary/10 rounded-xl">
-            <Icon className="w-4 h-4 text-primary" />
-          </div>
-          <h3 className="font-black text-sm uppercase tracking-widest text-primary">{title}</h3>
-        </div>
-        <p className="text-xs text-muted-foreground leading-relaxed mt-2 pl-10">{description}</p>
-      </div>
-      <div className="space-y-4">{children}</div>
-    </div>
-  );
-}
-
-// ─── Field ────────────────────────────────────────────────────────────────────
-
-function Field({
-  label, hint, children,
-}: { label: string; hint?: string; children: React.ReactNode }) {
-  return (
-    <div className="space-y-1.5">
-      <Label className="text-xs font-black uppercase tracking-widest text-muted-foreground">
-        {label}
-      </Label>
-      {children}
-      {hint && <p className="text-[10px] text-muted-foreground/70">{hint}</p>}
-    </div>
-  );
-}
-
 // ─── Main Page ────────────────────────────────────────────────────────────────
 
 export default function SettingsPage() {
@@ -98,6 +58,23 @@ export default function SettingsPage() {
   const [saving, setSaving]   = useState(false);
   const [saved, setSaved]     = useState(false);
   const logoInputRef = useRef<HTMLInputElement>(null);
+  const [overview, setOverview] = useState<SettingsOverview | null>(null);
+  const [travel, setTravel] = useState<TravelForm>({ remoteThresholdKm: '95', remoteBonusMinutes: '60' });
+  const [savedAddress, setSavedAddress] = useState('');
+
+  const addressKey = (f: Pick<CompanyForm, 'address' | 'postalCode' | 'city'>) =>
+    [f.address, f.postalCode, f.city].map(v => v.trim()).join('|');
+
+  const loadOverview = React.useCallback(async () => {
+    const data = await fetchOverview();
+    setOverview(data);
+    if (data) {
+      setTravel({
+        remoteThresholdKm: String(data.travel.remoteThresholdKm),
+        remoteBonusMinutes: String(data.travel.remoteBonusMinutes),
+      });
+    }
+  }, []);
 
   // ── Load company data ────────────────────────────────────────────────────────
   useEffect(() => {
@@ -124,15 +101,28 @@ export default function SettingsPage() {
             website:     row.website     ?? '',
             logoData:    row.logo_data   ?? '',
           });
+          setSavedAddress(addressKey({ address: row.address ?? '', postalCode: row.postal_code ?? '', city: row.city ?? '' }));
         }
       })
       .catch(() => toast({ title: 'Fehler beim Laden', variant: 'destructive' }))
       .finally(() => setLoading(false));
-  }, [companyId, toast]);
+    if (canManageSettings) loadOverview();
+  }, [companyId, toast, canManageSettings, loadOverview]);
 
   // ── Save ─────────────────────────────────────────────────────────────────────
   const handleSave = async () => {
     if (!companyId) return;
+    const threshold = Number(travel.remoteThresholdKm);
+    const bonus = Number(travel.remoteBonusMinutes);
+    if (!Number.isFinite(threshold) || threshold < 0 || threshold > 2000 ||
+        !Number.isInteger(bonus) || bonus < 0 || bonus > 600) {
+      toast({
+        title: 'Ungültige Fahrzeit-Regel',
+        description: 'Fernobjekt-Grenze: 0–2000 km, Zusatzzeit: 0–600 ganze Minuten.',
+        variant: 'destructive',
+      });
+      return;
+    }
     setSaving(true);
     setSaved(false);
     try {
@@ -154,10 +144,15 @@ export default function SettingsPage() {
             email:       form.email      || null,
             website:     form.website    || null,
             logo_data:   form.logoData   || null,
+            remote_threshold_km:  threshold,
+            remote_bonus_minutes: bonus,
           },
         }),
       });
       if (!res.ok) throw new Error();
+      setSavedAddress(addressKey(form));
+      loadOverview();
+      refreshCompanyBranding();
       setSaved(true);
       toast({ title: 'Einstellungen gespeichert', description: 'Alle Änderungen wurden übernommen.' });
       setTimeout(() => setSaved(false), 3000);
@@ -218,6 +213,8 @@ export default function SettingsPage() {
             </CardContent>
           </Card>
         )}
+
+        {canManageSettings && overview && <SetupChecklist overview={overview} />}
 
         {loading ? (
           <div className="flex items-center justify-center py-24 gap-3 text-muted-foreground">
@@ -300,7 +297,7 @@ export default function SettingsPage() {
               >
                 <Field label="Firmenname *">
                   <Input
-                    placeholder="z. B. Tuhmaz Gebäudeservice GmbH"
+                    placeholder="z. B. Muster Gebäudeservice GmbH"
                     value={form.name}
                     onChange={set('name')}
                     className="h-12 rounded-xl font-medium"
@@ -342,6 +339,20 @@ export default function SettingsPage() {
                   />
                 </Field>
               </Section>
+
+              {overview && (
+                <>
+                  <Separator />
+                  <TravelSettings
+                    overview={overview}
+                    form={travel}
+                    onChange={setTravel}
+                    canManage={canManageSettings}
+                    hasUnsavedAddress={addressKey(form) !== savedAddress}
+                    onLocated={loadOverview}
+                  />
+                </>
+              )}
 
               <Separator />
 
@@ -476,6 +487,13 @@ export default function SettingsPage() {
                   </div>
                 </div>
               </Section>
+
+              {overview && (
+                <>
+                  <Separator />
+                  <SystemStatus overview={overview} />
+                </>
+              )}
 
             </CardContent>
           </Card>
