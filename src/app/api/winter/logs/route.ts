@@ -16,6 +16,7 @@ import { hasPermission, normalizeRole } from '@/lib/permissions';
 import { getRequestSession } from '@/lib/request-context';
 import { WinterError, appendWinterLog, fetchWeather, parseWork } from '@/lib/winter';
 import { errorResponse, optionalCoordinate, optionalUuid, presentLog } from '@/lib/winter-api';
+import { completeWinterTask } from '@/lib/winter-plan';
 
 const MAX_LIST = 2000;
 
@@ -104,7 +105,7 @@ export async function POST(req: NextRequest) {
       const photoMediaId = body.photo
         ? mediaIdFromUrl(await storeDataUrl(db, { companyId, userId: session.userId, kind: 'photo', dataUrl: body.photo }))
         : null;
-      return appendWinterLog(db, {
+      const entry = await appendWinterLog(db, {
         id: randomUUID(),
         company_id: companyId,
         job_site_id: site.id,
@@ -130,6 +131,9 @@ export async function POST(req: NextRequest) {
         voided: false,
         client_request_id: clientRequestId,
       });
+      // The day's Winterdienst task in the Tourplan is done.
+      await completeWinterTask(db, companyId, site.id, work.performedAt);
+      return entry;
     });
     return NextResponse.json({ data: presentLog(row) }, { status: 201 });
   } catch (error) {

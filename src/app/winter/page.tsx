@@ -8,9 +8,10 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import {
-  CheckCircle2, Clock, Download, Image as ImageIcon, Loader2, MapPin, Pencil,
+  CalendarPlus, CheckCircle2, Clock, Download, Image as ImageIcon, Loader2, MapPin, Pencil,
   Plus, ShieldAlert, ShieldCheck, Snowflake, ThermometerSnowflake, X,
 } from 'lucide-react';
+import Link from 'next/link';
 import { Shell } from '@/components/layout/Shell';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -114,6 +115,7 @@ export default function WinterPage() {
   const [chain, setChain] = useState<ChainCheck | null>(null);
   const [correcting, setCorrecting] = useState<LogEntry | null>(null);
   const [setupOpen, setSetupOpen] = useState(false);
+  const [planOpen, setPlanOpen] = useState(false);
 
   const loadSites = useCallback(async () => {
     try {
@@ -227,9 +229,14 @@ export default function WinterPage() {
               </SelectContent>
             </Select>
             {canManage && (
-              <Button variant="outline" className="h-10 rounded-xl font-black gap-2" onClick={() => setSetupOpen(true)}>
-                <Plus className="w-4 h-4" /> Objekte einrichten
-              </Button>
+              <>
+                <Button variant="outline" className="h-10 rounded-xl font-black gap-2" onClick={() => setSetupOpen(true)}>
+                  <Plus className="w-4 h-4" /> Objekte einrichten
+                </Button>
+                <Button className="h-10 rounded-xl font-black gap-2" onClick={() => setPlanOpen(true)} disabled={!sites?.length}>
+                  <CalendarPlus className="w-4 h-4" /> Einsätze planen
+                </Button>
+              </>
             )}
           </div>
         </div>
@@ -377,6 +384,7 @@ export default function WinterPage() {
           onSaved={() => { setCorrecting(null); loadEntries(); loadSites(); loadChain(); }}
         />
       )}
+      {planOpen && <PlanDialog onClose={() => setPlanOpen(false)} />}
       {setupOpen && (
         <SetupDialog
           winterSites={sites ?? []}
@@ -576,6 +584,7 @@ function SetupDialog({ winterSites, onClose, onSaved }: { winterSites: WinterSit
           </div>
         ) : (
           <>
+            <AutoPlanSettings />
             <Input className="rounded-xl" placeholder="Objekt suchen…" value={filter} onChange={e => setFilter(e.target.value)} />
             <div className="overflow-y-auto -mx-2 px-2 divide-y">
               {!allSites ? (
@@ -608,5 +617,199 @@ function SetupDialog({ winterSites, onClose, onSaved }: { winterSites: WinterSit
         )}
       </DialogContent>
     </Dialog>
+  );
+}
+
+// ─── Planning ─────────────────────────────────────────────────────────────────
+
+interface PlannedSite {
+  siteId: string;
+  name: string;
+  forecast: { available: boolean; minTempC: number | null; snowOrIce: boolean; precipitationMm: number };
+  risk: boolean;
+  status: 'created' | 'exists' | 'skipped' | 'no_forecast';
+  workerIds: string[];
+  published: boolean;
+}
+interface PlanResult { date: string; thresholdC: number; created: number; sites: PlannedSite[] }
+
+function berlinDay(offset: number) {
+  const d = new Date(Date.now() + offset * 86400000);
+  return new Intl.DateTimeFormat('en-CA', { timeZone: 'Europe/Berlin', year: 'numeric', month: '2-digit', day: '2-digit' }).format(d);
+}
+
+function PlanDialog({ onClose }: { onClose: () => void }) {
+  const { toast } = useToast();
+  const days = useMemo(() => [
+    { value: berlinDay(0), label: 'Heute' },
+    { value: berlinDay(1), label: 'Morgen' },
+    { value: berlinDay(2), label: 'Übermorgen' },
+  ], []);
+  const [date, setDate] = useState(days[1].value);
+  const [force, setForce] = useState(false);
+  const [preview, setPreview] = useState<PlanResult | null>(null);
+  const [busy, setBusy] = useState(false);
+  // Keep the preview effect independent of the parent's re-renders.
+  const closeRef = React.useRef(onClose);
+  closeRef.current = onClose;
+
+  const run = useCallback(async (dryRun: boolean) => {
+    setBusy(true);
+    try {
+      const result = await api<PlanResult>('/api/winter/plan', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ date, force, dryRun }),
+      });
+      if (dryRun) {
+        setPreview(result);
+      } else {
+        const drafts = result.sites.filter(s => s.status === 'created' && !s.published).length;
+        toast({
+          title: `${result.created} Winterdienst-Aufgaben angelegt`,
+          description: drafts
+            ? `${drafts} ohne Mitarbeiter: bitte im Tourplan zuweisen und veröffentlichen.`
+            : 'Die Mitarbeiter sehen sie im Tourplan und in der App.',
+        });
+        closeRef.current();
+      }
+    } catch (e: any) {
+      toast({ title: 'Planung fehlgeschlagen', description: e.message, variant: 'destructive' });
+    } finally {
+      setBusy(false);
+    }
+  }, [date, force, toast]);
+
+  useEffect(() => { run(true); }, [run]);
+
+  const toCreate = preview?.sites.filter(s => s.status === 'created').length ?? 0;
+  const statusText = (s: PlannedSite) =>
+    s.status === 'exists' ? 'bereits geplant'
+      : s.status === 'created' ? (s.published ? 'wird angelegt' : 'wird angelegt (ohne Mitarbeiter)')
+      : s.status === 'no_forecast' ? 'keine Vorhersage'
+      : 'nicht nötig';
+
+  return (
+    <Dialog open onOpenChange={o => !o && onClose()}>
+      <DialogContent className="rounded-3xl sm:max-w-2xl max-h-[90vh] flex flex-col">
+        <DialogHeader>
+          <DialogTitle>Winterdienst-Einsätze planen</DialogTitle>
+          <DialogDescription>
+            Legt im Tourplan eine Aufgabe „Winterdienst“ je Objekt an, wenn laut DWD-Vorhersage Frost oder Schnee droht
+            (Nacht davor bis 10 Uhr). Mitarbeiter werden vom letzten Winterdienst des Objekts übernommen.
+          </DialogDescription>
+        </DialogHeader>
+        <div className="flex flex-wrap items-center gap-3">
+          <Select value={date} onValueChange={setDate}>
+            <SelectTrigger className="w-48 rounded-xl font-bold"><SelectValue /></SelectTrigger>
+            <SelectContent>
+              {days.map(d => <SelectItem key={d.value} value={d.value}>{d.label} ({new Date(`${d.value}T12:00:00Z`).toLocaleDateString('de-DE')})</SelectItem>)}
+            </SelectContent>
+          </Select>
+          <label className="flex items-center gap-2 text-sm font-bold">
+            <Checkbox checked={force} onCheckedChange={v => setForce(v === true)} />
+            Unabhängig vom Wetter für alle Objekte
+          </label>
+        </div>
+        <div className="overflow-y-auto -mx-2 px-2">
+          {!preview || busy ? (
+            <div className="flex justify-center py-8"><Loader2 className="w-5 h-5 animate-spin" /></div>
+          ) : (
+            <table className="w-full text-sm">
+              <thead className="text-[10px] uppercase tracking-widest text-muted-foreground">
+                <tr><th className="text-left py-2">Objekt</th><th className="text-left py-2">Vorhersage</th><th className="text-left py-2">Aufgabe</th></tr>
+              </thead>
+              <tbody className="divide-y">
+                {preview.sites.map(s => (
+                  <tr key={s.siteId}>
+                    <td className="py-2 font-bold">{s.name}</td>
+                    <td className="py-2">
+                      {s.forecast.available
+                        ? <span className={s.risk ? 'text-sky-700 font-bold' : 'text-muted-foreground'}>
+                            min. {s.forecast.minTempC?.toFixed(1)} °C{s.forecast.snowOrIce ? ', Schnee/Glätte' : ''}
+                          </span>
+                        : <span className="text-muted-foreground">—</span>}
+                    </td>
+                    <td className="py-2 text-xs">{statusText(s)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+          {preview && <p className="text-[11px] text-muted-foreground mt-3">Schwelle: Tiefsttemperatur ≤ {preview.thresholdC} °C oder Schnee (änderbar unter „Objekte einrichten“).</p>}
+        </div>
+        <DialogFooter className="items-center">
+          <Link href="/schedule" className="text-xs font-bold text-primary hover:underline mr-auto">Zum Tourplan</Link>
+          <Button variant="outline" className="rounded-xl" onClick={onClose}>Schließen</Button>
+          <Button className="rounded-xl font-black" disabled={busy || !toCreate} onClick={() => run(false)}>
+            {toCreate ? `${toCreate} Aufgaben anlegen` : 'Nichts anzulegen'}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function AutoPlanSettings() {
+  const { toast } = useToast();
+  const [settings, setSettings] = useState<{ auto: boolean; threshold: string } | null>(null);
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    api<{ data: Array<{ winter_auto_plan: boolean; winter_plan_min_temp_c: string }> }>('/api/data', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'query', table: 'companies', select: 'winter_auto_plan,winter_plan_min_temp_c' }),
+    }).then(({ data }) => {
+      const row = data[0];
+      if (row) setSettings({ auto: row.winter_auto_plan, threshold: String(Number(row.winter_plan_min_temp_c)) });
+    }).catch(() => setSettings(null));
+  }, []);
+
+  const save = async (next: { auto: boolean; threshold: string }) => {
+    const threshold = Number(next.threshold.replace(',', '.'));
+    if (!Number.isFinite(threshold) || threshold < -20 || threshold > 10) {
+      toast({ title: 'Ungültige Temperatur', description: 'Bitte einen Wert zwischen -20 und 10 °C.', variant: 'destructive' });
+      return;
+    }
+    setSaving(true);
+    try {
+      const companies = await api<{ data: Array<{ id: string }> }>('/api/data', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'query', table: 'companies', select: 'id' }),
+      });
+      await api('/api/data', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'update', table: 'companies', filters: { id: companies.data[0]?.id },
+          data: { winter_auto_plan: next.auto, winter_plan_min_temp_c: threshold },
+        }),
+      });
+      setSettings(next);
+      toast({ title: 'Gespeichert' });
+    } catch (e: any) {
+      toast({ title: 'Speichern fehlgeschlagen', description: e.message, variant: 'destructive' });
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  if (!settings) return null;
+  return (
+    <div className="rounded-2xl border p-4 space-y-3">
+      <label className="flex items-center gap-2 text-sm font-black">
+        <Checkbox checked={settings.auto} disabled={saving} onCheckedChange={v => save({ ...settings, auto: v === true })} />
+        Aufgaben automatisch planen (abends für den nächsten Morgen)
+      </label>
+      <div className="flex items-center gap-2 text-sm">
+        <span className="text-muted-foreground">Bei Tiefsttemperatur ≤</span>
+        <Input className="w-20 h-9 rounded-xl" value={settings.threshold}
+          onChange={e => setSettings({ ...settings, threshold: e.target.value })}
+          onBlur={() => save(settings)} />
+        <span className="text-muted-foreground">°C oder Schnee</span>
+      </div>
+    </div>
   );
 }
