@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { SessionPayload } from '@/lib/auth-server';
-import sql from '@/lib/db';
+import sql, { withTenant, type Db } from '@/lib/db';
 import { getRequestSession } from '@/lib/request-context';
 import { hasPermission, normalizeRole, Role } from '@/lib/permissions';
 import { ALWAYS_FORBIDDEN_WRITE_FIELDS } from '@/lib/security';
@@ -77,6 +77,9 @@ const COMPANY_SCOPED_TABLES = new Set<TableName>([
   'users',
   'work_log_entries',
 ]);
+
+// Tables whose rows belong to one employee (employee_id). Workers only ever see and write their own.
+const EMPLOYEE_SCOPED_TABLES = new Set<TableName>(['time_entries', 'work_log_entries']);
 
 // Status values a non-approver (worker/leader) may set on their own time entries.
 // Setting 'APPROVED' or 'REJECTED' requires the 'time_entries.approve' permission.
@@ -212,7 +215,11 @@ function onlyColumns(data: Record<string, unknown>, allowed: Set<string>) {
 function canWrite(table: TableName, action: string, data: unknown, session: SessionPayload) {
   const role = roleOf(session);
   if (table === 'account_invites') return hasPermission(session, 'users.create');
-  if (table === 'companies') return hasPermission(session, 'companies.update');
+  // A company can only be edited here. Creating or deleting a tenant is a
+  // platform operation, never something a tenant's own API call may do.
+  if (table === 'companies') {
+    return (action === 'update' || action === 'upsert') && hasPermission(session, 'companies.update');
+  }
   if (table === 'users') {
     if (action === 'insert') return hasPermission(session, 'users.create');
     if (action === 'delete') return hasPermission(session, 'users.delete');
@@ -347,11 +354,11 @@ function normalizeTimeEntryRow(
   return row;
 }
 
-async function assertAssignedJobAccess(filters: Filters, session: SessionPayload) {
+async function assertAssignedJobAccess(db: Db, filters: Filters, session: SessionPayload) {
   const id = filters.id;
   if (typeof id !== 'string') throw new Error('Keine Berechtigung');
 
-  const rows = await sql`
+  const rows = await db`
     SELECT id
       FROM job_assignments
      WHERE id = ${id}
@@ -384,176 +391,187 @@ export async function POST(req: NextRequest) {
   const { action, orderBy } = body;
 
   try {
-    switch (action) {
-      case 'query': {
-        const filters = scopedFilters(table, normalizeFilters(table, body.filters), session);
-        const conditions = filterConditions(table, filters);
-        let query = sql`SELECT ${selectFragment(table, body.select, session, filters)} FROM ${sql(table)}`;
+    return await withTenant(session.companyId, async db => {
+      switch (action) {
+        case 'query': {
+          const filters = scopedFilters(table, normalizeFilters(table, body.filters), session);
+          const conditions = filterConditions(table, filters);
+          let query = db`SELECT ${selectFragment(table, body.select, session, filters)} FROM ${db(table)}`;
 
-        if (conditions.length > 0) {
-          query = sql`${query} WHERE ${conditions.reduce((a, b) => sql`${a} AND ${b}`)}`;
-        }
-        if (orderBy) {
-          assertColumn(table, orderBy.column);
-          const dir = orderBy.ascending === false ? sql`DESC` : sql`ASC`;
-          query = sql`${query} ORDER BY ${sql(orderBy.column)} ${dir}`;
-        }
-
-        const rows = await query;
-        return NextResponse.json({ data: rows });
-      }
-
-      case 'tracking_assignments': {
-        const today = typeof body.today === 'string' ? body.today : null;
-        if (!today) return err('today required');
-
-        let query = sql`
-          SELECT * FROM job_assignments
-           WHERE company_id = ${session.companyId}
-             AND is_plan_published = true
-             AND (
-               scheduled_date = ${today}
-               OR (scheduled_date < ${today} AND status != 'COMPLETED')
-             )
-        `;
-
-        const requestedWorkerId = typeof body.workerId === 'string' ? body.workerId : null;
-        const workerId = roleOf(session) === 'WORKER' ? session.userId : requestedWorkerId;
-        if (workerId) {
-          query = sql`${query} AND assigned_worker_ids @> ARRAY[${workerId}]::text[]`;
-        }
-
-        const rows = await query;
-        return NextResponse.json({ data: rows });
-      }
-
-      case 'query_range': {
-        const filters = scopedFilters(table, normalizeFilters(table, body.filters), session);
-        const rangeFilters: Array<{ column: string; gte?: string; lte?: string }> = body.rangeFilters ?? [];
-        const conditions = filterConditions(table, filters);
-
-        for (const range of rangeFilters) {
-          assertColumn(table, range.column);
-          if (range.gte !== undefined) conditions.push(sql`${sql(range.column)} >= ${range.gte}`);
-          if (range.lte !== undefined) conditions.push(sql`${sql(range.column)} <= ${range.lte}`);
-        }
-
-        let query = sql`SELECT ${selectFragment(table, body.select, session, filters)} FROM ${sql(table)}`;
-        if (conditions.length > 0) {
-          query = sql`${query} WHERE ${conditions.reduce((a, b) => sql`${a} AND ${b}`)}`;
-        }
-        if (orderBy) {
-          assertColumn(table, orderBy.column);
-          const dir = orderBy.ascending === false ? sql`DESC` : sql`ASC`;
-          query = sql`${query} ORDER BY ${sql(orderBy.column)} ${dir}`;
-        }
-
-        const rows = await query;
-        return NextResponse.json({ data: rows });
-      }
-
-      case 'query_contains': {
-        const column = String(body.column ?? '');
-        assertColumn(table, column);
-        const filters = scopedFilters(table, normalizeFilters(table, body.extraFilters), session);
-
-        let query = sql`SELECT ${selectFragment(table, body.select, session, filters)} FROM ${sql(table)} WHERE ${sql(column)} @> ${sql.array([body.value])}`;
-        const conditions = filterConditions(table, filters);
-        if (conditions.length > 0) {
-          query = sql`${query} AND ${conditions.reduce((a, b) => sql`${a} AND ${b}`)}`;
-        }
-        if (orderBy) {
-          assertColumn(table, orderBy.column);
-          const dir = orderBy.ascending === false ? sql`DESC` : sql`ASC`;
-          query = sql`${query} ORDER BY ${sql(orderBy.column)} ${dir}`;
-        }
-
-        const rows = await query;
-        return NextResponse.json({ data: rows });
-      }
-
-      case 'insert': {
-        if (!canWrite(table, action, body.data, session)) return err('Keine Berechtigung', 403);
-        const rows = sanitizeRows(table, body.data, session);
-        if (table === 'time_entries') {
-          assertTimeEntryStatusAllowed(rows, session);
-          rows.forEach(row => normalizeTimeEntryRow(row));
-        }
-        if (table === 'users') assertRoleAssignment(rows, session);
-        const inserted = await sql`INSERT INTO ${sql(table)} ${sql(rows)} RETURNING *`;
-        return NextResponse.json({ data: inserted });
-      }
-
-      case 'upsert': {
-        if (!canWrite(table, action, body.data, session)) return err('Keine Berechtigung', 403);
-        const rows = sanitizeRows(table, body.data, session);
-        if (table === 'time_entries') {
-          assertTimeEntryStatusAllowed(rows, session);
-          rows.forEach(row => normalizeTimeEntryRow(row));
-        }
-        if (table === 'users') assertRoleAssignment(rows, session);
-        const updateColumns = Object.keys(rows[0]).filter(key => key !== 'id');
-        // Scope the conflict update so a client can never overwrite (and thereby
-        // take over) a row that belongs to a different company.
-        const scopeColumn = table === 'companies' ? 'id' : 'company_id';
-        const upserted = await sql`
-          INSERT INTO ${sql(table)} ${sql(rows)}
-          ON CONFLICT (id) DO UPDATE SET ${sql(rows[0], ...updateColumns)}
-          WHERE ${sql(table)}.${sql(scopeColumn)} = ${session.companyId}
-          RETURNING *
-        `;
-        return NextResponse.json({ data: upserted });
-      }
-
-      case 'update': {
-        if (!canWrite(table, action, body.data, session)) return err('Keine Berechtigung', 403);
-        const filters = scopedFilters(table, normalizeFilters(table, body.filters), session);
-        if (table === 'users' && !hasPermission(session, 'users.update')) {
-          filters.id = session.userId;
-        }
-        if (Object.keys(filters).length === 0) return err('update requires at least one filter');
-        if (table === 'job_assignments' && !hasPermission(session, 'assignments.manage')) {
-          await assertAssignedJobAccess(filters, session);
-        }
-        const rows = sanitizeRows(table, body.data, session);
-        if (table === 'users') assertRoleAssignment(rows, session);
-        if (table === 'time_entries') {
-          assertTimeEntryStatusAllowed(rows, session);
-          const id = filters.id;
-          let existing: { clock_in_datetime?: string | null; clock_out_datetime?: string | null } | undefined;
-          if (typeof id === 'string') {
-            const existingRows = await sql`
-              SELECT clock_in_datetime, clock_out_datetime
-                FROM time_entries
-               WHERE id = ${id}
-                 AND company_id = ${session.companyId}
-               LIMIT 1
-            `;
-            existing = existingRows[0];
+          if (conditions.length > 0) {
+            query = db`${query} WHERE ${conditions.reduce((a, b) => db`${a} AND ${b}`)}`;
           }
-          rows.forEach(row => normalizeTimeEntryRow(row, existing));
+          if (orderBy) {
+            assertColumn(table, orderBy.column);
+            const dir = orderBy.ascending === false ? db`DESC` : db`ASC`;
+            query = db`${query} ORDER BY ${db(orderBy.column)} ${dir}`;
+          }
+
+          const rows = await query;
+          return NextResponse.json({ data: rows });
         }
-        const conditions = filterConditions(table, filters);
-        const whereClause = conditions.reduce((a, b) => sql`${a} AND ${b}`);
-        const updated = await sql`
-          UPDATE ${sql(table)} SET ${sql(rows[0])} WHERE ${whereClause} RETURNING *
-        `;
-        return NextResponse.json({ data: updated });
-      }
 
-      case 'delete': {
-        if (!canWrite(table, action, body.data, session)) return err('Keine Berechtigung', 403);
-        const filters = scopedFilters(table, normalizeFilters(table, body.filters), session);
-        if (Object.keys(filters).length === 0) return err('delete requires at least one filter');
-        const conditions = filterConditions(table, filters);
-        const whereClause = conditions.reduce((a, b) => sql`${a} AND ${b}`);
-        await sql`DELETE FROM ${sql(table)} WHERE ${whereClause}`;
-        return NextResponse.json({ data: null });
-      }
+        case 'tracking_assignments': {
+          // This action always reads job_assignments, whatever `table` the client
+          // named, so it must be gated on that table's permission.
+          if (!canRead('job_assignments', session)) return err('Keine Berechtigung', 403);
+          const today = typeof body.today === 'string' ? body.today : null;
+          if (!today) return err('today required');
 
-      default:
-        return err(`Unbekannte Aktion: ${action}`);
-    }
+          let query = db`
+            SELECT * FROM job_assignments
+             WHERE company_id = ${session.companyId}
+               AND is_plan_published = true
+               AND (
+                 scheduled_date = ${today}
+                 OR (scheduled_date < ${today} AND status != 'COMPLETED')
+               )
+          `;
+
+          const requestedWorkerId = typeof body.workerId === 'string' ? body.workerId : null;
+          const workerId = roleOf(session) === 'WORKER' ? session.userId : requestedWorkerId;
+          if (workerId) {
+            query = db`${query} AND assigned_worker_ids @> ARRAY[${workerId}]::text[]`;
+          }
+
+          const rows = await query;
+          return NextResponse.json({ data: rows });
+        }
+
+        case 'query_range': {
+          const filters = scopedFilters(table, normalizeFilters(table, body.filters), session);
+          const rangeFilters: Array<{ column: string; gte?: string; lte?: string }> = body.rangeFilters ?? [];
+          const conditions = filterConditions(table, filters);
+
+          for (const range of rangeFilters) {
+            assertColumn(table, range.column);
+            if (range.gte !== undefined) conditions.push(db`${db(range.column)} >= ${range.gte}`);
+            if (range.lte !== undefined) conditions.push(db`${db(range.column)} <= ${range.lte}`);
+          }
+
+          let query = db`SELECT ${selectFragment(table, body.select, session, filters)} FROM ${db(table)}`;
+          if (conditions.length > 0) {
+            query = db`${query} WHERE ${conditions.reduce((a, b) => db`${a} AND ${b}`)}`;
+          }
+          if (orderBy) {
+            assertColumn(table, orderBy.column);
+            const dir = orderBy.ascending === false ? db`DESC` : db`ASC`;
+            query = db`${query} ORDER BY ${db(orderBy.column)} ${dir}`;
+          }
+
+          const rows = await query;
+          return NextResponse.json({ data: rows });
+        }
+
+        case 'query_contains': {
+          const column = String(body.column ?? '');
+          assertColumn(table, column);
+          const filters = scopedFilters(table, normalizeFilters(table, body.extraFilters), session);
+
+          let query = db`SELECT ${selectFragment(table, body.select, session, filters)} FROM ${db(table)} WHERE ${db(column)} @> ${db.array([body.value])}`;
+          const conditions = filterConditions(table, filters);
+          if (conditions.length > 0) {
+            query = db`${query} AND ${conditions.reduce((a, b) => db`${a} AND ${b}`)}`;
+          }
+          if (orderBy) {
+            assertColumn(table, orderBy.column);
+            const dir = orderBy.ascending === false ? db`DESC` : db`ASC`;
+            query = db`${query} ORDER BY ${db(orderBy.column)} ${dir}`;
+          }
+
+          const rows = await query;
+          return NextResponse.json({ data: rows });
+        }
+
+        case 'insert': {
+          if (!canWrite(table, action, body.data, session)) return err('Keine Berechtigung', 403);
+          const rows = sanitizeRows(table, body.data, session);
+          if (table === 'time_entries') {
+            assertTimeEntryStatusAllowed(rows, session);
+            rows.forEach(row => normalizeTimeEntryRow(row));
+          }
+          if (table === 'users') assertRoleAssignment(rows, session);
+          const inserted = await db`INSERT INTO ${db(table)} ${db(rows)} RETURNING *`;
+          return NextResponse.json({ data: inserted });
+        }
+
+        case 'upsert': {
+          if (!canWrite(table, action, body.data, session)) return err('Keine Berechtigung', 403);
+          const rows = sanitizeRows(table, body.data, session);
+          if (table === 'time_entries') {
+            assertTimeEntryStatusAllowed(rows, session);
+            rows.forEach(row => normalizeTimeEntryRow(row));
+          }
+          if (table === 'users') assertRoleAssignment(rows, session);
+          const updateColumns = Object.keys(rows[0]).filter(key => key !== 'id');
+          // Scope the conflict update so a client can never overwrite (and thereby
+          // take over) a row that belongs to a different company.
+          const scopeColumn = table === 'companies' ? 'id' : 'company_id';
+          // Workers may only overwrite their own rows; without this a worker could
+          // upsert a colleague's time entry id and take the entry over.
+          const ownRowsOnly = roleOf(session) === 'WORKER' && EMPLOYEE_SCOPED_TABLES.has(table)
+            ? db`AND ${db(table)}.employee_id = ${session.userId}`
+            : db``;
+          const upserted = await db`
+            INSERT INTO ${db(table)} ${db(rows)}
+            ON CONFLICT (id) DO UPDATE SET ${db(rows[0], ...updateColumns)}
+            WHERE ${db(table)}.${db(scopeColumn)} = ${session.companyId}
+            ${ownRowsOnly}
+            RETURNING *
+          `;
+          return NextResponse.json({ data: upserted });
+        }
+
+        case 'update': {
+          if (!canWrite(table, action, body.data, session)) return err('Keine Berechtigung', 403);
+          const filters = scopedFilters(table, normalizeFilters(table, body.filters), session);
+          if (table === 'users' && !hasPermission(session, 'users.update')) {
+            filters.id = session.userId;
+          }
+          if (Object.keys(filters).length === 0) return err('update requires at least one filter');
+          if (table === 'job_assignments' && !hasPermission(session, 'assignments.manage')) {
+            await assertAssignedJobAccess(db, filters, session);
+          }
+          const rows = sanitizeRows(table, body.data, session);
+          if (table === 'users') assertRoleAssignment(rows, session);
+          if (table === 'time_entries') {
+            assertTimeEntryStatusAllowed(rows, session);
+            const id = filters.id;
+            let existing: { clock_in_datetime?: string | null; clock_out_datetime?: string | null } | undefined;
+            if (typeof id === 'string') {
+              const existingRows = await db`
+                SELECT clock_in_datetime, clock_out_datetime
+                  FROM time_entries
+                 WHERE id = ${id}
+                   AND company_id = ${session.companyId}
+                 LIMIT 1
+              `;
+              existing = existingRows[0];
+            }
+            rows.forEach(row => normalizeTimeEntryRow(row, existing));
+          }
+          const conditions = filterConditions(table, filters);
+          const whereClause = conditions.reduce((a, b) => db`${a} AND ${b}`);
+          const updated = await db`
+            UPDATE ${db(table)} SET ${db(rows[0])} WHERE ${whereClause} RETURNING *
+          `;
+          return NextResponse.json({ data: updated });
+        }
+
+        case 'delete': {
+          if (!canWrite(table, action, body.data, session)) return err('Keine Berechtigung', 403);
+          const filters = scopedFilters(table, normalizeFilters(table, body.filters), session);
+          if (Object.keys(filters).length === 0) return err('delete requires at least one filter');
+          const conditions = filterConditions(table, filters);
+          const whereClause = conditions.reduce((a, b) => db`${a} AND ${b}`);
+          await db`DELETE FROM ${db(table)} WHERE ${whereClause}`;
+          return NextResponse.json({ data: null });
+        }
+
+        default:
+          return err(`Unbekannte Aktion: ${action}`);
+      }
+    });
   } catch (e: any) {
     const safeError = safeDataError(e);
     console.error(`[api/data] ${action} ${table}:`, e?.message ?? e);

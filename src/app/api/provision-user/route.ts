@@ -1,15 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server';
 import bcrypt from 'bcryptjs';
-import sql from '@/lib/db';
-import { getSession } from '@/lib/auth-server';
+import { withTenant } from '@/lib/db';
 import { hasPermission, isAdminLike } from '@/lib/permissions';
 import { writeAuditLog } from '@/lib/audit';
-import { getRequestIp, getUserAgent } from '@/lib/request-context';
+import { getRequestIp, getRequestSession, getUserAgent } from '@/lib/request-context';
 
 const ALLOWED_ROLES = ['ADMIN', 'MANAGER', 'ACCOUNTANT', 'LEADER', 'WORKER'] as const;
 
 export async function POST(req: NextRequest) {
-  const session = await getSession();
+  // Same session resolution as every other API route: cookie (web) or Bearer token (mobile).
+  const session = await getRequestSession(req);
   if (!session || !hasPermission(session, 'users.create')) {
     return NextResponse.json({ error: 'Keine Berechtigung' }, { status: 403 });
   }
@@ -37,7 +37,7 @@ export async function POST(req: NextRequest) {
 
     const passwordHash = await bcrypt.hash(password, 12);
 
-    const [user] = await sql`
+    const [user] = await withTenant(companyId, db => db`
       INSERT INTO public.users (
         company_id, name, email, password_hash, role,
         contract_type, hourly_rate, monthly_target_hours,
@@ -48,7 +48,7 @@ export async function POST(req: NextRequest) {
         1, 0, false, 'ST'
       )
       RETURNING id, name, email, role, company_id
-    `;
+    `);
 
     await writeAuditLog({
       session,

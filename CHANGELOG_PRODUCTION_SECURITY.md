@@ -35,7 +35,7 @@
 
 ## Database changes
 
-- Added `db/migrations/010_production_security_foundation.sql`:
+- Added the production security migration (now part of `db/migrations/0001_baseline.sql`):
   - Adds/updates role constraint for `SUPER_ADMIN`, `ADMIN`, `MANAGER`, `ACCOUNTANT`, `LEADER`, `WORKER`.
   - Adds `audit_logs` table and indexes.
   - Adds `signature_data` and `kv_zusatz_rate` columns used by UI/mobile profile flows.
@@ -52,7 +52,7 @@
 
 1. Rotate all secrets exposed in older archives.
 2. Create the real production `.env` from `.env.example` on the server only.
-3. Apply `db/migrations/010_production_security_foundation.sql`.
+3. Run `npm run db:migrate` (the former `db/migrations/010_production_security_foundation.sql` is now part of `db/migrations/0001_baseline.sql`).
 4. Create/rotate the admin user using `node scripts/create-admin.mjs`.
 5. Run `npm ci`, `npm run typecheck`, `npm run lint`, and `npm run build` on the real server.
 6. Test web login, team management, tracking, payroll, and mobile login before replacing production.
