@@ -76,6 +76,26 @@ SHA-256-chained to the previous one of the same company, and
 correction entries with a reason; the original stays. Weather at the time
 of work comes from the German Weather Service (DWD) via Bright Sky.
 
+### Automatic Winterdienst tasks
+
+Winterdienst is switched on per site in the Objekte dialog (or on the
+Winterdienst page → *Objekte einrichten*). On frost or snow days each such
+site gets a task "Winterdienst" in the Tourplan:
+
+- *Einsätze planen* on the Winterdienst page: preview the DWD forecast per
+  site and create the tasks (or force them regardless of the weather).
+- Automatically: add to the server's crontab (needs `CRON_SECRET`):
+
+  ```
+  0 17 * * *  curl -fsS -H "Authorization: Bearer $CRON_SECRET" https://<host>/api/cron/winter-plan
+  30 3 * * *  curl -fsS -H "Authorization: Bearer $CRON_SECRET" "https://<host>/api/cron/winter-plan?day=today"
+  ```
+
+Threshold (default: minimum ≤ 1 °C or snow) and on/off are per company.
+Workers are taken from the site's previous Winterdienst task; without
+them the task stays a draft for the office. Recording the work in the app
+marks the task as done.
+
 ## Photos and voice notes
 
 Media is stored as files, not in the database. `STORAGE_DRIVER` picks where:

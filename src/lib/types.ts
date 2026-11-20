@@ -11,7 +11,8 @@ export type ServiceCategory =
   | 'RASSEN_MAEHEN' 
   | 'GARTEN_PFLEGE' 
   | 'BAEUME_PRUEFEN' 
-  | 'LAUBAUFNAHME';
+  | 'LAUBAUFNAHME'
+  | 'WINTERDIENST';
 
 export interface User {
   id: string;

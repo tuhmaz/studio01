@@ -27,7 +27,7 @@ import {
   MapPin, Upload, Loader2, Building2, FileSpreadsheet,
   Trash2, Search, Waves, Leaf, TreePine, CheckCircle2,
   Table as TableIcon, CalendarDays, Info, Clock, Navigation,
-  Plus, Pencil
+  Plus, Pencil, Snowflake,
 } from 'lucide-react';
 import { parseExcelDirect } from '@/ai/flows/parse-excel-direct';
 import { GERMAN_MONTHS } from '@/ai/flows/parse-excel-plan-shared';
@@ -76,6 +76,9 @@ interface SiteForm {
   estimatedTravelTimeMinutesFromHQ: string;
   isRemote: boolean;
   services: Record<string, ServiceForm>;
+  winterEnabled: boolean;
+  winterAreas: string;
+  winterNotes: string;
 }
 
 const emptyServices = (): Record<string, ServiceForm> =>
@@ -93,6 +96,9 @@ const emptyForm = (): SiteForm => ({
   estimatedTravelTimeMinutesFromHQ: '0',
   isRemote: false,
   services: emptyServices(),
+  winterEnabled: false,
+  winterAreas: 'Gehweg, Hauseingang',
+  winterNotes: '',
 });
 
 function siteToForm(site: any): SiteForm {
@@ -122,6 +128,9 @@ function siteToForm(site: any): SiteForm {
     ),
     isRemote: site.is_remote ?? site.isRemote ?? false,
     services,
+    winterEnabled: site.winter_service_enabled ?? false,
+    winterAreas: (site.winter_areas ?? []).join(', ') || 'Gehweg, Hauseingang',
+    winterNotes: site.winter_notes ?? '',
   };
 }
 
@@ -149,6 +158,9 @@ function formToSiteData(form: SiteForm): any {
     travel_time_from_hq: parseFloat(form.estimatedTravelTimeMinutesFromHQ) || 0,
     estimated_travel_time_minutes_from_hq: parseFloat(form.estimatedTravelTimeMinutesFromHQ) || 0,
     services,
+    winter_service_enabled: form.winterEnabled,
+    winter_areas: form.winterAreas.split(',').map(a => a.trim()).filter(Boolean).slice(0, 20),
+    winter_notes: form.winterNotes.trim() || null,
     ...(hasCoordinates ? { lat, lng } : {}),
   };
 }
@@ -628,7 +640,7 @@ function AddEditSiteDialog({ open, site, nextId, availableRegions, onSave, onClo
                     )}
                   </Button>
                   <p className="text-[9px] text-muted-foreground font-medium mt-1 text-center">
-                    HQ: Johannes-R.-Becher-Straße 25, 39218 Schönebeck (Elbe)
+                    Vom Firmensitz aus (Einstellungen → Standort &amp; Fahrzeiten)
                   </p>
                 </div>
 
@@ -651,10 +663,37 @@ function AddEditSiteDialog({ open, site, nextId, availableRegions, onSave, onClo
                       className="w-5 h-5 accent-primary rounded"
                     />
                     <div>
-                      <p className="text-sm font-black">Fernliegenschaft — +1 Stunde Zuschlag</p>
-                      <p className="text-[10px] text-muted-foreground font-medium mt-0.5">Aktivieren wenn die Liegenschaft mehr als 95 km vom HQ entfernt ist.</p>
+                      <p className="text-sm font-black">Fernliegenschaft — Zusatzzeit</p>
+                      <p className="text-[10px] text-muted-foreground font-medium mt-0.5">Wird bei der Distanzberechnung automatisch gesetzt (Grenze und Zusatzzeit unter Einstellungen).</p>
                     </div>
                   </label>
+                </div>
+
+                <div className="col-span-2 space-y-3">
+                  <label className={`flex items-center gap-4 p-5 rounded-2xl border-2 cursor-pointer transition-all ${form.winterEnabled ? 'bg-sky-50 border-sky-300' : 'bg-gray-50 border-transparent hover:border-gray-200'}`}>
+                    <input
+                      type="checkbox"
+                      checked={form.winterEnabled}
+                      onChange={e => set('winterEnabled', e.target.checked)}
+                      className="w-5 h-5 accent-primary rounded"
+                    />
+                    <div>
+                      <p className="text-sm font-black flex items-center gap-2"><Snowflake className="w-4 h-4 text-sky-600" /> Winterdienst</p>
+                      <p className="text-[10px] text-muted-foreground font-medium mt-0.5">Objekt erscheint im Winterdienst-Protokoll und bekommt bei Frost oder Schnee automatisch eine Aufgabe im Tourplan.</p>
+                    </div>
+                  </label>
+                  {form.winterEnabled && (
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 px-1">
+                      <div className="space-y-2">
+                        <Label className="text-[10px] font-black uppercase text-primary/60 tracking-widest">Zu räumende Flächen (mit Komma)</Label>
+                        <Input value={form.winterAreas} onChange={e => set('winterAreas', e.target.value)} placeholder="Gehweg, Hauseingang, Parkplatz" className="rounded-xl font-bold" />
+                      </div>
+                      <div className="space-y-2">
+                        <Label className="text-[10px] font-black uppercase text-primary/60 tracking-widest">Hinweise für Mitarbeiter</Label>
+                        <Input value={form.winterNotes} onChange={e => set('winterNotes', e.target.value)} placeholder="z. B. werktags ab 7 Uhr geräumt" className="rounded-xl font-bold" />
+                      </div>
+                    </div>
+                  )}
                 </div>
               </div>
             </TabsContent>

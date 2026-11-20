@@ -31,6 +31,7 @@ export const CATEGORY_LABELS: Record<string, string> = {
   GARTEN_PFLEGE:   'Gartenpflege',
   BAEUME_PRUEFEN:  'Bäume prüfen',
   LAUBAUFNAHME:    'Laubaufnahme',
+  WINTERDIENST:    'Winterdienst',
 };
 
 export const GPS_RADIUS_METERS = 300;
