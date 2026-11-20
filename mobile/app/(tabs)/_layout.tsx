@@ -45,6 +45,13 @@ export default function TabLayout() {
         }}
       />
       <Tabs.Screen
+        name="winter"
+        options={{
+          title: 'Winter',
+          tabBarIcon: ({ color, size }) => <Ionicons name="snow-outline" size={size} color={color} />,
+        }}
+      />
+      <Tabs.Screen
         name="notes"
         options={{
           title: 'Notizen',
