@@ -138,7 +138,7 @@ export default function LoginScreen() {
           </TouchableOpacity>
         </View>
 
-        <Text style={styles.footer}>© 2026 Tuhmaz Hausmeister Pro</Text>
+        <Text style={styles.footer}>© Hausmeister Pro</Text>
       </ScrollView>
 
       {/* Server Settings Modal */}

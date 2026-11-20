@@ -23,6 +23,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { useAuth } from '@/db/provider';
 import { useToast } from '@/hooks/use-toast';
+import { useCompanyBranding } from '@/hooks/use-company';
 
 interface ShellProps {
   children: React.ReactNode;
@@ -31,6 +32,7 @@ interface ShellProps {
 }
 
 export function Shell({ children, userRole, userName }: ShellProps) {
+  const { branding, productName, companyName } = useCompanyBranding();
   const pathname = usePathname();
   const router = useRouter();
   const { logout, changePassword } = useAuth();
@@ -94,12 +96,19 @@ export function Shell({ children, userRole, userName }: ShellProps) {
       <Sidebar className="border-none shadow-xl print:hidden">
         <SidebarHeader className="p-6">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 bg-accent rounded-lg flex items-center justify-center">
-              <MapPin className="text-primary w-6 h-6" />
+            <div className="w-10 h-10 bg-accent rounded-lg flex items-center justify-center overflow-hidden shrink-0">
+              {branding?.logoData ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img src={branding.logoData} alt="" className="w-full h-full object-contain bg-white p-0.5" />
+              ) : (
+                <MapPin className="text-primary w-6 h-6" />
+              )}
             </div>
-            <div>
-              <h1 className="font-bold text-xl tracking-tight text-white">Haus Pro</h1>
-              <p className="text-xs text-sidebar-foreground/70 uppercase font-semibold">Tuhmaz Group</p>
+            <div className="min-w-0">
+              <h1 className="font-bold text-xl tracking-tight text-white truncate">{productName}</h1>
+              {companyName && (
+                <p className="text-xs text-sidebar-foreground/70 uppercase font-semibold truncate">{companyName}</p>
+              )}
             </div>
           </div>
         </SidebarHeader>
