@@ -61,6 +61,21 @@ Each company sets its own headquarters and remote-site rule
 (Einstellungen → Standort & Fahrzeiten); all travel times are computed on
 the server from these.
 
+## Winterdienst
+
+Web: **Winterdienst** (managers, leaders) — today's status per site, the
+season log per site, corrections, Streuprotokoll as PDF, and per-site setup
+(areas, notes). Worker app: **Winter** tab — pick a site, choose the activity
+and grit, take a photo; time and GPS are captured on save. Without signal the
+entry is stored on the phone and sent later (up to 72 h).
+
+The log (`winter_service_logs`) is evidence for liability cases:
+append-only (a database trigger blocks UPDATE/DELETE), every entry is
+SHA-256-chained to the previous one of the same company, and
+`GET /api/winter/verify` recomputes the chain. Mistakes are fixed by
+correction entries with a reason; the original stays. Weather at the time
+of work comes from the German Weather Service (DWD) via Bright Sky.
+
 ## Photos and voice notes
 
 Media is stored as files, not in the database. `STORAGE_DRIVER` picks where:

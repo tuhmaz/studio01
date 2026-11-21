@@ -24,7 +24,8 @@ export type Permission =
   | 'payroll.settle'
   | 'reports.export'
   | 'audit_logs.view'
-  | 'settings.manage';
+  | 'settings.manage'
+  | 'winter.manage';
 
 export const ROLE_PERMISSIONS: Record<Role, Permission[]> = {
   SUPER_ADMIN: ['*'],
@@ -36,13 +37,13 @@ export const ROLE_PERMISSIONS: Record<Role, Permission[]> = {
     'time_entries.view', 'time_entries.manage', 'time_entries.approve',
     'work_logs.view', 'work_logs.create',
     'payroll.view', 'payroll.manage', 'payroll.settle',
-    'reports.export', 'audit_logs.view', 'settings.manage',
+    'reports.export', 'audit_logs.view', 'settings.manage', 'winter.manage',
   ],
   MANAGER: [
     'companies.view', 'users.view', 'job_sites.view', 'job_sites.manage',
     'assignments.view', 'assignments.manage',
     'time_entries.view', 'time_entries.manage', 'time_entries.approve',
-    'work_logs.view', 'work_logs.create', 'payroll.view', 'reports.export',
+    'work_logs.view', 'work_logs.create', 'payroll.view', 'reports.export', 'winter.manage',
   ],
   ACCOUNTANT: [
     'companies.view', 'users.view', 'time_entries.view', 'work_logs.view',

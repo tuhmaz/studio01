@@ -3,7 +3,7 @@
 import React, { useState } from 'react';
 import {
   LayoutDashboard, Calendar, MapPin, Users, FileText, LogOut,
-  Clock, Briefcase, UserCheck, Settings, Lock, Loader2, Wallet, History
+  Clock, Briefcase, UserCheck, Settings, Lock, Loader2, Wallet, History, Snowflake
 } from 'lucide-react';
 import {
   Sidebar, SidebarContent, SidebarFooter, SidebarHeader,
@@ -50,6 +50,7 @@ export function Shell({ children, userRole, userName }: ShellProps) {
     { label: 'Einsatzplanung',icon: UserCheck,       href: '/deployment', roles: ['SUPER_ADMIN', 'ADMIN', 'MANAGER', 'LEADER'] },
     { label: 'Objekte',       icon: Briefcase,       href: '/jobs',       roles: ['SUPER_ADMIN', 'ADMIN', 'MANAGER', 'LEADER'] },
     { label: 'Objekt-Verlauf',icon: History,         href: '/history',    roles: ['SUPER_ADMIN', 'ADMIN', 'MANAGER', 'LEADER'] },
+    { label: 'Winterdienst',  icon: Snowflake,       href: '/winter',     roles: ['SUPER_ADMIN', 'ADMIN', 'MANAGER', 'LEADER'] },
     { label: 'Zeiterfassung', icon: Clock,           href: '/tracking',   roles: ['SUPER_ADMIN', 'ADMIN', 'MANAGER', 'ACCOUNTANT', 'LEADER', 'WORKER'] },
     { label: 'Team',          icon: Users,           href: '/team',       roles: ['SUPER_ADMIN', 'ADMIN'] },
     { label: 'Berichte',      icon: FileText,        href: '/reports',    roles: ['SUPER_ADMIN', 'ADMIN', 'MANAGER', 'ACCOUNTANT'] },
@@ -165,16 +166,7 @@ export function Shell({ children, userRole, userName }: ShellProps) {
             <SidebarTrigger />
             <div className="h-6 w-[1px] bg-border hidden md:block" />
             <h2 className="text-lg font-bold text-primary capitalize hidden md:block">
-              {pathname === '/dashboard'  ? 'Übersicht'      :
-               pathname === '/schedule'   ? 'Tourplan'        :
-               pathname === '/deployment' ? 'Einsatz'         :
-               pathname === '/jobs'       ? 'Objekte'         :
-               pathname === '/history'    ? 'Objekt-Verlauf'  :
-               pathname === '/tracking'   ? 'Zeiterfassung'   :
-               pathname === '/team'       ? 'Team'            :
-               pathname === '/reports'    ? 'Berichte'        :
-               pathname === '/payroll'    ? 'Lohnabrechnung'  :
-               pathname === '/settings'   ? 'Einstellungen'   : 'Home'}
+              {navItems.find(item => pathname.startsWith(item.href))?.label ?? 'Übersicht'}
             </h2>
           </div>
           <div className="flex items-center gap-3">
