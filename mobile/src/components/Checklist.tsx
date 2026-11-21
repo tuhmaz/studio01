@@ -3,7 +3,8 @@
  *
  * One row per service: tap the camera for a before photo, tap ✓ when done
  * (or take the after photo, which also marks it done), or ✗ with a short
- * reason when it was not possible. Every tap is saved right away.
+ * reason when it was not possible. Every tap is saved right away – on the
+ * server, or without signal on the phone (sent later, with the time of the tap).
  */
 import React, { useCallback, useEffect, useState } from 'react';
 import {
@@ -11,26 +12,10 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
-import { apiFetch } from '@/api/client';
 import { MediaImage } from '@/components/MediaImage';
+import { useAuth } from '@/context/AuthContext';
 import { COLORS } from '@/utils/constants';
-
-type Status = 'started' | 'done' | 'not_possible';
-
-interface Item {
-  code: string;
-  label: string;
-  check: null | { status: Status; reason: string | null; before_url: string | null; after_url: string | null };
-}
-
-interface ChecklistData {
-  assignment: { id: string; date: string; site: { name: string } | null; title: string };
-  items: Item[];
-}
-
-export async function fetchChecklist(assignmentId: string) {
-  return apiFetch<ChecklistData>(`/api/checks?assignmentId=${encodeURIComponent(assignmentId)}`);
-}
+import { checkService, loadChecklist, type ChecklistData, type ChecklistItem as Item } from '@/sync/field';
 
 async function takePhoto(): Promise<string | null> {
   const perm = await ImagePicker.requestCameraPermissionsAsync();
@@ -44,26 +29,30 @@ async function takePhoto(): Promise<string | null> {
 }
 
 export function ChecklistModal({ assignmentId, onClose }: { assignmentId: string; onClose: (done: number, total: number) => void }) {
+  const { user } = useAuth();
   const [data, setData] = useState<ChecklistData | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [reasonFor, setReasonFor] = useState<string | null>(null);
   const [reason, setReason] = useState('');
 
   const load = useCallback(async () => {
+    if (!user) return;
     try {
-      setData(await fetchChecklist(assignmentId));
+      setData(await loadChecklist(user, assignmentId));
     } catch (e: any) {
       Alert.alert('Checkliste nicht verfügbar', e?.message ?? 'Bitte Verbindung prüfen.');
       onClose(0, 0);
     }
-  }, [assignmentId, onClose]);
+  }, [assignmentId, onClose, user]);
 
   useEffect(() => { load(); }, [load]);
 
-  const send = async (code: string, body: Record<string, unknown>) => {
+  const send = async (code: string, body: Parameters<typeof checkService>[3]) => {
+    const item = data?.items.find(i => i.code === code);
+    if (!user || !item) return;
     setBusy(code);
     try {
-      await apiFetch('/api/checks', { method: 'POST', body: { assignmentId, serviceCode: code, ...body } }, 45000);
+      await checkService(user, assignmentId, item, body);
       await load();
     } catch (e: any) {
       Alert.alert('Nicht gespeichert', e?.message ?? 'Bitte erneut versuchen.');
@@ -112,6 +101,9 @@ export function ChecklistModal({ assignmentId, onClose }: { assignmentId: string
 
         <ScrollView contentContainerStyle={{ padding: 16, paddingBottom: 40 }}>
           {!data && <ActivityIndicator color={COLORS.primary} style={{ marginTop: 40 }} />}
+          {data?.offline && (
+            <Text style={s.offline}>Offline – alles wird auf dem Handy gespeichert und später gesendet.</Text>
+          )}
           {data && items.length === 0 && (
             <Text style={s.empty}>Für diesen Einsatz sind keine Leistungen hinterlegt.</Text>
           )}
@@ -125,6 +117,7 @@ export function ChecklistModal({ assignmentId, onClose }: { assignmentId: string
                   {isBusy && <ActivityIndicator color={COLORS.primary} />}
                 </View>
                 {status === 'not_possible' && <Text style={s.reason}>Nicht möglich: {item.check?.reason}</Text>}
+                {item.check?.pending && <Text style={s.pending}>Auf dem Handy gespeichert – wird gesendet</Text>}
 
                 <View style={s.photos}>
                   {item.check?.before_url
@@ -208,6 +201,8 @@ const s = StyleSheet.create({
   row:        { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   label:      { fontSize: 15, fontWeight: '800', color: COLORS.text, flex: 1 },
   reason:     { fontSize: 12, color: COLORS.danger, marginTop: 4, fontWeight: '600' },
+  pending:    { fontSize: 11, color: '#b45309', marginTop: 4, fontWeight: '700' },
+  offline:    { fontSize: 12, color: '#92400e', backgroundColor: '#fef3c7', borderRadius: 10, padding: 10, marginBottom: 12, fontWeight: '600' },
   photos:     { flexDirection: 'row', gap: 8, marginTop: 8 },
   thumb:      { width: 72, height: 54, borderRadius: 8 },
   actions:    { flexDirection: 'row', gap: 8, marginTop: 10, alignItems: 'center' },

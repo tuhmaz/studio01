@@ -5,6 +5,7 @@ import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { AuthProvider, useAuth } from '@/context/AuthContext';
 import { OfflineBanner } from '@/components/OfflineBanner';
+import { SyncProvider } from '@/sync/SyncContext';
 import { COLORS } from '@/utils/constants';
 
 function RootLayoutNav() {
@@ -41,7 +42,9 @@ export default function RootLayout() {
     <GestureHandlerRootView style={{ flex: 1 }}>
       <SafeAreaProvider>
         <AuthProvider>
-          <RootLayoutNav />
+          <SyncProvider>
+            <RootLayoutNav />
+          </SyncProvider>
         </AuthProvider>
       </SafeAreaProvider>
     </GestureHandlerRootView>

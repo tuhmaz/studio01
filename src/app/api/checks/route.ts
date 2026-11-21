@@ -14,9 +14,12 @@ import { CheckError, assertVisitAccess, checklistItems, loadVisit, presentCheck 
 import { MediaError, mediaIdFromUrl, storeDataUrl } from '@/lib/media';
 import { hasPermission } from '@/lib/permissions';
 import { getRequestSession } from '@/lib/request-context';
+import { FieldError, clientTime } from '@/lib/field-ops';
 
 function errorResponse(error: unknown, route: string) {
-  if (error instanceof CheckError) return NextResponse.json({ error: error.message }, { status: error.status });
+  if (error instanceof CheckError || error instanceof FieldError) {
+    return NextResponse.json({ error: error.message }, { status: error.status });
+  }
   if (error instanceof MediaError) return NextResponse.json({ error: error.message }, { status: 400 });
   console.error(`[${route}]`, error);
   return NextResponse.json({ error: 'Serverfehler' }, { status: 500 });
@@ -68,6 +71,8 @@ export async function POST(req: NextRequest) {
     if (!['started', 'done', 'not_possible', 'open'].includes(String(status))) throw new CheckError('Ungültiger Status');
     const reason = typeof body.reason === 'string' ? body.reason.trim().slice(0, 500) : '';
     if (status === 'not_possible' && reason.length < 3) throw new CheckError('Bitte kurz den Grund angeben');
+    // Offline in der App abgehakt: Zeitpunkt vom Gerät (≤ 72 h), sonst jetzt.
+    const checkedAt = clientTime(body.checkedAt).toISOString();
     for (const photo of [body.beforePhoto, body.afterPhoto]) {
       if (photo != null && typeof photo !== 'string') throw new CheckError('Ungültiges Foto');
     }
@@ -94,10 +99,10 @@ export async function POST(req: NextRequest) {
       const [saved] = await db`
         INSERT INTO service_checks
           (company_id, job_assignment_id, job_site_id, service_code, service_label, status, reason,
-           before_media_id, after_media_id, employee_id, employee_name)
+           before_media_id, after_media_id, employee_id, employee_name, checked_at)
         VALUES
           (${companyId}, ${visit.id}, ${visit.job_site_id}, ${serviceCode}, ${item.label}, ${status as string},
-           ${status === 'not_possible' ? reason : null}, ${beforeId}, ${afterId}, ${session.userId}, ${session.name})
+           ${status === 'not_possible' ? reason : null}, ${beforeId}, ${afterId}, ${session.userId}, ${session.name}, ${checkedAt})
         ON CONFLICT (job_assignment_id, service_code) DO UPDATE SET
           -- Adding a before photo later never undoes a finished check.
           status          = CASE WHEN EXCLUDED.status = 'started' AND service_checks.status <> 'started'
@@ -107,6 +112,9 @@ export async function POST(req: NextRequest) {
           after_media_id  = coalesce(EXCLUDED.after_media_id, service_checks.after_media_id),
           employee_id     = EXCLUDED.employee_id,
           employee_name   = EXCLUDED.employee_name,
+          -- Ein späteres Vorher-Foto verschiebt den Zeitpunkt der Erledigung nicht.
+          checked_at      = CASE WHEN EXCLUDED.status = 'started' AND service_checks.status <> 'started'
+                                 THEN service_checks.checked_at ELSE EXCLUDED.checked_at END,
           updated_at      = now()
         WHERE service_checks.company_id = ${companyId}
         RETURNING *

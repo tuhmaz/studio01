@@ -2,6 +2,8 @@ import { fileURLToPath } from 'node:url';
 import { defineConfig } from 'vitest/config';
 
 const alias = { '@': fileURLToPath(new URL('./src', import.meta.url)) };
+// Logik der Mitarbeiter-App (ohne React Native): eigener Alias auf mobile/src.
+const mobileAlias = { '@': fileURLToPath(new URL('./mobile/src', import.meta.url)) };
 
 export default defineConfig({
   resolve: { alias },
@@ -15,6 +17,14 @@ export default defineConfig({
           name: 'unit',
           environment: 'node',
           include: ['src/**/*.test.ts'],
+        },
+      },
+      {
+        resolve: { alias: mobileAlias },
+        test: {
+          name: 'mobile',
+          environment: 'node',
+          include: ['mobile/src/**/*.test.ts'],
         },
       },
       {

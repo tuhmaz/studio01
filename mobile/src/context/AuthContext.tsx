@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import { getToken, setToken, clearToken, setUnauthorizedHandler } from '@/api/client';
-import { login as apiLogin, logout as apiLogout, verifySession, MobileUser } from '@/api/auth';
+import { login as apiLogin, logout as apiLogout, verifySession, rememberProfile, rememberedProfile, MobileUser } from '@/api/auth';
 
 interface AuthState {
   user:      MobileUser | null;
@@ -25,6 +25,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     setUnauthorizedHandler(() => {
       clearToken().catch(() => {});
+      rememberProfile(null).catch(() => {});
       setTokenState(null);
       setUser(null);
     });
@@ -37,17 +38,29 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       try {
         const stored = await getToken();
         if (stored) {
-          const profile = await verifySession(stored);
-          if (profile) {
-            setTokenState(stored);
-            setUser(profile);
-          } else {
-            // Token abgelaufen oder ungültig — aus SecureStore löschen
-            await clearToken();
+          try {
+            const profile = await verifySession(stored);
+            if (profile) {
+              setTokenState(stored);
+              setUser(profile);
+              await rememberProfile(profile);
+            } else {
+              // Vom Server abgelehnt (abgelaufen/widerrufen) — abmelden.
+              await clearToken();
+              await rememberProfile(null);
+            }
+          } catch {
+            // Kein Netz beim Start: mit dem gemerkten Profil offline weiterarbeiten.
+            // Lehnt der Server die Sitzung später ab (401), meldet die App ab.
+            const cached = await rememberedProfile();
+            if (cached) {
+              setTokenState(stored);
+              setUser(cached);
+            }
           }
         }
       } catch {
-        // Netzwerkfehler beim Start: Token behalten für nächsten Versuch
+        // SecureStore nicht lesbar – Anmeldung anzeigen.
       } finally {
         setLoading(false);
       }
@@ -57,6 +70,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const login = async (email: string, password: string) => {
     const { token: t, user: u } = await apiLogin(email, password);
     await setToken(t);
+    await rememberProfile(u);
     setTokenState(t);
     setUser(u);
   };

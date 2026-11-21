@@ -11,16 +11,18 @@ import {
 } from 'expo-audio';
 import { useFocusEffect } from 'expo-router';
 import { useAuth } from '@/context/AuthContext';
-import { apiData } from '@/api/client';
 import { MediaImage } from '@/components/MediaImage';
 import { COLORS } from '@/utils/constants';
-import { randomId, formatTime } from '@/utils/helpers';
+import { formatTime } from '@/utils/helpers';
+import { addNote, loadNotes, loadTracking, type NoteEntry, type TimeEntry } from '@/sync/field';
+import { useSync } from '@/sync/SyncContext';
 
-interface ActiveEntry { id: string; job_assignment_id: string; job_site_id: string | null; }
-interface NoteEntry   { id: string; type: string; content: string; author_name: string; created_at: string; duration?: number; }
+type ActiveEntry = TimeEntry;
 
 export default function NotesScreen() {
   const { user } = useAuth();
+  const { lastSyncAt } = useSync();
+  const [offline, setOffline] = useState(false);
 
   const [activeEntry,  setActiveEntry]  = useState<ActiveEntry | null>(null);
   const [notes,        setNotes]        = useState<NoteEntry[]>([]);
@@ -37,21 +39,24 @@ export default function NotesScreen() {
     if (!user) return;
     if (!silent) setLoading(true);
     try {
-      const eRes = await apiData<ActiveEntry[]>({ action: 'query', table: 'time_entries', filters: { employee_id: user.id, status: 'OPEN' } });
-      const entry = (eRes.data ?? [])[0] ?? null;
+      // Offline: Schicht und Notizen aus dem gespeicherten Stand + wartende Vorgänge.
+      const tracking = await loadTracking(user);
+      const entry = tracking.activeEntry;
       setActiveEntry(entry);
       if (entry) {
-        const nRes = await apiData<NoteEntry[]>({
-          action: 'query', table: 'work_log_entries',
-          filters: { job_assignment_id: entry.job_assignment_id },
-          orderBy: { column: 'created_at', ascending: false },
-        });
-        setNotes(nRes.data ?? []);
+        const { notes: list, offline: off } = await loadNotes(user, entry.job_assignment_id);
+        setNotes(list);
+        setOffline(off || tracking.offline);
       } else {
         setNotes([]);
+        setOffline(tracking.offline);
       }
+    } catch (e: any) {
+      Alert.alert('Fehler', e?.message);
     } finally { setLoading(false); }
   }, [user]);
+
+  useEffect(() => { if (lastSyncAt) void load(true); }, [lastSyncAt, load]);
 
   useEffect(() => { load(); }, [load]);
   useFocusEffect(
@@ -64,14 +69,8 @@ export default function NotesScreen() {
     if (!user || !activeEntry) return;
     setSaving(true);
     try {
-      await apiData({ action: 'insert', table: 'work_log_entries', data: {
-        id: `note-${randomId()}`, company_id: user.companyId,
-        time_entry_id: activeEntry.id, employee_id: user.id,
-        job_assignment_id: activeEntry.job_assignment_id,
-        job_site_id: activeEntry.job_site_id,
-        type, content, author_name: user.name, duration: duration ?? null,
-      }});
-      await load();
+      await addNote(user, activeEntry, { type, content, duration });
+      await load(true);
     } catch (e: any) {
       Alert.alert('Fehler', e?.message);
     } finally { setSaving(false); }
@@ -210,6 +209,9 @@ export default function NotesScreen() {
         {!loading && filtered.length === 0 && (
           <Text style={styles.emptyHint}>Noch keine Einträge.</Text>
         )}
+        {offline && (
+          <Text style={styles.offlineNote}>Offline – neue Notizen, Fotos und Sprachnachrichten werden auf dem Handy gespeichert und später gesendet.</Text>
+        )}
         {filtered.map(n => (
           <View key={n.id} style={styles.noteCard}>
             <View style={styles.noteMeta}>
@@ -219,6 +221,7 @@ export default function NotesScreen() {
               />
               <Text style={styles.noteAuthor}>{n.author_name}</Text>
               <Text style={styles.noteTime}>{formatTime(n.created_at)}</Text>
+              {n.pending && <Ionicons name="cloud-upload-outline" size={14} color="#b45309" />}
             </View>
             {n.type === 'photo' && (
               <MediaImage content={n.content} style={styles.noteImage} resizeMode="cover" />
@@ -240,6 +243,7 @@ export default function NotesScreen() {
 }
 
 const styles = StyleSheet.create({
+  offlineNote: { fontSize: 12, color: '#92400e', backgroundColor: '#fef3c7', borderRadius: 10, padding: 10, marginBottom: 12, fontWeight: '600' },
   container:   { flex: 1, backgroundColor: COLORS.bg },
   header:      { backgroundColor: COLORS.primary, paddingTop: 56, paddingBottom: 20, paddingHorizontal: 20 },
   headerTitle: { color: '#fff', fontSize: 22, fontWeight: '900' },
