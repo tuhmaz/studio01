@@ -23,6 +23,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { LeistungsnachweisView } from '@/components/reports/LeistungsnachweisView';
 import { useAuth } from '@/db/provider';
 import { useToast } from '@/hooks/use-toast';
+import { compressImage } from '@/lib/image-compress';
 import { lastMonths, type LeistungsnachweisReport } from '@/lib/leistungsnachweis-types';
 import { exportLeistungsnachweisPdf } from '@/lib/leistungsnachweis-pdf';
 
@@ -102,27 +103,6 @@ async function api<T>(url: string, init?: Parameters<typeof fetch>[1]): Promise<
   const data = await res.json().catch(() => null);
   if (!res.ok) throw new Error(data?.error ?? `Fehler (HTTP ${res.status})`);
   return data as T;
-}
-
-/** Verkleinert ein Handyfoto auf max. 1600 px (JPEG), damit der Upload schnell geht. */
-async function compressImage(file: File): Promise<string> {
-  const url = URL.createObjectURL(file);
-  try {
-    const img = await new Promise<InstanceType<typeof window.Image>>((resolve, reject) => {
-      const el = new window.Image();
-      el.onload = () => resolve(el);
-      el.onerror = () => reject(new Error('Bild konnte nicht gelesen werden'));
-      el.src = url;
-    });
-    const scale = Math.min(1, 1600 / Math.max(img.width, img.height));
-    const canvas = window.document.createElement('canvas');
-    canvas.width = Math.round(img.width * scale);
-    canvas.height = Math.round(img.height * scale);
-    canvas.getContext('2d')?.drawImage(img, 0, 0, canvas.width, canvas.height);
-    return canvas.toDataURL('image/jpeg', 0.82);
-  } finally {
-    URL.revokeObjectURL(url);
-  }
 }
 
 export default function PortalPage() {

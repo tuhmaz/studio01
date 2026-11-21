@@ -12,7 +12,7 @@ import { useAuth } from '@/context/AuthContext';
 import { apiData } from '@/api/client';
 import { COLORS, categoryLabel, GPS_RADIUS_METERS } from '@/utils/constants';
 import { gpsDistance, formatDuration, formatTime, elapsedMinutes, randomId } from '@/utils/helpers';
-import { ChecklistModal } from '@/components/Checklist';
+import { ChecklistModal, fetchChecklist } from '@/components/Checklist';
 import { fetchWinterSites, queuedEntries } from '@/api/winter';
 
 interface Assignment { id: string; title: string; status: string; scheduled_date: string; job_site_id: string | null; categories: string[]; assigned_worker_ids: string[]; }
@@ -199,8 +199,37 @@ export default function TrackingScreen() {
     if (activeAssign?.job_site_id) router.push({ pathname: '/(tabs)/winter', params: { siteId: activeAssign.job_site_id } });
   };
 
+  /** Leistungen der Checkliste ohne Rückmeldung (offline: keine Warnung). */
+  const openChecklistItems = async (): Promise<string[]> => {
+    if (!activeAssign || !activeAssign.categories.some(c => c !== 'WINTERDIENST')) return [];
+    try {
+      const data = await fetchChecklist(activeAssign.id);
+      return data.items
+        .filter(i => i.check?.status !== 'done' && i.check?.status !== 'not_possible')
+        .map(i => i.label);
+    } catch {
+      return [];
+    }
+  };
+
   const clockOut = async () => {
     if (!user || !activeEntry || clocking) return;
+    const open = await openChecklistItems();
+    if (open.length) {
+      Alert.alert(
+        `${open.length} Leistung${open.length === 1 ? '' : 'en'} ohne Rückmeldung`,
+        `${open.join(', ')}\n\nIm Leistungsnachweis steht sonst „keine Rückmeldung“.`,
+        [
+          { text: 'Zur Checkliste', onPress: () => setChecklistOpen(true) },
+          { text: 'Trotzdem ausstempeln', style: 'destructive', onPress: () => { void clockOutAfterChecklist(); } },
+        ],
+      );
+      return;
+    }
+    await clockOutAfterChecklist();
+  };
+
+  const clockOutAfterChecklist = async () => {
     if (await winterProtocolMissing()) {
       Alert.alert(
         'Winterdienst nicht protokolliert',
