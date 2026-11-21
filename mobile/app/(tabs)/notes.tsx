@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import {
   View, Text, ScrollView, StyleSheet, TouchableOpacity,
-  TextInput, Alert, ActivityIndicator, Image,
+  TextInput, Alert, ActivityIndicator,
 } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { Ionicons } from '@expo/vector-icons';
@@ -12,6 +12,7 @@ import {
 import { useFocusEffect } from 'expo-router';
 import { useAuth } from '@/context/AuthContext';
 import { apiData } from '@/api/client';
+import { MediaImage } from '@/components/MediaImage';
 import { COLORS } from '@/utils/constants';
 import { randomId, formatTime } from '@/utils/helpers';
 
@@ -220,7 +221,7 @@ export default function NotesScreen() {
               <Text style={styles.noteTime}>{formatTime(n.created_at)}</Text>
             </View>
             {n.type === 'photo' && (
-              <Image source={{ uri: n.content }} style={styles.noteImage} resizeMode="cover" />
+              <MediaImage content={n.content} style={styles.noteImage} resizeMode="cover" />
             )}
             {n.type === 'text' && (
               <Text style={styles.noteText}>{n.content}</Text>

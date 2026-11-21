@@ -69,3 +69,6 @@ firestore-debug.log
 /mobile/android/app/debug.keystore
 /mobile/ios/Pods/
 /mobile/ios/build/
+
+# uploaded files (STORAGE_DRIVER=local)
+/storage/

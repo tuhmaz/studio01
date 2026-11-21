@@ -4,6 +4,7 @@ import sql, { withTenant, type Db } from '@/lib/db';
 import { getRequestSession } from '@/lib/request-context';
 import { hasPermission, normalizeRole, Role } from '@/lib/permissions';
 import { ALWAYS_FORBIDDEN_WRITE_FIELDS } from '@/lib/security';
+import { MediaError, externalizeWorkLogMedia } from '@/lib/media';
 
 type FilterValue = string | number | boolean | null;
 type Filters = Record<string, FilterValue>;
@@ -94,6 +95,7 @@ function err(msg: string, status = 400) {
 }
 
 function safeDataError(error: unknown): { message: string; status: number } {
+  if (error instanceof MediaError) return { message: error.message, status: 400 };
   const message = error instanceof Error ? error.message : String(error);
   if (message === 'Keine Berechtigung') return { message, status: 403 };
   if (
@@ -491,6 +493,7 @@ export async function POST(req: NextRequest) {
             rows.forEach(row => normalizeTimeEntryRow(row));
           }
           if (table === 'users') assertRoleAssignment(rows, session);
+          if (table === 'work_log_entries') await externalizeWorkLogMedia(db, rows, session);
           const inserted = await db`INSERT INTO ${db(table)} ${db(rows)} RETURNING *`;
           return NextResponse.json({ data: inserted });
         }
@@ -503,6 +506,7 @@ export async function POST(req: NextRequest) {
             rows.forEach(row => normalizeTimeEntryRow(row));
           }
           if (table === 'users') assertRoleAssignment(rows, session);
+          if (table === 'work_log_entries') await externalizeWorkLogMedia(db, rows, session);
           const updateColumns = Object.keys(rows[0]).filter(key => key !== 'id');
           // Scope the conflict update so a client can never overwrite (and thereby
           // take over) a row that belongs to a different company.
@@ -550,6 +554,7 @@ export async function POST(req: NextRequest) {
             }
             rows.forEach(row => normalizeTimeEntryRow(row, existing));
           }
+          if (table === 'work_log_entries') await externalizeWorkLogMedia(db, rows, session);
           const conditions = filterConditions(table, filters);
           const whereClause = conditions.reduce((a, b) => db`${a} AND ${b}`);
           const updated = await db`
