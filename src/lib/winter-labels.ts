@@ -16,3 +16,6 @@ export const MATERIALS = {
   mixed: 'Gemisch',
 } as const;
 export type Material = keyof typeof MATERIALS;
+
+/** Tätigkeiten, bei denen das Streumittel Pflicht ist. */
+export const NEEDS_MATERIAL: Activity[] = ['gritting', 'clearing_gritting'];

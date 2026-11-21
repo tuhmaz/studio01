@@ -15,7 +15,7 @@ import { mediaIdFromUrl, storeDataUrl } from '@/lib/media';
 import { hasPermission, normalizeRole } from '@/lib/permissions';
 import { getRequestSession } from '@/lib/request-context';
 import { WinterError, appendWinterLog, fetchWeather, parseWork } from '@/lib/winter';
-import { errorResponse, optionalCoordinate, optionalUuid, presentLog } from '@/lib/winter-api';
+import { errorResponse, isUuid, optionalCoordinate, optionalUuid, presentLog } from '@/lib/winter-api';
 import { completeWinterTask } from '@/lib/winter-plan';
 
 const MAX_LIST = 2000;
@@ -74,8 +74,8 @@ export async function POST(req: NextRequest) {
     const { companyId } = session;
     const work = parseWork(body);
     const clientRequestId = optionalUuid(body.clientRequestId, 'Anfrage-ID');
-    const lat = optionalCoordinate(body.lat, 90);
-    const lng = optionalCoordinate(body.lng, 180);
+    let lat = optionalCoordinate(body.lat, 90);
+    let lng = optionalCoordinate(body.lng, 180);
     const gpsAccuracy = body.gpsAccuracyM == null ? null : Math.max(0, Math.round(Number(body.gpsAccuracyM) || 0));
     if ((lat == null) !== (lng == null)) throw new WinterError('Ungültige GPS-Position');
     if (body.photo != null && typeof body.photo !== 'string') throw new WinterError('Ungültiges Foto');
@@ -96,6 +96,22 @@ export async function POST(req: NextRequest) {
     if (!site) throw new WinterError('Objekt nicht gefunden', 404);
     if (!site.winter_service_enabled) throw new WinterError('Für dieses Objekt ist kein Winterdienst eingerichtet');
 
+    // Büro (winter.manage) darf für einen Mitarbeiter nachtragen; der Eintrag
+    // zeigt dann beide: wer gearbeitet hat und wer es erfasst hat.
+    let employee = { id: session.userId, name: session.name };
+    if (body.employeeId != null && body.employeeId !== session.userId) {
+      if (!hasPermission(session, 'winter.manage')) throw new WinterError('Nur das Büro darf für andere Mitarbeiter erfassen', 403);
+      if (!isUuid(body.employeeId)) throw new WinterError('Ungültiger Mitarbeiter');
+      const [worker] = await withTenant(companyId, db => db`
+        SELECT id, name FROM users WHERE id = ${body.employeeId} AND company_id = ${companyId} AND role <> 'CLIENT'
+      `);
+      if (!worker) throw new WinterError('Mitarbeiter nicht gefunden', 404);
+      employee = { id: worker.id, name: worker.name };
+      // Die Position des Büros ist kein Nachweis für den Einsatzort.
+      lat = null;
+      lng = null;
+    }
+
     // Weather first (network), outside the transaction.
     const wLat = lat ?? (site.lat == null ? null : Number(site.lat));
     const wLng = lng ?? (site.lng == null ? null : Number(site.lng));
@@ -110,8 +126,8 @@ export async function POST(req: NextRequest) {
         company_id: companyId,
         job_site_id: site.id,
         site_label: [site.name, [site.address, site.city].filter(Boolean).join(', ')].filter(Boolean).join(' — '),
-        employee_id: session.userId,
-        employee_name: session.name,
+        employee_id: employee.id,
+        employee_name: employee.name,
         entered_by: session.userId,
         entered_by_name: session.name,
         performed_at: work.performedAt,
@@ -123,7 +139,7 @@ export async function POST(req: NextRequest) {
         notes: work.notes,
         lat,
         lng,
-        gps_accuracy_m: gpsAccuracy,
+        gps_accuracy_m: lat == null ? null : gpsAccuracy,
         photo_media_id: photoMediaId,
         weather,
         corrects_log_id: null,

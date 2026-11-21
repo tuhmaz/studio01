@@ -8,7 +8,7 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import {
-  CalendarPlus, CheckCircle2, Clock, Download, Image as ImageIcon, Loader2, MapPin, Pencil,
+  AlertTriangle, CalendarPlus, CheckCircle2, ClipboardPlus, Clock, Download, Image as ImageIcon, Loader2, MapPin, Pencil,
   Plus, ShieldAlert, ShieldCheck, Snowflake, ThermometerSnowflake, X,
 } from 'lucide-react';
 import Link from 'next/link';
@@ -28,6 +28,7 @@ import { useToast } from '@/hooks/use-toast';
 import { UserRole } from '@/lib/types';
 import { ACTIVITIES, MATERIALS, type Activity, type Material } from '@/lib/winter-labels';
 import { recentSeasons, type Season } from '@/lib/winter-season';
+import { WinterRecordDialog } from '@/components/winter/WinterRecordDialog';
 
 interface WinterSite {
   id: string;
@@ -40,7 +41,33 @@ interface WinterSite {
   last_activity: Activity | null;
   last_employee_name: string | null;
   entries_today: number;
+  /** Heutige Winterdienst-Aufgabe aus Tourplan/Einsatzplanung. */
+  task_status_today: 'PENDING' | 'IN_PROGRESS' | 'COMPLETED' | null;
+  task_workers_today: string[] | null;
 }
+
+interface WinterTask {
+  id: string;
+  date: string;
+  siteId: string;
+  siteName: string;
+  siteAddress: string;
+  status: 'PENDING' | 'IN_PROGRESS' | 'COMPLETED';
+  published: boolean;
+  workers: string[];
+  entries: number;
+  lastEntryAt: string | null;
+  protocol: 'documented' | 'missing' | 'pending';
+}
+
+const TASK_STATUS_DE: Record<WinterTask['status'], string> = {
+  PENDING: 'geplant',
+  IN_PROGRESS: 'läuft',
+  COMPLETED: 'erledigt',
+};
+
+const fmtDay = (iso: string) =>
+  new Date(`${iso}T12:00:00Z`).toLocaleDateString('de-DE', { weekday: 'short', day: '2-digit', month: '2-digit' });
 
 interface LogEntry {
   id: string;
@@ -116,6 +143,8 @@ export default function WinterPage() {
   const [correcting, setCorrecting] = useState<LogEntry | null>(null);
   const [setupOpen, setSetupOpen] = useState(false);
   const [planOpen, setPlanOpen] = useState(false);
+  const [tasks, setTasks] = useState<WinterTask[] | null>(null);
+  const [recording, setRecording] = useState<{ siteId: string; backOffice: boolean; date?: string; employee?: string } | null>(null);
 
   const loadSites = useCallback(async () => {
     try {
@@ -146,12 +175,28 @@ export default function WinterPage() {
     try { setChain(await api<ChainCheck>('/api/winter/verify')); } catch { setChain(null); }
   }, [canManage]);
 
+  const loadTasks = useCallback(async () => {
+    try {
+      setTasks((await api<{ data: WinterTask[] }>('/api/winter/tasks')).data);
+    } catch {
+      setTasks([]);
+    }
+  }, []);
+
+  const afterRecord = () => {
+    setRecording(null);
+    loadSites(); loadEntries(); loadChain(); loadTasks();
+  };
+
   useEffect(() => { loadSites(); }, [loadSites]);
+  useEffect(() => { loadTasks(); }, [loadTasks]);
   useEffect(() => { loadEntries(); }, [loadEntries]);
   useEffect(() => { loadChain(); }, [loadChain]);
 
   const selected = sites?.find(s => s.id === selectedId) ?? null;
   const doneToday = sites?.filter(s => s.entries_today > 0).length ?? 0;
+  const missingTasks = tasks?.filter(t => t.protocol === 'missing') ?? [];
+  const recordSite = recording ? sites?.find(s => s.id === recording.siteId) ?? null : null;
   const lastHash = entries?.[0]?.hash;
 
   const exportPdf = () => {
@@ -169,7 +214,7 @@ export default function WinterPage() {
       ACTIVITIES[e.activity],
       materialText(e),
       e.areas.join(', ') || '—',
-      e.employee_name,
+      e.employee_name + (!e.corrects_log_id && e.entered_by_name && e.entered_by_name !== e.employee_name ? ` (nachgetr. ${e.entered_by_name})` : ''),
       weatherText(e.weather),
       e.lat && e.lng ? `${Number(e.lat).toFixed(5)}, ${Number(e.lng).toFixed(5)}` : '—',
       e.photo_url ? 'ja' : '—',
@@ -258,22 +303,33 @@ export default function WinterPage() {
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
                 {sites.map(site => {
                   const done = site.entries_today > 0;
+                  const taskDoneNoLog = !done && site.task_status_today === 'COMPLETED';
                   return (
                     <button
                       key={site.id}
                       onClick={() => setSelectedId(site.id)}
-                      className={`text-left rounded-2xl border p-4 transition-all ${selectedId === site.id ? 'ring-2 ring-primary' : ''} ${done ? 'border-emerald-200 bg-emerald-50/60' : 'border-amber-200 bg-amber-50/60'}`}
+                      className={`text-left rounded-2xl border p-4 transition-all ${selectedId === site.id ? 'ring-2 ring-primary' : ''} ${done ? 'border-emerald-200 bg-emerald-50/60' : taskDoneNoLog ? 'border-red-300 bg-red-50/70' : 'border-amber-200 bg-amber-50/60'}`}
                     >
                       <div className="flex items-start justify-between gap-2">
                         <p className="font-black text-sm leading-tight">{site.name}</p>
-                        {done ? <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" /> : <Clock className="w-4 h-4 text-amber-600 shrink-0" />}
+                        {done
+                          ? <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                          : taskDoneNoLog
+                            ? <AlertTriangle className="w-4 h-4 text-red-600 shrink-0" />
+                            : <Clock className="w-4 h-4 text-amber-600 shrink-0" />}
                       </div>
                       <p className="text-[11px] text-muted-foreground mt-1 truncate">{[site.address, site.city].filter(Boolean).join(', ')}</p>
                       <p className={`text-xs font-bold mt-2 ${done ? 'text-emerald-700' : 'text-amber-700'}`}>
                         {done
                           ? `${ACTIVITIES[site.last_activity!]} · ${fmtTime(site.last_performed_at!)} · ${site.last_employee_name}`
-                          : 'Noch kein Eintrag'}
+                          : taskDoneNoLog ? 'Erledigt, aber nicht protokolliert' : 'Noch kein Eintrag'}
                       </p>
+                      {site.task_status_today && (
+                        <p className="text-[11px] text-muted-foreground mt-1 truncate">
+                          Tourplan: {TASK_STATUS_DE[site.task_status_today]}
+                          {site.task_workers_today?.length ? ` · ${site.task_workers_today.join(', ')}` : ' · ohne Team'}
+                        </p>
+                      )}
                     </button>
                   );
                 })}
@@ -281,6 +337,45 @@ export default function WinterPage() {
             )}
           </CardContent>
         </Card>
+
+        {/* Tourplan tasks without protocol */}
+        {missingTasks.length > 0 && (
+          <Card className="rounded-3xl border-2 border-red-200 shadow-md">
+            <CardContent className="p-6 space-y-3">
+              <div>
+                <h2 className="font-black text-sm uppercase tracking-widest text-red-700 flex items-center gap-2">
+                  <AlertTriangle className="w-4 h-4" /> Erledigt, aber ohne Streuprotokoll ({missingTasks.length})
+                </h2>
+                <p className="text-xs text-muted-foreground mt-1">
+                  Diese Winterdienst-Aufgaben wurden im Tourplan abgeschlossen (Ausstempeln), es gibt für den Tag aber keinen Eintrag im Protokoll.
+                  Ohne Eintrag fehlt der Nachweis gegenüber Hausverwaltung und Versicherung.
+                  {canManage ? ' Bis 72 Stunden zurück kann das Büro nachtragen.' : ''}
+                </p>
+              </div>
+              <ul className="divide-y rounded-2xl border">
+                {missingTasks.map(t => {
+                  const ageH = (Date.now() - Date.parse(`${t.date}T23:59:00`)) / 3_600_000;
+                  return (
+                    <li key={t.id} className="flex flex-wrap items-center justify-between gap-3 px-4 py-3">
+                      <div className="min-w-0">
+                        <p className="font-bold text-sm">{fmtDay(t.date)} · {t.siteName}</p>
+                        <p className="text-xs text-muted-foreground">{t.siteAddress} · {t.workers.join(', ') || 'ohne Team'}</p>
+                      </div>
+                      {canManage && (ageH < 72 ? (
+                        <Button size="sm" variant="outline" className="rounded-lg font-bold gap-1.5"
+                          onClick={() => setRecording({ siteId: t.siteId, backOffice: true, date: t.date, employee: t.workers[0] })}>
+                          <ClipboardPlus className="w-4 h-4" /> Nachtragen
+                        </Button>
+                      ) : (
+                        <span className="text-xs text-muted-foreground">älter als 72 h – nicht mehr nachtragbar</span>
+                      ))}
+                    </li>
+                  );
+                })}
+              </ul>
+            </CardContent>
+          </Card>
+        )}
 
         {/* Season log */}
         {selected && (
@@ -298,9 +393,15 @@ export default function WinterPage() {
                     </div>
                   )}
                 </div>
-                <Button className="h-11 rounded-xl font-black gap-2" onClick={exportPdf} disabled={!entries?.length}>
-                  <Download className="w-4 h-4" /> Streuprotokoll PDF
-                </Button>
+                <div className="flex flex-wrap gap-2">
+                  <Button variant="outline" className="h-11 rounded-xl font-black gap-2"
+                    onClick={() => setRecording({ siteId: selected.id, backOffice: canManage })}>
+                    <ClipboardPlus className="w-4 h-4" /> Einsatz erfassen
+                  </Button>
+                  <Button className="h-11 rounded-xl font-black gap-2" onClick={exportPdf} disabled={!entries?.length}>
+                    <Download className="w-4 h-4" /> Streuprotokoll PDF
+                  </Button>
+                </div>
               </div>
 
               {!entries ? (
@@ -338,7 +439,12 @@ export default function WinterPage() {
                             </td>
                             <td className="px-4 py-3 whitespace-nowrap">{materialText(e)}</td>
                             <td className="px-4 py-3">{e.areas.join(', ') || '—'}</td>
-                            <td className="px-4 py-3 whitespace-nowrap">{e.employee_name}</td>
+                            <td className="px-4 py-3 whitespace-nowrap">
+                              {e.employee_name}
+                              {!e.corrects_log_id && e.entered_by_name && e.entered_by_name !== e.employee_name && (
+                                <p className="text-[10px] text-muted-foreground">nachgetragen von {e.entered_by_name}</p>
+                              )}
+                            </td>
                             <td className="px-4 py-3 whitespace-nowrap">
                               <span className="inline-flex items-center gap-1"><ThermometerSnowflake className="w-3.5 h-3.5 text-blue-500" />{weatherText(e.weather)}</span>
                             </td>
@@ -384,7 +490,17 @@ export default function WinterPage() {
           onSaved={() => { setCorrecting(null); loadEntries(); loadSites(); loadChain(); }}
         />
       )}
-      {planOpen && <PlanDialog onClose={() => setPlanOpen(false)} />}
+      {planOpen && <PlanDialog onClose={() => { setPlanOpen(false); loadTasks(); loadSites(); }} />}
+      {recording && recordSite && (
+        <WinterRecordDialog
+          site={recordSite}
+          backOffice={recording.backOffice}
+          defaultDate={recording.date}
+          defaultEmployeeName={recording.employee}
+          onClose={() => setRecording(null)}
+          onSaved={afterRecord}
+        />
+      )}
       {setupOpen && (
         <SetupDialog
           winterSites={sites ?? []}
