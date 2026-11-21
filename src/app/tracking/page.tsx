@@ -19,7 +19,8 @@ import {
   TreePine, Users, Clock, Send, Edit, Snowflake, AlertTriangle
 } from 'lucide-react';
 import { WinterRecordDialog, type RecordSite } from '@/components/winter/WinterRecordDialog';
-import { WINTER_CATEGORY } from '@/lib/services';
+import { WINTER_CATEGORY, checklistCodes } from '@/lib/services';
+import { ChecklistPanel, type ChecklistProgress } from '@/components/tracking/ChecklistPanel';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/db/provider';
 import NotesPanel from '@/components/tracking/NotesPanel';
@@ -264,6 +265,12 @@ export default function TrackingPage() {
     return () => { cancelled = true; };
   }, [isWinterTask, activeAssignment?.jobSiteId, winterRefresh]);
   const winterMissing = isWinterTask && (winterSite?.entries_today ?? 0) === 0;
+
+  // ── Checkliste (Leistungsnachweis) ────────────────────────────────────────
+  const hasChecklist = checklistCodes(activeAssignment?.categories).length > 0;
+  const [checklistProgress, setChecklistProgress] = useState<ChecklistProgress | null>(null);
+  useEffect(() => { setChecklistProgress(null); }, [activeAssignment?.id]);
+  const checklistOpen = hasChecklist ? checklistProgress?.open ?? [] : [];
 
   // ── Time Entries ───────────────────────────────────────────────────────────
   const [allTeamEntries, setAllTeamEntries] = useState<(TimeEntry & { jobAssignmentId: string })[]>([]);
@@ -754,6 +761,16 @@ export default function TrackingPage() {
                     </div>
                   )}
 
+                  {hasChecklist && activeAssignment && (
+                    <div className="border-t border-dashed pt-4">
+                      <ChecklistPanel
+                        assignmentId={activeAssignment.id}
+                        canEdit={isClockedIn || canManageTeam}
+                        onProgress={setChecklistProgress}
+                      />
+                    </div>
+                  )}
+                  {!hasChecklist && (
                   <div className="border-t border-dashed pt-4">
                     <p className="text-[10px] text-primary font-black uppercase tracking-widest mb-3 flex items-center gap-2">
                       <Hammer className="w-3.5 h-3.5" /> Zu erledigende Leistungen — {currentMonth.trim()}
@@ -782,6 +799,7 @@ export default function TrackingPage() {
                       <p className="text-xs text-muted-foreground font-bold italic py-1">Keine fälligen Leistungen für {currentMonth.trim()}</p>
                     )}
                   </div>
+                  )}
                 </div>
               </CardContent>
 
@@ -927,6 +945,15 @@ export default function TrackingPage() {
                 : 'Ihre Arbeitszeit wird erfasst und die Schicht beendet.'}
             </AlertDialogDescription>
           </AlertDialogHeader>
+          {checklistOpen.length > 0 && (
+            <div className="rounded-2xl border-2 border-amber-200 bg-amber-50 p-4 text-sm">
+              <p className="font-black text-amber-800 flex items-center gap-1.5">
+                <AlertTriangle className="w-4 h-4" /> {checklistOpen.length} Leistung{checklistOpen.length === 1 ? '' : 'en'} ohne Rückmeldung
+              </p>
+              <p className="text-amber-800/80 mt-1">{checklistOpen.join(', ')}</p>
+              <p className="text-amber-800/80 mt-1">Im Leistungsnachweis für die Hausverwaltung stehen sie sonst als „keine Rückmeldung“. Bitte abhaken oder „nicht möglich“ mit Grund wählen.</p>
+            </div>
+          )}
           {winterMissing && winterSite && (
             <div className="rounded-2xl border-2 border-red-200 bg-red-50 p-4 text-sm">
               <p className="font-black text-red-700 flex items-center gap-1.5"><AlertTriangle className="w-4 h-4" /> Winterdienst noch nicht protokolliert</p>
