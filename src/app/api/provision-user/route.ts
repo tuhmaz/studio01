@@ -1,10 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
 import bcrypt from 'bcryptjs';
-import sql from '@/lib/db';
-import { getSession } from '@/lib/auth-server';
+import sql, { withTenant } from '@/lib/db';
 import { hasPermission, isAdminLike } from '@/lib/permissions';
 import { writeAuditLog } from '@/lib/audit';
-import { getRequestIp, getUserAgent } from '@/lib/request-context';
+import { getRequestIp, getRequestSession, getUserAgent } from '@/lib/request-context';
 
 const ALLOWED_ROLES = ['ADMIN', 'MANAGER', 'ACCOUNTANT', 'LEADER', 'WORKER'] as const;
 const CONTRACT_TYPES = ['MINIJOB', 'MIDIJOB', 'VOLLZEIT', 'TEILZEIT'] as const;
@@ -44,7 +43,8 @@ function describeDbError(err: any): { status: number; error: string } {
 }
 
 export async function POST(req: NextRequest) {
-  const session = await getSession();
+  // Cookie (Web) oder Bearer-Token (Mobile) – wie bei allen anderen API-Routen.
+  const session = await getRequestSession(req);
   if (!session) {
     return bad('Sitzung abgelaufen. Bitte neu anmelden.', 401);
   }
@@ -101,7 +101,7 @@ export async function POST(req: NextRequest) {
   const statusTaetigkeit = optionalText(body.statusTaetigkeit);
 
   try {
-    // E-Mails sind systemweit eindeutig; Groß-/Kleinschreibung darf keine Dubletten erzeugen.
+    // Bewusst ohne Mandanten-Kontext: E-Mails sind systemweit eindeutig; Groß-/Kleinschreibung darf keine Dubletten erzeugen.
     const [existing] = await sql`
       SELECT id FROM public.users WHERE lower(email) = ${email} LIMIT 1
     `;
@@ -111,7 +111,7 @@ export async function POST(req: NextRequest) {
 
     const passwordHash = await bcrypt.hash(password, 12);
 
-    const [user] = await sql`
+    const [user] = await withTenant(companyId, db => db`
       INSERT INTO public.users (
         company_id, name, email, password_hash, role,
         contract_type, hourly_rate, monthly_target_hours,
@@ -124,14 +124,14 @@ export async function POST(req: NextRequest) {
         ${svNr}, ${steuerId}, ${statusTaetigkeit}
       )
       RETURNING id, name, email, role, company_id
-    `;
+    `);
 
     // kv_zusatz_rate kommt erst mit Migration 010 – fehlt die Spalte, darf das Anlegen nicht scheitern.
     if (body.kvZusatzRate != null && body.kvZusatzRate !== '') {
       const kvZusatzRate = Number(body.kvZusatzRate);
       if (Number.isFinite(kvZusatzRate) && kvZusatzRate >= 0 && kvZusatzRate <= 10) {
         try {
-          await sql`UPDATE public.users SET kv_zusatz_rate = ${kvZusatzRate} WHERE id = ${user.id}`;
+          await withTenant(companyId, db => db`UPDATE public.users SET kv_zusatz_rate = ${kvZusatzRate} WHERE id = ${user.id}`);
         } catch (error) {
           console.warn('[provision-user] kv_zusatz_rate not saved', error);
         }

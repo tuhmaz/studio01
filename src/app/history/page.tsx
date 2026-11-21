@@ -247,7 +247,7 @@ export default function HistoryPage() {
       columnStyles: { 3: { halign: 'center' }, 5: { halign: 'center' } },
     });
 
-    const safeName = selectedSite.name.replace(/[^\w\-]+/g, '_').slice(0, 40);
+    const safeName = selectedSite.name.replace(/[^\w-]+/g, '_').slice(0, 40);
     return { doc, filename: `Objekt-Verlauf_${safeName}_${new Date().toISOString().slice(0, 10)}.pdf` };
   }, [selectedSite, selectedEmployee, siteEntries, stats.totalMinutes, usersMap, assignmentsMap]);
 

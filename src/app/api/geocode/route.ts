@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getSession } from '@/lib/auth-server';
-import sql from '@/lib/db';
+import { withTenant } from '@/lib/db';
+import { getRequestSession } from '@/lib/request-context';
 import { hasPermission } from '@/lib/permissions';
 
 /**
@@ -10,7 +10,7 @@ import { hasPermission } from '@/lib/permissions';
  * Body: { siteIds?: string[] }  — if omitted, processes all sites for the company.
  */
 export async function POST(req: NextRequest) {
-  const session = await getSession();
+  const session = await getRequestSession(req);
   if (!session) return NextResponse.json({ error: 'Nicht authentifiziert' }, { status: 401 });
   if (!hasPermission(session, 'job_sites.manage')) {
     return NextResponse.json({ error: 'Keine Berechtigung' }, { status: 403 });
@@ -24,20 +24,20 @@ export async function POST(req: NextRequest) {
   // Fetch sites that need geocoding
   let sites;
   if (requestedSiteIds.length) {
-    sites = await sql`
+    sites = await withTenant(session.companyId, db => db`
       SELECT id, address, city, postal_code, lat, lng
       FROM public.job_sites
       WHERE company_id = ${session.companyId}
         AND id = ANY(${requestedSiteIds}::text[])
         AND (lat IS NULL OR lng IS NULL)
-    `;
+    `);
   } else {
-    sites = await sql`
+    sites = await withTenant(session.companyId, db => db`
       SELECT id, address, city, postal_code, lat, lng
       FROM public.job_sites
       WHERE company_id = ${session.companyId}
         AND (lat IS NULL OR lng IS NULL)
-    `;
+    `);
   }
 
   if (!sites.length) {
@@ -109,7 +109,8 @@ export async function POST(req: NextRequest) {
         console.error(`OSRM route calc failed for site ${site.id}`, e);
       }
 
-      await sql`
+      // One short transaction per site: never hold a DB transaction open across the HTTP calls above.
+      await withTenant(session.companyId, db => db`
         UPDATE public.job_sites
         SET lat = ${lat}, 
             lng = ${lng},
@@ -119,7 +120,7 @@ export async function POST(req: NextRequest) {
             is_remote = ${isRemote}
         WHERE id = ${site.id}
           AND company_id = ${session.companyId}
-      `;
+      `);
 
       results.push({ id: site.id, lat, lng, address: site.address });
       geocoded++;

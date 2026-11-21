@@ -48,8 +48,43 @@ function createPool() {
   });
 }
 
-// Singleton — survives hot-reloads in dev
-const sql: ReturnType<typeof postgres> =
-  globalThis.__pgPool ?? (globalThis.__pgPool = createPool());
+type Pool = ReturnType<typeof postgres>;
+
+// Singleton — survives hot-reloads in dev. Created on first use, not on import,
+// so `next build` can load route modules without database credentials.
+function pool(): Pool {
+  return globalThis.__pgPool ?? (globalThis.__pgPool = createPool());
+}
+
+const sql = new Proxy(function lazySql() {} as unknown as Pool, {
+  apply: (_target, _this, args) => (pool() as unknown as (...a: unknown[]) => unknown)(...args),
+  get: (_target, prop) => {
+    const real = pool() as unknown as Record<PropertyKey, unknown>;
+    const value = real[prop];
+    return typeof value === 'function' ? (value as (...a: unknown[]) => unknown).bind(real) : value;
+  },
+}) as Pool;
 
 export default sql;
+
+export type Db = ReturnType<typeof postgres> | postgres.TransactionSql;
+
+/**
+ * Runs `fn` in a transaction scoped to one tenant.
+ *
+ * Sets the transaction-local setting `app.company_id`, which the row-level
+ * security policies (db/migrations/0002_row_level_security.sql) use to hide
+ * and protect every row of other companies. Use the `tx` passed to `fn` for
+ * all queries of the request; queries made on the global `sql` pool run
+ * outside the scope and are not protected by the policies.
+ */
+export async function withTenant<T>(
+  companyId: string,
+  fn: (tx: postgres.TransactionSql) => Promise<T>,
+): Promise<T> {
+  if (!companyId) throw new Error('withTenant requires a company id');
+  return sql.begin(async tx => {
+    await tx`SELECT set_config('app.company_id', ${companyId}, true)`;
+    return fn(tx);
+  }) as Promise<T>;
+}
