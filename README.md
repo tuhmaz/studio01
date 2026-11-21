@@ -96,6 +96,20 @@ Workers are taken from the site's previous Winterdienst task; without
 them the task stays a draft for the office. Recording the work in the app
 marks the task as done.
 
+## Leistungsnachweis
+
+Each site's services (Objekte → *Leistungen & Monate*, with the standard
+catalog plus the company's own services such as "Treppenhaus reinigen")
+become the checklist of every visit planned in the Einsatzplanung.
+
+- Worker app: *Zeiterfassung* → active shift → **Checkliste**. Per service:
+  before photo, ✓ done (an after photo also marks it done), or ✗ not possible
+  with a reason. Each tap is saved immediately (`/api/checks`).
+- Web: **Leistungsnachweis** — per site and month: planned vs. done, who and
+  when, before/after photos, compliance rate ("4 von 6 Leistungen erbracht"),
+  and a PDF with a photo appendix for the property manager
+  (`/api/reports/leistungsnachweis`).
+
 ## Photos and voice notes
 
 Media is stored as files, not in the database. `STORAGE_DRIVER` picks where:

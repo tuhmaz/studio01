@@ -52,6 +52,7 @@ import {
 import { Separator } from '@/components/ui/separator';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { useToast } from '@/hooks/use-toast';
+import { serviceLabel } from '@/lib/services';
 import { useAuth } from '@/db/provider';
 import { useQuery } from '@/db/use-query';
 import { UserRole, JobSite } from '@/lib/types';
@@ -465,7 +466,7 @@ export default function SchedulePage() {
                                   <div className="flex flex-wrap gap-2 mt-2">
                                     {task.categories?.map((cat: string) => (
                                       <Badge key={cat} variant="secondary" className="text-[8px] py-0.5 px-3 bg-gray-100 border-none font-black text-muted-foreground uppercase">
-                                        {cat}
+                                        {serviceLabel(cat, site?.services as never)}
                                       </Badge>
                                     ))}
                                   </div>
@@ -515,7 +516,7 @@ export default function SchedulePage() {
                               <div className="flex flex-wrap gap-2">
                                 {task.categories?.map((cat: string) => (
                                   <Badge key={cat} className="bg-white border-primary/20 text-primary font-black text-[9px] px-3 py-1">
-                                    {cat}
+                                    {serviceLabel(cat, site?.services as never)}
                                   </Badge>
                                 ))}
                               </div>

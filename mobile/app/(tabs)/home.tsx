@@ -9,7 +9,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '@/context/AuthContext';
 import { apiData } from '@/api/client';
 import { isManagement as isManagementRole, isFieldRole } from '@/utils/roles';
-import { COLORS, CATEGORY_LABELS } from '@/utils/constants';
+import { COLORS, categoryLabel } from '@/utils/constants';
 import { formatDate, formatDateFull, formatTime, elapsedMinutes, formatDuration } from '@/utils/helpers';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -619,7 +619,7 @@ function AssignmentCard({
           {a.categories?.length > 0 &&
             a.categories.slice(0, 2).map(c => (
               <View key={c} style={s.catChip}>
-                <Text style={s.catText}>{CATEGORY_LABELS[c] ?? c}</Text>
+                <Text style={s.catText}>{categoryLabel(c)}</Text>
               </View>
             ))}
         </View>
