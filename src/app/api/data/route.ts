@@ -15,7 +15,7 @@ const TABLE_COLUMNS = {
     'id', 'name', 'site_name', 'address', 'city', 'postal_code', 'tax_number',
     'phone', 'email', 'website', 'logo_data', 'created_at',
     'hq_lat', 'hq_lng', 'remote_threshold_km', 'remote_bonus_minutes',
-    'winter_auto_plan', 'winter_plan_min_temp_c',
+    'winter_auto_plan', 'winter_plan_min_temp_c', 'portal_show_worker_names',
   ]),
   job_assignments: new Set([
     'id', 'company_id', 'job_site_id', 'title', 'scheduled_date', 'status',
@@ -182,9 +182,14 @@ function selectFragment(table: TableName, select: unknown, session: SessionPaylo
 }
 
 function filterConditions(table: TableName, filters: Filters) {
-  return Object.entries(filters).map(([column, value]) => (
+  const conditions = Object.entries(filters).map(([column, value]) => (
     value === null ? sql`${sql(column)} IS NULL` : sql`${sql(column)} = ${value}`
   ));
+  // Portal-Logins der Hausverwaltungen sind keine Mitarbeiter: sie tauchen weder
+  // im Team, in der Lohnabrechnung noch in der Einsatzplanung auf und werden
+  // nur über /api/clients verwaltet.
+  if (table === 'users') conditions.push(sql`role <> 'CLIENT'`);
+  return conditions;
 }
 
 function scopedFilters(table: TableName, filters: Filters, session: SessionPayload): Filters {
@@ -526,6 +531,7 @@ export async function POST(req: NextRequest) {
             ON CONFLICT (id) DO UPDATE SET ${db(rows[0], ...updateColumns)}
             WHERE ${db(table)}.${db(scopeColumn)} = ${session.companyId}
             ${ownRowsOnly}
+            ${table === 'users' ? db`AND ${db(table)}.role <> 'CLIENT'` : db``}
             RETURNING *
           `;
           return NextResponse.json({ data: upserted });

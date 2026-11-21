@@ -29,6 +29,8 @@ export interface SessionPayload {
   role: string;
   name: string;
   email: string;
+  /** Nur bei role = 'CLIENT': die Hausverwaltung des Portal-Logins. */
+  clientId?: string | null;
 }
 
 type RawSessionPayload = SessionPayload & {
@@ -40,7 +42,7 @@ async function validateSessionPayload(payload: RawSessionPayload): Promise<Sessi
   if (!payload.userId || !payload.companyId) return null;
 
   const [user] = await sql`
-    SELECT id, company_id, role, name, email, password_changed_at, sessions_revoked_at
+    SELECT id, company_id, role, name, email, client_id, password_changed_at, sessions_revoked_at
       FROM public.users
      WHERE id = ${payload.userId}
      LIMIT 1
@@ -68,6 +70,7 @@ async function validateSessionPayload(payload: RawSessionPayload): Promise<Sessi
     role: user.role,
     name: user.name,
     email: user.email,
+    clientId: user.client_id ?? null,
   };
 }
 

@@ -24,7 +24,7 @@ export interface Fixtures {
 }
 
 const TABLES = [
-  'service_checks', 'winter_service_logs', 'media_files', 'audit_logs', 'payroll_settlements', 'work_log_entries', 'time_entries',
+  'defect_reports', 'clients', 'service_checks', 'winter_service_logs', 'media_files', 'audit_logs', 'payroll_settlements', 'work_log_entries', 'time_entries',
   'job_assignments', 'job_sites', 'account_invites', 'users', 'companies',
 ];
 

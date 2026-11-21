@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import type { SessionPayload } from '@/lib/auth-server';
 
-export type Role = 'SUPER_ADMIN' | 'ADMIN' | 'MANAGER' | 'ACCOUNTANT' | 'LEADER' | 'WORKER';
+export type Role = 'SUPER_ADMIN' | 'ADMIN' | 'MANAGER' | 'ACCOUNTANT' | 'LEADER' | 'WORKER' | 'CLIENT';
 export type Permission =
   | '*'
   | 'companies.view'
@@ -25,7 +25,8 @@ export type Permission =
   | 'reports.export'
   | 'audit_logs.view'
   | 'settings.manage'
-  | 'winter.manage';
+  | 'winter.manage'
+  | 'clients.manage';
 
 export const ROLE_PERMISSIONS: Record<Role, Permission[]> = {
   SUPER_ADMIN: ['*'],
@@ -37,13 +38,13 @@ export const ROLE_PERMISSIONS: Record<Role, Permission[]> = {
     'time_entries.view', 'time_entries.manage', 'time_entries.approve',
     'work_logs.view', 'work_logs.create',
     'payroll.view', 'payroll.manage', 'payroll.settle',
-    'reports.export', 'audit_logs.view', 'settings.manage', 'winter.manage',
+    'reports.export', 'audit_logs.view', 'settings.manage', 'winter.manage', 'clients.manage',
   ],
   MANAGER: [
     'companies.view', 'users.view', 'job_sites.view', 'job_sites.manage',
     'assignments.view', 'assignments.manage',
     'time_entries.view', 'time_entries.manage', 'time_entries.approve',
-    'work_logs.view', 'work_logs.create', 'payroll.view', 'reports.export', 'winter.manage',
+    'work_logs.view', 'work_logs.create', 'payroll.view', 'reports.export', 'winter.manage', 'clients.manage',
   ],
   ACCOUNTANT: [
     'companies.view', 'users.view', 'time_entries.view', 'work_logs.view',
@@ -58,6 +59,9 @@ export const ROLE_PERMISSIONS: Record<Role, Permission[]> = {
     'companies.view', 'job_sites.view', 'assignments.view',
     'time_entries.view', 'time_entries.manage', 'work_logs.view', 'work_logs.create',
   ],
+  // Hausverwaltung im Kundenportal: keine einzige interne Berechtigung.
+  // Zugriff nur über /api/portal/*, das die Objekte auf client_id einschränkt.
+  CLIENT: [],
 };
 
 export function normalizeRole(role?: string | null): Role {
