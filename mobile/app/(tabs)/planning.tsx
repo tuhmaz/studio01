@@ -10,12 +10,11 @@ import {
 import { StatusBar } from 'expo-status-bar';
 import { useFocusEffect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import { format } from 'date-fns';
-import { de } from 'date-fns/locale';
 import { useAuth } from '@/context/AuthContext';
 import { apiData } from '@/api/client';
 import { isManagement, isFieldRole } from '@/utils/roles';
-import { COLORS } from '@/utils/constants';
+import { COLORS, categoryLabel } from '@/utils/constants';
+import { dateLocale, t, rtlFlip } from '@/i18n';
 import { randomId, gpsDistance } from '@/utils/helpers';
 
 // ─── Constants (mirrored from web parse-excel-plan-shared) ───────────────────
@@ -49,9 +48,8 @@ const SERVICE_META: Record<string, { label: string; icon: string; bg: string; te
   VEG_Laub:       { label: 'Laub VEG',       icon: 'leaf-outline',         bg: '#fefce8', text: '#a16207', border: '#fde68a' },
 };
 
-const STATUS_LABEL: Record<string, string> = {
-  PENDING: 'Offen', IN_PROGRESS: 'Aktiv', COMPLETED: 'Fertig',
-};
+const statusLabel = (status: string) =>
+  status === 'PENDING' || status === 'IN_PROGRESS' || status === 'COMPLETED' ? t(`status.${status}`) : status;
 const STATUS_COLOR: Record<string, string> = {
   PENDING: '#f59e0b', IN_PROGRESS: '#3b82f6', COMPLETED: '#16a34a',
 };
@@ -218,12 +216,12 @@ export default function PlanningScreen() {
   // ── Save ──
   const handleSave = async () => {
     if (!selectedSite || selectedWorkers.length === 0) {
-      Alert.alert('Fehlende Informationen', 'Bitte wählen Sie einen Standort und mindestens einen Mitarbeiter aus.');
+      Alert.alert(t('plan.missingInfo'), t('plan.chooseSiteAndWorker'));
       return;
     }
     const existing = deployments.find(d => d.jobSiteId === selectedSite);
     if (existing) {
-      Alert.alert('Bereits eingeplant', 'Für diesen Standort existiert bereits ein Einsatz am selben Tag.');
+      Alert.alert(t('plan.alreadyPlanned'), t('plan.alreadyPlannedText'));
       return;
     }
     setSaving(true);
@@ -243,12 +241,12 @@ export default function PlanningScreen() {
           categories: dueServices.map(([code]) => code),
         },
       });
-      Alert.alert('Tagesplan gespeichert', `${selectedWorkers.length} Mitarbeiter wurden zugewiesen.`);
+      Alert.alert(t('plan.daySaved'), t('plan.workersAssigned', { count: selectedWorkers.length }));
       setSelectedSite('');
       setSelectedWorkers([]);
       await load(true);
     } catch (e: any) {
-      Alert.alert('Fehler', e?.message || 'Unbekannter Fehler');
+      Alert.alert(t('common.error'), e?.message || t('common.unknownError'));
     } finally {
       setSaving(false);
     }
@@ -260,11 +258,11 @@ export default function PlanningScreen() {
   // ── Sonderauftrag save ──
   const handleSaveSonder = async () => {
     if (!sonderTitle.trim()) {
-      Alert.alert('Fehlende Informationen', 'Bitte geben Sie eine Beschreibung ein.');
+      Alert.alert(t('plan.missingInfo'), t('plan.enterDescription'));
       return;
     }
     if (selectedWorkers.length === 0) {
-      Alert.alert('Fehlende Informationen', 'Bitte wählen Sie mindestens einen Mitarbeiter aus.');
+      Alert.alert(t('plan.missingInfo'), t('plan.chooseWorker'));
       return;
     }
     setSaving(true);
@@ -287,14 +285,14 @@ export default function PlanningScreen() {
           categories: [],
         },
       });
-      Alert.alert('Sonderauftrag gespeichert', `${selectedWorkers.length} Mitarbeiter wurden zugewiesen.`);
+      Alert.alert(t('plan.specialSaved'), t('plan.workersAssigned', { count: selectedWorkers.length }));
       setSonderTitle('');
       setSonderAddress('');
       setSelectedWorkers([]);
       setMode('regular');
       await load(true);
     } catch (e: any) {
-      Alert.alert('Fehler', e?.message || 'Unbekannter Fehler');
+      Alert.alert(t('common.error'), e?.message || t('common.unknownError'));
     } finally {
       setSaving(false);
     }
@@ -305,13 +303,14 @@ export default function PlanningScreen() {
     return (
       <View style={s.center}>
         <Ionicons name="lock-closed" size={44} color={COLORS.textMuted} />
-        <Text style={s.lockText}>Keine Berechtigung</Text>
+        <Text style={s.lockText}>{t('plan.noPermission')}</Text>
       </View>
     );
   }
 
   const isToday = selectedDate === todayStr;
-  const formattedDate = format(new Date(selectedDate + 'T00:00:00'), 'EEEE, d. MMMM yyyy', { locale: de });
+  // Anzeige des Monats in der App-Sprache; currentMonth bleibt der Schlüssel der Daten ("Nov.").
+  const displayMonth = new Date(selectedDate + 'T00:00:00').toLocaleDateString(dateLocale(), { month: 'long' });
 
   return (
     <View style={s.root}>
@@ -320,29 +319,29 @@ export default function PlanningScreen() {
       {/* ══ Header ══ */}
       <View style={s.header}>
         <View>
-          <Text style={s.headerTitle}>Einsatzplanung</Text>
-          <Text style={s.headerSub}>Teilen Sie das Team und die Aufgaben ein.</Text>
+          <Text style={s.headerTitle}>{t('plan.title')}</Text>
+          <Text style={s.headerSub}>{t('plan.subtitle')}</Text>
         </View>
 
         {/* Date navigator */}
         <View style={s.dateNav}>
           <TouchableOpacity style={s.dateNavBtn} onPress={() => setSelectedDate(d => addDays(d, -1))}>
-            <Ionicons name="chevron-back" size={20} color="#fff" />
+            <Ionicons style={rtlFlip} name="chevron-back" size={20} color="#fff" />
           </TouchableOpacity>
           <View style={s.dateNavCenter}>
-            <Text style={s.dateNavDay}>{formattedDate.split(',')[0]}</Text>
+            <Text style={s.dateNavDay}>{new Date(selectedDate + 'T00:00:00').toLocaleDateString(dateLocale(), { weekday: 'long' })}</Text>
             <Text style={s.dateNavFull}>
-              {format(new Date(selectedDate + 'T00:00:00'), 'd. MMM yyyy', { locale: de })}
+              {new Date(selectedDate + 'T00:00:00').toLocaleDateString(dateLocale(), { day: 'numeric', month: 'short', year: 'numeric' })}
             </Text>
           </View>
           <TouchableOpacity style={s.dateNavBtn} onPress={() => setSelectedDate(d => addDays(d, 1))}>
-            <Ionicons name="chevron-forward" size={20} color="#fff" />
+            <Ionicons style={rtlFlip} name="chevron-forward" size={20} color="#fff" />
           </TouchableOpacity>
         </View>
         {!isToday && (
           <TouchableOpacity style={s.todayBtn} onPress={() => setSelectedDate(todayStr)}>
             <Ionicons name="today-outline" size={13} color={COLORS.primary} />
-            <Text style={s.todayBtnText}>Heute</Text>
+            <Text style={s.todayBtnText}>{t('plan.today')}</Text>
           </TouchableOpacity>
         )}
 
@@ -353,14 +352,14 @@ export default function PlanningScreen() {
             onPress={() => setMode('regular')}
           >
             <Ionicons name="business-outline" size={14} color={mode === 'regular' ? COLORS.primary : 'rgba(255,255,255,0.7)'} />
-            <Text style={[s.modeBtnText, mode === 'regular' && s.modeBtnTextActive]}>Regulärer Einsatz</Text>
+            <Text style={[s.modeBtnText, mode === 'regular' && s.modeBtnTextActive]}>{t('plan.regular')}</Text>
           </TouchableOpacity>
           <TouchableOpacity
             style={[s.modeBtn, mode === 'sonder' && s.modeBtnSonderActive]}
             onPress={() => setMode('sonder')}
           >
             <Ionicons name="flash-outline" size={14} color={mode === 'sonder' ? '#92400e' : 'rgba(255,255,255,0.7)'} />
-            <Text style={[s.modeBtnText, mode === 'sonder' && s.modeBtnSonderText]}>Sonderauftrag</Text>
+            <Text style={[s.modeBtnText, mode === 'sonder' && s.modeBtnSonderText]}>{t('plan.special')}</Text>
           </TouchableOpacity>
         </View>
       </View>
@@ -381,26 +380,26 @@ export default function PlanningScreen() {
                   color={mode === 'sonder' ? '#92400e' : COLORS.primary} />
               </View>
               <Text style={[s.cardHeaderText, mode === 'sonder' && s.cardHeaderTextSonder]}>
-                {mode === 'sonder' ? '1. BESCHREIBUNG & ORT' : '1. STANDORT & AUFGABEN WÄHLEN'}
+                {mode === 'sonder' ? t('plan.step1Special') : t('plan.step1Regular')}
               </Text>
             </View>
 
             {mode === 'sonder' ? (
               /* ── Sonderauftrag fields ── */
               <View style={s.sonderFields}>
-                <Text style={s.sonderFieldLabel}>BESCHREIBUNG *</Text>
+                <Text style={s.sonderFieldLabel}>{t('plan.description')}</Text>
                 <TextInput
                   style={s.sonderInput}
-                  placeholder="z.B. Ölfleck-Reinigung, Winterdienst..."
+                  placeholder={t('plan.descriptionPlaceholder')}
                   placeholderTextColor={COLORS.textLight}
                   value={sonderTitle}
                   onChangeText={setSonderTitle}
                   returnKeyType="next"
                 />
-                <Text style={s.sonderFieldLabel}>ORT / ADRESSE (optional)</Text>
+                <Text style={s.sonderFieldLabel}>{t('plan.location')}</Text>
                 <TextInput
                   style={s.sonderInput}
-                  placeholder="z.B. Hauptstraße 12, Musterstadt"
+                  placeholder={t('plan.locationPlaceholder')}
                   placeholderTextColor={COLORS.textLight}
                   value={sonderAddress}
                   onChangeText={setSonderAddress}
@@ -430,7 +429,7 @@ export default function PlanningScreen() {
                 ) : (
                   <View style={s.sitePickerPlaceholder}>
                     <Ionicons name="business-outline" size={20} color={COLORS.textLight} />
-                    <Text style={s.sitePickerPlaceholderText}>Standort auswählen...</Text>
+                    <Text style={s.sitePickerPlaceholderText}>{t('plan.chooseSite')}</Text>
                     <Ionicons name="chevron-down" size={18} color={COLORS.textLight} />
                   </View>
                 )}
@@ -441,7 +440,7 @@ export default function PlanningScreen() {
             {currentSite && (
               <View style={s.siteDetails}>
                 <View style={s.siteInfoBox}>
-                  <Text style={s.siteInfoLabel}>ADRESSE</Text>
+                  <Text style={s.siteInfoLabel}>{t('plan.address')}</Text>
                   <Text style={s.siteInfoValue}>{currentSite.address}, {currentSite.city}</Text>
                 </View>
 
@@ -449,7 +448,7 @@ export default function PlanningScreen() {
                   <View style={s.servicesBoxHeader}>
                     <Ionicons name="hammer-outline" size={13} color={COLORS.primary} />
                     <Text style={s.servicesBoxTitle}>
-                      FÄLLIGE LEISTUNGEN — {currentMonth.toUpperCase()}
+                      {t('plan.dueServices', { month: displayMonth.toUpperCase() })}
                     </Text>
                   </View>
                   <View style={s.serviceChips}>
@@ -463,13 +462,13 @@ export default function PlanningScreen() {
                             style={[s.serviceChip, { backgroundColor: meta.bg, borderColor: meta.border }]}
                           >
                             <Ionicons name={meta.icon as any} size={11} color={meta.text} />
-                            <Text style={[s.serviceChipText, { color: meta.text }]}>{meta.label}</Text>
+                            <Text style={[s.serviceChipText, { color: meta.text }]}>{categoryLabel(key)}</Text>
                           </View>
                         );
                       })
                     ) : (
                       <Text style={s.noServices}>
-                        Keine fälligen Leistungen für {currentMonth}
+                        {t('plan.noDueServices', { month: displayMonth })}
                       </Text>
                     )}
                   </View>
@@ -480,7 +479,7 @@ export default function PlanningScreen() {
                     <View style={s.servicesBoxHeader}>
                       <Ionicons name="bulb-outline" size={14} color="#d97706" />
                       <Text style={[s.servicesBoxTitle, { color: '#d97706' }]}>
-                        VORSCHLÄGE (IN DER NÄHE)
+                        {t('plan.suggestions')}
                       </Text>
                     </View>
                     <View style={{ gap: 8 }}>
@@ -496,11 +495,11 @@ export default function PlanningScreen() {
                           <View style={{ flex: 1 }}>
                             <Text style={{ fontSize: 13, fontWeight: '800', color: '#451a03' }}>{site.name}</Text>
                             <Text style={{ fontSize: 10, color: '#92400e', marginTop: 2 }}>
-                              {Math.round(gpsDistance(currentSite.lat!, currentSite.lng!, site.lat!, site.lng!) / 1000)} km entfernt
+                              {t('plan.kmAway', { km: Math.round(gpsDistance(currentSite.lat!, currentSite.lng!, site.lat!, site.lng!) / 1000) })}
                             </Text>
                           </View>
                           <View style={{ backgroundColor: '#fef3c7', paddingHorizontal: 10, paddingVertical: 4, borderRadius: 12 }}>
-                            <Text style={{ fontSize: 10, fontWeight: '800', color: '#b45309' }}>Wählen</Text>
+                            <Text style={{ fontSize: 10, fontWeight: '800', color: '#b45309' }}>{t('plan.choose')}</Text>
                           </View>
                         </TouchableOpacity>
                       ))}
@@ -517,7 +516,7 @@ export default function PlanningScreen() {
               <View style={s.cardHeaderIcon}>
                 <Ionicons name="people" size={14} color={COLORS.primary} />
               </View>
-              <Text style={s.cardHeaderText}>2. TEAM ZUSAMMENSTELLEN</Text>
+              <Text style={s.cardHeaderText}>{t('plan.step2')}</Text>
             </View>
 
             <View style={s.workerGrid}>
@@ -543,7 +542,7 @@ export default function PlanningScreen() {
                         <Text style={s.workerName} numberOfLines={1}>{worker.name}</Text>
                         {worker.role === 'LEADER' && (
                           <View style={s.leiterBadge}>
-                            <Text style={s.leiterBadgeText}>LEITER</Text>
+                            <Text style={s.leiterBadgeText}>{t('plan.leaderBadge')}</Text>
                           </View>
                         )}
                       </View>
@@ -557,19 +556,19 @@ export default function PlanningScreen() {
 
           {/* ══ Zusammenfassung ══ */}
           <View style={[s.summaryCard, mode === 'sonder' && s.summaryCardSonder]}>
-            <Text style={s.summaryTitle}>ZUSAMMENFASSUNG</Text>
+            <Text style={s.summaryTitle}>{t('plan.summary')}</Text>
             <Text style={s.summarySub}>
-              {mode === 'sonder' ? 'Sonderauftrag prüfen' : 'Zuweisung prüfen'}
+              {mode === 'sonder' ? t('plan.checkSpecial') : t('plan.checkAssignment')}
             </Text>
 
             <View style={s.summaryDivider} />
 
             <View style={s.summaryRow}>
-              <Text style={s.summaryLabel}>DATUM</Text>
+              <Text style={s.summaryLabel}>{t('plan.date')}</Text>
               <View style={s.summaryValueRow}>
                 <Ionicons name="calendar-outline" size={14} color="rgba(255,255,255,0.8)" />
                 <Text style={s.summaryValue}>
-                  {format(new Date(selectedDate + 'T00:00:00'), 'dd.MM.yyyy', { locale: de })}
+                  {new Date(selectedDate + 'T00:00:00').toLocaleDateString(dateLocale(), { day: '2-digit', month: '2-digit', year: 'numeric' })}
                 </Text>
               </View>
             </View>
@@ -577,14 +576,14 @@ export default function PlanningScreen() {
             {mode === 'sonder' ? (
               <>
                 <View style={s.summaryRow}>
-                  <Text style={s.summaryLabel}>BESCHREIBUNG</Text>
+                  <Text style={s.summaryLabel}>{t('plan.summaryDescription')}</Text>
                   <Text style={s.summaryValue} numberOfLines={2}>
                     {sonderTitle.trim() || '—'}
                   </Text>
                 </View>
                 {sonderAddress.trim() !== '' && (
                   <View style={s.summaryRow}>
-                    <Text style={s.summaryLabel}>ORT</Text>
+                    <Text style={s.summaryLabel}>{t('plan.place')}</Text>
                     <Text style={s.summaryValue} numberOfLines={1}>{sonderAddress.trim()}</Text>
                   </View>
                 )}
@@ -592,16 +591,16 @@ export default function PlanningScreen() {
             ) : (
               <>
                 <View style={s.summaryRow}>
-                  <Text style={s.summaryLabel}>OBJEKT</Text>
+                  <Text style={s.summaryLabel}>{t('plan.site')}</Text>
                   <Text style={s.summaryValue} numberOfLines={1}>
-                    {currentSite ? currentSite.name : 'Keines gewählt'}
+                    {currentSite ? currentSite.name : t('plan.noneChosen')}
                   </Text>
                 </View>
                 {dueServices.length > 0 && (
                   <View style={s.summaryRow}>
-                    <Text style={s.summaryLabel}>AUFGABEN ({dueServices.length})</Text>
+                    <Text style={s.summaryLabel}>{t('plan.tasks', { count: dueServices.length })}</Text>
                     <Text style={s.summaryValue}>
-                      {dueServices.map(([k]) => SERVICE_META[k]?.label ?? k).join(', ')}
+                      {dueServices.map(([k]) => categoryLabel(k)).join(', ')}
                     </Text>
                   </View>
                 )}
@@ -609,7 +608,7 @@ export default function PlanningScreen() {
             )}
 
             <View style={s.summaryRow}>
-              <Text style={s.summaryLabel}>TEAM ({selectedWorkers.length})</Text>
+              <Text style={s.summaryLabel}>{t('plan.team', { count: selectedWorkers.length })}</Text>
               <View style={s.summaryTeamChips}>
                 {selectedWorkers.length > 0 ? (
                   selectedWorkers.map(id => {
@@ -621,7 +620,7 @@ export default function PlanningScreen() {
                     ) : null;
                   })
                 ) : (
-                  <Text style={s.summaryEmpty}>Keine Mitarbeiter gewählt</Text>
+                  <Text style={s.summaryEmpty}>{t('plan.noWorkers')}</Text>
                 )}
               </View>
             </View>
@@ -640,7 +639,7 @@ export default function PlanningScreen() {
                 ) : (
                   <>
                     <Ionicons name="flash-outline" size={18} color="#92400e" />
-                    <Text style={[s.saveBtnText, { color: '#92400e' }]}>SONDERAUFTRAG SPEICHERN</Text>
+                    <Text style={[s.saveBtnText, { color: '#92400e' }]}>{t('plan.saveSpecial')}</Text>
                   </>
                 )}
               </TouchableOpacity>
@@ -655,7 +654,7 @@ export default function PlanningScreen() {
                 ) : (
                   <>
                     <Ionicons name="save-outline" size={18} color={COLORS.primary} />
-                    <Text style={s.saveBtnText}>EINSATZ SPEICHERN</Text>
+                    <Text style={s.saveBtnText}>{t('plan.save')}</Text>
                   </>
                 )}
               </TouchableOpacity>
@@ -670,7 +669,7 @@ export default function PlanningScreen() {
                   <Ionicons name="list" size={14} color={COLORS.primary} />
                 </View>
                 <Text style={s.cardHeaderText}>
-                  AKTIVE EINSÄTZE — {format(new Date(selectedDate + 'T00:00:00'), 'd. MMM', { locale: de }).toUpperCase()}
+                  {t('plan.activeAssignments', { date: new Date(selectedDate + 'T00:00:00').toLocaleDateString(dateLocale(), { day: 'numeric', month: 'short' }).toUpperCase() })}
                 </Text>
               </View>
 
@@ -692,12 +691,12 @@ export default function PlanningScreen() {
                           </Text>
                         </View>
                         <Text style={s.deploymentMeta}>
-                          {isSonder ? 'Sonderauftrag · ' : ''}{dep.assignedWorkerIds.length} Person{dep.assignedWorkerIds.length !== 1 ? 'en' : ''}
+                          {isSonder ? t('plan.specialPrefix') : ''}{dep.assignedWorkerIds.length === 1 ? t('plan.personOne') : t('plan.personMany', { count: dep.assignedWorkerIds.length })}
                         </Text>
                       </View>
                       <View style={[s.deploymentBadge, { backgroundColor: `${statusColor}20`, borderColor: `${statusColor}40` }]}>
                         <Text style={[s.deploymentBadgeText, { color: statusColor }]}>
-                          {STATUS_LABEL[dep.status] ?? dep.status}
+                          {statusLabel(dep.status)}
                         </Text>
                       </View>
                     </View>
@@ -717,7 +716,7 @@ export default function PlanningScreen() {
           <View style={s.modalSheet}>
             <View style={s.modalHandle} />
             <View style={s.modalHeaderRow}>
-              <Text style={s.modalHeaderTitle}>Standort auswählen</Text>
+              <Text style={s.modalHeaderTitle}>{t('plan.siteModal')}</Text>
               <TouchableOpacity onPress={() => setShowSiteModal(false)}>
                 <Ionicons name="close" size={24} color={COLORS.text} />
               </TouchableOpacity>
@@ -743,7 +742,7 @@ export default function PlanningScreen() {
                       <Text style={[s.modalItemTitle, isSelected && { color: COLORS.primary }]}>{item.name}</Text>
                       <Text style={s.modalItemSub}>{item.address}, {item.city}</Text>
                       {due > 0 && (
-                        <Text style={s.modalItemDue}>{due} Leistung{due !== 1 ? 'en' : ''} fällig in {currentMonth}</Text>
+                        <Text style={s.modalItemDue}>{due === 1 ? t('plan.dueInMonthOne', { month: displayMonth }) : t('plan.dueInMonthMany', { count: due, month: displayMonth })}</Text>
                       )}
                     </View>
                     {isSelected && <Ionicons name="checkmark-circle" size={22} color={COLORS.primary} />}

@@ -1,3 +1,4 @@
+import { dateLocale } from '@/i18n';
 /** Haversine distance in meters between two GPS coordinates */
 export function gpsDistance(
   lat1: number, lng1: number,
@@ -21,17 +22,17 @@ export function formatDuration(minutes: number): string {
 }
 
 export function formatTime(iso: string): string {
-  return new Date(iso).toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' });
+  return new Date(iso).toLocaleTimeString(dateLocale(), { hour: '2-digit', minute: '2-digit' });
 }
 
 export function formatDate(iso: string): string {
-  return new Date(iso).toLocaleDateString('de-DE', {
+  return new Date(iso).toLocaleDateString(dateLocale(), {
     weekday: 'short', day: 'numeric', month: 'short',
   });
 }
 
 export function formatDateFull(iso: string): string {
-  return new Date(iso).toLocaleDateString('de-DE', {
+  return new Date(iso).toLocaleDateString(dateLocale(), {
     weekday: 'long', day: 'numeric', month: 'long', year: 'numeric',
   });
 }

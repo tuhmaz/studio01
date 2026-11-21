@@ -59,6 +59,12 @@
         {
           "microphonePermission": "Für Sprachnotizen am Objekt"
         }
+      ],
+      [
+        "expo-localization",
+        {
+          "supportsRTL": true
+        }
       ]
     ],
     "experiments": {

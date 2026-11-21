@@ -14,6 +14,7 @@ import {
   overlayChecklist, overlayNotes, overlayTracking,
   type Assignment, type ChecklistData, type ChecklistStatus, type JobSite, type NoteEntry, type TimeEntry, type TrackingData,
 } from '@/sync/overlay';
+import { t } from '@/i18n';
 
 export type { Assignment, ChecklistData, ChecklistItem, JobSite, NoteEntry, TimeEntry, TrackingData } from '@/sync/overlay';
 export { overlayChecklist, overlayNotes, overlayTracking } from '@/sync/overlay';
@@ -48,7 +49,7 @@ export async function loadTracking(user: MobileUser, day = localDay()): Promise<
   } catch (error) {
     if (!isNetworkError(error)) throw error;
     const cached = await loadCache<Omit<TrackingData, 'offline' | 'savedAt'>>(trackingKey(user, day));
-    if (!cached) throw new Error('Keine Verbindung und noch keine gespeicherten Einsätze für heute. Bitte einmal mit Netz öffnen.');
+    if (!cached) throw new Error(t('sync.noCachedTasks'));
     base = { ...cached.data, offline: true, savedAt: cached.savedAt };
   }
   return overlayTracking(base, await pendingOps(user.id), user);
@@ -75,7 +76,7 @@ export async function loadChecklist(user: MobileUser, assignmentId: string): Pro
   } catch (error) {
     if (!isNetworkError(error)) throw error;
     const cached = await loadCache<ChecklistData>(checklistKey(user, assignmentId));
-    if (!cached) throw new Error('Checkliste ohne Netz nicht verfügbar – bitte einmal mit Netz öffnen.');
+    if (!cached) throw new Error(t('sync.noCachedChecklist'));
     base = { ...cached.data, offline: true };
   }
   return overlayChecklist(base, await pendingOps(user.id));
@@ -112,7 +113,7 @@ export function clockIn(
   siteName: string,
   gps: { lat: number | null; lng: number | null; verified: boolean },
 ): Promise<SubmitResult> {
-  return submit(op(user, 'clock_in', assignment.id, `Einstempeln · ${siteName}`, '/api/field/ops', {
+  return submit(op(user, 'clock_in', assignment.id, t('op.clockIn', { site: siteName }), '/api/field/ops', {
     op: 'clock_in',
     assignmentId: assignment.id,
     requestId: newOpId(),
@@ -124,7 +125,7 @@ export function clockIn(
 }
 
 export function clockOut(user: MobileUser, assignmentId: string, siteName: string, travelBonusMinutes: number): Promise<SubmitResult> {
-  return submit(op(user, 'clock_out', assignmentId, `Ausstempeln · ${siteName}`, '/api/field/ops', {
+  return submit(op(user, 'clock_out', assignmentId, t('op.clockOut', { site: siteName }), '/api/field/ops', {
     op: 'clock_out',
     assignmentId,
     requestId: newOpId(),
@@ -139,7 +140,7 @@ export function checkService(
   item: { code: string; label: string },
   body: { status: ChecklistStatus | 'open'; reason?: string; beforePhoto?: string; afterPhoto?: string },
 ): Promise<SubmitResult> {
-  return submit(op(user, 'check', assignmentId, `Checkliste · ${item.label}`, '/api/checks', {
+  return submit(op(user, 'check', assignmentId, t('op.check', { item: item.label }), '/api/checks', {
     assignmentId,
     serviceCode: item.code,
     ...body,
@@ -152,7 +153,7 @@ export function addNote(
   entry: { id: string; job_assignment_id: string },
   note: { type: 'text' | 'photo' | 'voice'; content: string; duration?: number },
 ): Promise<SubmitResult> {
-  const label = note.type === 'text' ? 'Notiz' : note.type === 'photo' ? 'Foto' : 'Sprachnachricht';
+  const label = note.type === 'text' ? t('op.note') : note.type === 'photo' ? t('op.photo') : t('op.voice');
   return submit(op(user, 'note', entry.job_assignment_id, label, '/api/field/ops', {
     op: 'note',
     id: `note-${newOpId()}`,

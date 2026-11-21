@@ -16,6 +16,7 @@ import { COLORS } from '@/utils/constants';
 import { formatTime } from '@/utils/helpers';
 import { addNote, loadNotes, loadTracking, type NoteEntry, type TimeEntry } from '@/sync/field';
 import { useSync } from '@/sync/SyncContext';
+import { t } from '@/i18n';
 
 type ActiveEntry = TimeEntry;
 
@@ -52,7 +53,7 @@ export default function NotesScreen() {
         setOffline(tracking.offline);
       }
     } catch (e: any) {
-      Alert.alert('Fehler', e?.message);
+      Alert.alert(t('common.error'), e?.message);
     } finally { setLoading(false); }
   }, [user]);
 
@@ -72,13 +73,13 @@ export default function NotesScreen() {
       await addNote(user, activeEntry, { type, content, duration });
       await load(true);
     } catch (e: any) {
-      Alert.alert('Fehler', e?.message);
+      Alert.alert(t('common.error'), e?.message);
     } finally { setSaving(false); }
   };
 
   const handlePhoto = async () => {
     const perm = await ImagePicker.requestCameraPermissionsAsync();
-    if (!perm.granted) { Alert.alert('Berechtigung fehlt', 'Kamerazugriff erlauben'); return; }
+    if (!perm.granted) { Alert.alert(t('common.permissionMissing'), t('notes.cameraPerm')); return; }
     const result = await ImagePicker.launchCameraAsync({ base64: true, quality: 0.6 });
     if (!result.canceled && result.assets[0].base64) {
       await saveNote('photo', `data:image/jpeg;base64,${result.assets[0].base64}`);
@@ -96,14 +97,14 @@ export default function NotesScreen() {
 
   const startRecording = async () => {
     const perm = await AudioModule.requestRecordingPermissionsAsync();
-    if (!perm.granted) { Alert.alert('Berechtigung fehlt', 'Mikrofonzugriff erlauben'); return; }
+    if (!perm.granted) { Alert.alert(t('common.permissionMissing'), t('notes.micPerm')); return; }
     await setAudioModeAsync({ allowsRecording: true, playsInSilentMode: true });
     await audioRecorder.prepareToRecordAsync();
     audioRecorder.record();
     setIsRecording(true);
     setRecSeconds(0);
-    const t = setInterval(() => setRecSeconds(s => s + 1), 1000);
-    setRecTimer(t);
+    const timer = setInterval(() => setRecSeconds(s => s + 1), 1000);
+    setRecTimer(timer);
   };
 
   const stopRecording = async () => {
@@ -138,11 +139,11 @@ export default function NotesScreen() {
     return (
       <View style={styles.container}>
         <StatusBar style="light" />
-        <View style={styles.header}><Text style={styles.headerTitle}>Notizen</Text></View>
+        <View style={styles.header}><Text style={styles.headerTitle}>{t('notes.title')}</Text></View>
         <View style={styles.emptyBox}>
           <Ionicons name="time-outline" size={52} color={COLORS.border} />
-          <Text style={styles.emptyTitle}>Nicht eingestempelt</Text>
-          <Text style={styles.emptyText}>Stempeln Sie sich ein, um Notizen hinzuzufügen.</Text>
+          <Text style={styles.emptyTitle}>{t('notes.notClockedIn')}</Text>
+          <Text style={styles.emptyText}>{t('notes.clockInFirst')}</Text>
         </View>
       </View>
     );
@@ -151,17 +152,17 @@ export default function NotesScreen() {
   return (
     <View style={styles.container}>
       <StatusBar style="light" />
-      <View style={styles.header}><Text style={styles.headerTitle}>Notizen & Medien</Text></View>
+      <View style={styles.header}><Text style={styles.headerTitle}>{t('notes.titleMedia')}</Text></View>
 
       {/* Action buttons */}
       <View style={styles.actions}>
         <TouchableOpacity style={[styles.actionBtn, { backgroundColor: '#059669' }]} onPress={handlePhoto} disabled={saving}>
           <Ionicons name="camera" size={20} color="#fff" />
-          <Text style={styles.actionText}>Foto</Text>
+          <Text style={styles.actionText}>{t('notes.photo')}</Text>
         </TouchableOpacity>
         <TouchableOpacity style={[styles.actionBtn, { backgroundColor: '#6366f1' }]} onPress={handleGallery} disabled={saving}>
           <Ionicons name="images" size={20} color="#fff" />
-          <Text style={styles.actionText}>Galerie</Text>
+          <Text style={styles.actionText}>{t('notes.gallery')}</Text>
         </TouchableOpacity>
         <TouchableOpacity
           style={[styles.actionBtn, { backgroundColor: isRecording ? COLORS.accent : '#3b82f6' }]}
@@ -169,7 +170,7 @@ export default function NotesScreen() {
           disabled={saving}
         >
           <Ionicons name={isRecording ? 'stop-circle' : 'mic'} size={20} color="#fff" />
-          <Text style={styles.actionText}>{isRecording ? `${recSeconds}s` : 'Audio'}</Text>
+          <Text style={styles.actionText}>{isRecording ? `${recSeconds}s` : t('notes.audio')}</Text>
         </TouchableOpacity>
       </View>
 
@@ -177,7 +178,7 @@ export default function NotesScreen() {
       <View style={styles.textRow}>
         <TextInput
           style={styles.textInput}
-          placeholder="Textnotiz eingeben…"
+          placeholder={t('notes.placeholder')}
           placeholderTextColor={COLORS.textLight}
           value={textInput}
           onChangeText={setTextInput}
@@ -194,10 +195,10 @@ export default function NotesScreen() {
 
       {/* Tabs */}
       <View style={styles.tabs}>
-        {(['all','photo','voice','text'] as const).map(t => (
-          <TouchableOpacity key={t} style={[styles.tab, activeTab === t && styles.tabActive]} onPress={() => setActiveTab(t)}>
-            <Text style={[styles.tabText, activeTab === t && styles.tabTextActive]}>
-              {t === 'all' ? 'Alle' : t === 'photo' ? 'Fotos' : t === 'voice' ? 'Audio' : 'Text'}
+        {(['all','photo','voice','text'] as const).map(tab => (
+          <TouchableOpacity key={tab} style={[styles.tab, activeTab === tab && styles.tabActive]} onPress={() => setActiveTab(tab)}>
+            <Text style={[styles.tabText, activeTab === tab && styles.tabTextActive]}>
+              {t(`notes.tab.${tab}`)}
             </Text>
           </TouchableOpacity>
         ))}
@@ -207,10 +208,10 @@ export default function NotesScreen() {
       <ScrollView contentContainerStyle={{ padding: 16, paddingBottom: 32 }}>
         {loading && <ActivityIndicator color={COLORS.primary} style={{ marginTop: 20 }} />}
         {!loading && filtered.length === 0 && (
-          <Text style={styles.emptyHint}>Noch keine Einträge.</Text>
+          <Text style={styles.emptyHint}>{t('notes.empty')}</Text>
         )}
         {offline && (
-          <Text style={styles.offlineNote}>Offline – neue Notizen, Fotos und Sprachnachrichten werden auf dem Handy gespeichert und später gesendet.</Text>
+          <Text style={styles.offlineNote}>{t('notes.offline')}</Text>
         )}
         {filtered.map(n => (
           <View key={n.id} style={styles.noteCard}>

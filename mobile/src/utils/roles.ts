@@ -3,6 +3,7 @@
  * (src/lib/permissions.ts). The API is the source of truth for authorization;
  * these helpers only drive client-side UI gating (which tabs/screens to show).
  */
+import { t } from '@/i18n';
 
 export type Role =
   | 'SUPER_ADMIN'
@@ -48,5 +49,5 @@ export function isFieldRole(role?: string | null): boolean {
 }
 
 export function roleLabel(role?: string | null): string {
-  return ROLE_LABELS[normalizeRole(role)];
+  return t(`role.${normalizeRole(role)}`);
 }

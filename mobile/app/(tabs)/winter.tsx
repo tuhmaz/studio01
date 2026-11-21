@@ -20,6 +20,7 @@ import {
 } from '@/api/winter';
 import { COLORS } from '@/utils/constants';
 import { formatTime } from '@/utils/helpers';
+import { t, rtlFlip } from '@/i18n';
 
 const NEEDS_MATERIAL: Activity[] = ['gritting', 'clearing_gritting'];
 
@@ -82,8 +83,8 @@ export default function WinterScreen() {
     <View style={styles.container}>
       <StatusBar style="light" />
       <View style={styles.header}>
-        <Text style={styles.headerTitle}>Winterdienst</Text>
-        <Text style={styles.headerSub}>Objekt antippen, dann Einsatz eintragen</Text>
+        <Text style={styles.headerTitle}>{t('winter.title')}</Text>
+        <Text style={styles.headerSub}>{t('winter.subtitle')}</Text>
       </View>
 
       <ScrollView
@@ -94,7 +95,7 @@ export default function WinterScreen() {
           <View style={[styles.banner, { backgroundColor: '#fef3c7' }]}>
             <Ionicons name="cloud-upload-outline" size={18} color="#92400e" />
             <Text style={[styles.bannerText, { color: '#92400e' }]}>
-              {queue.length} {queue.length === 1 ? 'Eintrag wartet' : 'Einträge warten'} auf Verbindung und {queue.length === 1 ? 'wird' : 'werden'} automatisch gesendet.
+              {queue.length === 1 ? t('winter.queueOne') : t('winter.queueMany', { count: queue.length })}
             </Text>
           </View>
         )}
@@ -106,7 +107,7 @@ export default function WinterScreen() {
                 {entry.siteName}, {formatTime(entry.performedAt)}: {message}
               </Text>
               <TouchableOpacity onPress={async () => { await discardQueuedEntry(entry.clientRequestId); load(); }}>
-                <Text style={styles.bannerAction}>Eintrag verwerfen</Text>
+                <Text style={styles.bannerAction}>{t('winter.discard')}</Text>
               </TouchableOpacity>
             </View>
           </View>
@@ -114,7 +115,7 @@ export default function WinterScreen() {
         {offline && (
           <View style={[styles.banner, { backgroundColor: '#e2e8f0' }]}>
             <Ionicons name="cloud-offline-outline" size={18} color={COLORS.textMuted} />
-            <Text style={styles.bannerText}>Keine Verbindung. Einträge werden auf dem Handy gespeichert.</Text>
+            <Text style={styles.bannerText}>{t('winter.offline')}</Text>
           </View>
         )}
 
@@ -122,8 +123,8 @@ export default function WinterScreen() {
         {sites?.length === 0 && !offline && (
           <View style={styles.empty}>
             <Ionicons name="snow-outline" size={48} color={COLORS.textLight} />
-            <Text style={styles.emptyTitle}>Keine Winterdienst-Objekte</Text>
-            <Text style={styles.emptyText}>Ihr Büro richtet die Objekte im Web unter „Winterdienst“ ein.</Text>
+            <Text style={styles.emptyTitle}>{t('winter.emptyTitle')}</Text>
+            <Text style={styles.emptyText}>{t('winter.emptyText')}</Text>
           </View>
         )}
         {sites?.map(s => {
@@ -136,11 +137,11 @@ export default function WinterScreen() {
                 <Text style={styles.siteAddress}>{[s.address, s.city].filter(Boolean).join(', ')}</Text>
                 <Text style={[styles.siteStatus, { color: done ? COLORS.success : COLORS.warning }]}>
                   {done && s.last_activity
-                    ? `${ACTIVITIES[s.last_activity]} · ${formatTime(s.last_performed_at!)} · ${s.last_employee_name}`
-                    : 'Heute noch kein Eintrag'}
+                    ? `${t(`winter.activity.${s.last_activity}`)} · ${formatTime(s.last_performed_at!)} · ${s.last_employee_name}`
+                    : t('winter.noEntryToday')}
                 </Text>
               </View>
-              <Ionicons name="chevron-forward" size={20} color={COLORS.textLight} />
+              <Ionicons style={rtlFlip} name="chevron-forward" size={20} color={COLORS.textLight} />
             </TouchableOpacity>
           );
         })}
@@ -174,7 +175,7 @@ function EntryForm({ site, onClose, onSaved }: { site: WinterSite; onClose: () =
 
   const takePhoto = async () => {
     const perm = await ImagePicker.requestCameraPermissionsAsync();
-    if (!perm.granted) { Alert.alert('Berechtigung fehlt', 'Bitte Kamerazugriff erlauben.'); return; }
+    if (!perm.granted) { Alert.alert(t('common.permissionMissing'), t('common.allowCamera')); return; }
     const result = await ImagePicker.launchCameraAsync({ base64: true, quality: 0.5 });
     if (!result.canceled && result.assets[0].base64) {
       setPhoto(`data:image/jpeg;base64,${result.assets[0].base64}`);
@@ -182,10 +183,10 @@ function EntryForm({ site, onClose, onSaved }: { site: WinterSite; onClose: () =
   };
 
   const save = async () => {
-    if (needsMaterial && !material) { Alert.alert('Streumittel fehlt', 'Bitte das Streumittel wählen.'); return; }
+    if (needsMaterial && !material) { Alert.alert(t('winter.materialMissing'), t('winter.chooseMaterial')); return; }
     const parsedAmount = amount.trim() ? Number(amount.replace(',', '.')) : null;
     if (parsedAmount != null && (!Number.isFinite(parsedAmount) || parsedAmount < 0)) {
-      Alert.alert('Menge ungültig', 'Bitte eine Zahl in kg eingeben.');
+      Alert.alert(t('winter.amountInvalid'), t('winter.amountHint'));
       return;
     }
     setSaving(true);
@@ -209,14 +210,14 @@ function EntryForm({ site, onClose, onSaved }: { site: WinterSite; onClose: () =
         photo,
       });
       Alert.alert(
-        result === 'sent' ? 'Gespeichert' : 'Offline gespeichert',
+        result === 'sent' ? t('common.saved') : t('common.savedOffline'),
         result === 'sent'
-          ? `${ACTIVITIES[activity]} für ${site.name} eingetragen.`
-          : 'Keine Verbindung. Der Eintrag wird automatisch gesendet, sobald wieder Netz da ist.',
+          ? t('winter.savedFor', { activity: t(`winter.activity.${activity}`), site: site.name })
+          : t('winter.savedOfflineText'),
       );
       onSaved();
     } catch (error: any) {
-      Alert.alert('Nicht gespeichert', error?.message ?? 'Unbekannter Fehler');
+      Alert.alert(t('common.notSaved'), error?.message ?? t('common.unknownError'));
       setSaving(false);
     }
   };
@@ -242,60 +243,60 @@ function EntryForm({ site, onClose, onSaved }: { site: WinterSite; onClose: () =
             </View>
           ) : null}
 
-          <Text style={styles.label}>Tätigkeit</Text>
+          <Text style={styles.label}>{t('winter.activity')}</Text>
           <View style={styles.chips}>
             {(Object.keys(ACTIVITIES) as Activity[]).map(a => (
-              <Chip key={a} label={ACTIVITIES[a]} active={activity === a} onPress={() => setActivity(a)} />
+              <Chip key={a} label={t(`winter.activity.${a}`)} active={activity === a} onPress={() => setActivity(a)} />
             ))}
           </View>
 
           {needsMaterial && (
             <>
-              <Text style={styles.label}>Streumittel</Text>
+              <Text style={styles.label}>{t('winter.material')}</Text>
               <View style={styles.chips}>
                 {(Object.keys(MATERIALS) as Material[]).map(m => (
-                  <Chip key={m} label={MATERIALS[m]} active={material === m} onPress={() => setMaterial(m)} />
+                  <Chip key={m} label={t(`winter.material.${m}`)} active={material === m} onPress={() => setMaterial(m)} />
                 ))}
               </View>
-              <Text style={styles.label}>Menge in kg (optional)</Text>
-              <TextInput style={styles.input} keyboardType="decimal-pad" value={amount} onChangeText={setAmount} placeholder="z. B. 5" placeholderTextColor={COLORS.textLight} />
+              <Text style={styles.label}>{t('winter.amount')}</Text>
+              <TextInput style={styles.input} keyboardType="decimal-pad" value={amount} onChangeText={setAmount} placeholder={t('winter.amountPlaceholder')} placeholderTextColor={COLORS.textLight} />
             </>
           )}
 
           {site.winter_areas.length > 0 && (
             <>
-              <Text style={styles.label}>Flächen</Text>
+              <Text style={styles.label}>{t('winter.areas')}</Text>
               <View style={styles.chips}>
                 {site.winter_areas.map(a => <Chip key={a} label={a} active={areas.includes(a)} onPress={() => toggleArea(a)} />)}
               </View>
             </>
           )}
 
-          <Text style={styles.label}>Foto (empfohlen)</Text>
+          <Text style={styles.label}>{t('winter.photo')}</Text>
           {photo ? (
             <View>
               <Image source={{ uri: photo }} style={styles.photo} resizeMode="cover" />
-              <TouchableOpacity onPress={() => setPhoto(null)}><Text style={styles.bannerAction}>Foto entfernen</Text></TouchableOpacity>
+              <TouchableOpacity onPress={() => setPhoto(null)}><Text style={styles.bannerAction}>{t('common.removePhoto')}</Text></TouchableOpacity>
             </View>
           ) : (
             <TouchableOpacity style={styles.photoBtn} onPress={takePhoto}>
               <Ionicons name="camera-outline" size={22} color={COLORS.primary} />
-              <Text style={styles.photoBtnText}>Foto aufnehmen</Text>
+              <Text style={styles.photoBtnText}>{t('common.takePhoto')}</Text>
             </TouchableOpacity>
           )}
 
-          <Text style={styles.label}>Notiz (optional)</Text>
-          <TextInput style={[styles.input, { minHeight: 70 }]} multiline value={notes} onChangeText={setNotes} placeholder="z. B. Eisglätte am Eingang" placeholderTextColor={COLORS.textLight} />
+          <Text style={styles.label}>{t('winter.note')}</Text>
+          <TextInput style={[styles.input, { minHeight: 70 }]} multiline value={notes} onChangeText={setNotes} placeholder={t('winter.notePlaceholder')} placeholderTextColor={COLORS.textLight} />
 
           <TouchableOpacity style={[styles.saveBtn, saving && { opacity: 0.6 }]} onPress={save} disabled={saving}>
             {saving ? <ActivityIndicator color="#fff" /> : (
               <>
                 <Ionicons name="checkmark-circle-outline" size={22} color="#fff" />
-                <Text style={styles.saveText}>Einsatz speichern</Text>
+                <Text style={styles.saveText}>{t('winter.save')}</Text>
               </>
             )}
           </TouchableOpacity>
-          <Text style={styles.hint}>Uhrzeit und GPS-Position werden beim Speichern automatisch erfasst.</Text>
+          <Text style={styles.hint}>{t('winter.autoHint')}</Text>
         </ScrollView>
       </View>
     </Modal>

@@ -10,6 +10,7 @@ import * as SecureStore from 'expo-secure-store';
 import { useFocusEffect } from 'expo-router';
 import { useAuth } from '@/context/AuthContext';
 import { useSync } from '@/sync/SyncContext';
+import { LANGUAGES, dateLocale, needsRestart, t, useI18n, type Lang } from '@/i18n';
 import { pendingOps } from '@/sync/outbox';
 import Constants from 'expo-constants';
 import { apiData, apiFetch } from '@/api/client';
@@ -144,7 +145,7 @@ function SignaturePadModal({
   const handleSave = () => {
     const allStrokes = strokes.filter(s => s.length > 0);
     if (allStrokes.length === 0) {
-      Alert.alert('Keine Unterschrift', 'Bitte zuerst unterschreiben.');
+      Alert.alert(t('profile.noSignature'), t('profile.signFirst'));
       return;
     }
     // Normalize touch coords → PAD_W × PAD_H for consistent PDF output
@@ -165,13 +166,13 @@ function SignaturePadModal({
 
           {/* Header */}
           <View style={pad.header}>
-            <Text style={pad.title}>Unterschrift</Text>
+            <Text style={pad.title}>{t('profile.signature')}</Text>
             <TouchableOpacity onPress={onCancel}>
               <Ionicons name="close" size={22} color={COLORS.text} />
             </TouchableOpacity>
           </View>
 
-          <Text style={pad.hint}>Unterschreiben Sie im weißen Feld unten</Text>
+          <Text style={pad.hint}>{t('profile.signHint')}</Text>
 
           {/* Drawing area */}
           <View
@@ -212,11 +213,11 @@ function SignaturePadModal({
           <View style={pad.actions}>
             <TouchableOpacity style={pad.clearBtn} onPress={handleClear}>
               <Ionicons name="refresh-outline" size={16} color={COLORS.textMuted} />
-              <Text style={pad.clearText}>Löschen</Text>
+              <Text style={pad.clearText}>{t('common.delete')}</Text>
             </TouchableOpacity>
             <TouchableOpacity style={pad.saveBtn} onPress={handleSave}>
               <Ionicons name="checkmark" size={16} color="#fff" />
-              <Text style={pad.saveBtnText}>Speichern</Text>
+              <Text style={pad.saveBtnText}>{t('common.save')}</Text>
             </TouchableOpacity>
           </View>
 
@@ -231,6 +232,19 @@ function SignaturePadModal({
 export default function ProfileScreen() {
   const { user, logout } = useAuth();
   const { syncNow } = useSync();
+  const { lang, setLang } = useI18n();
+
+  const chooseLanguage = (next: Lang) => {
+    if (next === lang) return;
+    if (needsRestart(next)) {
+      Alert.alert(t('profile.language'), t('profile.languageRestart'), [
+        { text: t('common.cancel'), style: 'cancel' },
+        { text: t('common.ok'), onPress: () => { void setLang(next); } },
+      ]);
+    } else {
+      void setLang(next);
+    }
+  };
   const [entries,       setEntries]       = useState<MonthEntry[]>([]);
   const [loading,       setLoading]       = useState(true);
   const [serverUrl,     setServerUrl]     = useState('');
@@ -342,15 +356,15 @@ export default function ProfileScreen() {
   });
   const totalBonusMin = Array.from(bonusPerDay.values()).reduce((s, v) => s + v, 0);
 
-  const MONTH_NAMES = ['Januar','Februar','März','April','Mai','Juni','Juli','August','September','Oktober','November','Dezember'];
+  const monthName   = (m: number) => new Date(2000, m, 1).toLocaleDateString(dateLocale(), { month: 'long' });
   const prevMonth   = month === 0 ? 11 : month - 1;
-  const periodLabel = `21. ${MONTH_NAMES[prevMonth]} – 20. ${MONTH_NAMES[month]} ${year}`;
+  const periodLabel = t('profile.period', { from: monthName(prevMonth), to: monthName(month), year });
 
   const handleSaveServer = async () => {
     await SecureStore.setItemAsync(SERVER_KEY, tempUrl.trim());
     setServerUrl(tempUrl.trim());
     setEditServer(false);
-    Alert.alert('Gespeichert', 'Server-URL wurde aktualisiert. Bitte neu anmelden.');
+    Alert.alert(t('common.saved'), t('profile.serverUpdated'));
   };
 
   const handleLogout = async () => {
@@ -359,13 +373,13 @@ export default function ProfileScreen() {
     await syncNow();
     const waiting = user ? (await pendingOps(user.id)).length : 0;
     Alert.alert(
-      'Abmelden',
-      waiting > 0
-        ? `${waiting} Vorgang${waiting === 1 ? ' ist' : 'e sind'} noch nicht gesendet (kein Netz). Sie bleiben auf dem Handy und werden gesendet, sobald Sie sich wieder anmelden.`
-        : 'Wirklich abmelden?',
+      t('profile.logout'),
+      waiting === 1
+        ? t('profile.logoutPendingOne')
+        : waiting > 1 ? t('profile.logoutPendingMany', { count: waiting }) : t('profile.logoutConfirm'),
       [
-        { text: 'Abbrechen', style: 'cancel' },
-        { text: 'Abmelden', style: 'destructive', onPress: logout },
+        { text: t('common.cancel'), style: 'cancel' },
+        { text: t('profile.logout'), style: 'destructive', onPress: logout },
       ],
     );
   };
@@ -381,9 +395,9 @@ export default function ProfileScreen() {
         data: { signature_data: dataUrl },
       });
       setHasSig(true);
-      Alert.alert('Gespeichert', 'Ihre Unterschrift wurde erfolgreich gespeichert.');
+      Alert.alert(t('common.saved'), t('profile.signatureSaved'));
     } catch {
-      Alert.alert('Fehler', 'Unterschrift konnte nicht gespeichert werden.');
+      Alert.alert(t('common.error'), t('profile.signatureFailed'));
     } finally {
       setSavingSig(false);
     }
@@ -391,12 +405,12 @@ export default function ProfileScreen() {
 
   const handleDeleteSignature = () => {
     Alert.alert(
-      'Unterschrift löschen',
-      'Möchten Sie Ihre Unterschrift wirklich löschen?',
+      t('profile.deleteSignature'),
+      t('profile.deleteSignatureConfirm'),
       [
-        { text: 'Abbrechen', style: 'cancel' },
+        { text: t('common.cancel'), style: 'cancel' },
         {
-          text: 'Löschen', style: 'destructive',
+          text: t('common.delete'), style: 'destructive',
           onPress: async () => {
             setSavingSig(true);
             try {
@@ -442,14 +456,14 @@ export default function ProfileScreen() {
               <View style={styles.statsRow}>
                 <View style={styles.stat}>
                   <Text style={styles.statValue}>{entries.length}</Text>
-                  <Text style={styles.statLabel}>Einsätze</Text>
+                  <Text style={styles.statLabel}>{t('profile.assignments')}</Text>
                 </View>
                 <View style={styles.statDivider} />
                 <View style={styles.stat}>
                   <Text style={styles.statValue}>{formatDuration(totalMinutes + totalBonusMin)}</Text>
-                  <Text style={styles.statLabel}>Vergütete Zeit</Text>
+                  <Text style={styles.statLabel}>{t('profile.paidTime')}</Text>
                   {totalBonusMin < 0 && (
-                    <Text style={styles.statSub}>-{formatDuration(-totalBonusMin)} Fahrzeit</Text>
+                    <Text style={styles.statSub}>{t('profile.travelTime', { duration: formatDuration(-totalBonusMin) })}</Text>
                   )}
                 </View>
                 {rolloverMinutes > 0 && (
@@ -460,8 +474,8 @@ export default function ProfileScreen() {
                     <Text style={[styles.statValue, { color: '#d97706' }]}>
                       +{formatDuration(rolloverMinutes)}
                     </Text>
-                    <Text style={styles.statLabel}>Übertrag</Text>
-                    <Text style={styles.statSub}>aus Vormonat</Text>
+                    <Text style={styles.statLabel}>{t('profile.carryover')}</Text>
+                    <Text style={styles.statSub}>{t('profile.fromLastMonth')}</Text>
                   </View>
                 )}
               </View>
@@ -469,7 +483,7 @@ export default function ProfileScreen() {
                 <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 10, backgroundColor: '#fef3c7', borderRadius: 8, paddingHorizontal: 10, paddingVertical: 6 }}>
                   <Ionicons name="refresh-circle-outline" size={15} color="#d97706" />
                   <Text style={{ fontSize: 12, color: '#92400e', fontWeight: '600' }}>
-                    {formatDuration(rolloverMinutes)} werden auf diesen Monat übertragen
+                    {t('profile.carriedOver', { duration: formatDuration(rolloverMinutes) })}
                   </Text>
                 </View>
               )}
@@ -490,7 +504,7 @@ export default function ProfileScreen() {
         <View style={styles.card}>
           <View style={styles.cardHeader}>
             <Ionicons name="create-outline" size={16} color={COLORS.primary} />
-            <Text style={styles.cardTitle}>Digitale Unterschrift</Text>
+            <Text style={styles.cardTitle}>{t('profile.digitalSignature')}</Text>
           </View>
 
           <Text style={styles.sigDesc}>
@@ -503,12 +517,12 @@ export default function ProfileScreen() {
             <View style={styles.sigStatusRow}>
               <View style={styles.sigBadge}>
                 <Ionicons name="checkmark-circle" size={16} color="#22c55e" />
-                <Text style={styles.sigBadgeText}>Unterschrift gespeichert</Text>
+                <Text style={styles.sigBadgeText}>{t('profile.signatureStored')}</Text>
               </View>
               <View style={styles.sigBtns}>
                 <TouchableOpacity style={styles.sigEditBtn} onPress={() => setSigPadOpen(true)}>
                   <Ionicons name="pencil-outline" size={14} color={COLORS.primary} />
-                  <Text style={styles.sigEditText}>Ändern</Text>
+                  <Text style={styles.sigEditText}>{t('profile.change')}</Text>
                 </TouchableOpacity>
                 <TouchableOpacity style={styles.sigDeleteBtn} onPress={handleDeleteSignature}>
                   <Ionicons name="trash-outline" size={14} color="#ef4444" />
@@ -518,16 +532,37 @@ export default function ProfileScreen() {
           ) : (
             <TouchableOpacity style={styles.sigAddBtn} onPress={() => setSigPadOpen(true)}>
               <Ionicons name="add-circle-outline" size={17} color="#fff" />
-              <Text style={styles.sigAddText}>Unterschrift hinzufügen</Text>
+              <Text style={styles.sigAddText}>{t('profile.addSignature')}</Text>
             </TouchableOpacity>
           )}
+        </View>
+
+        {/* Sprache */}
+        <View style={styles.card}>
+          <View style={styles.cardHeader}>
+            <Ionicons name="language-outline" size={16} color={COLORS.primary} />
+            <Text style={styles.cardTitle}>{t('profile.language')}</Text>
+          </View>
+          <Text style={styles.langHint}>{t('profile.languageHint')}</Text>
+          <View style={styles.langGrid}>
+            {LANGUAGES.map(l => (
+              <TouchableOpacity
+                key={l.code}
+                style={[styles.langChip, lang === l.code && styles.langChipActive]}
+                onPress={() => chooseLanguage(l.code)}
+                activeOpacity={0.85}
+              >
+                <Text style={[styles.langText, lang === l.code && styles.langTextActive]}>{l.name}</Text>
+              </TouchableOpacity>
+            ))}
+          </View>
         </View>
 
         {/* Server URL */}
         <View style={styles.card}>
           <View style={styles.cardHeader}>
             <Ionicons name="server-outline" size={16} color={COLORS.primary} />
-            <Text style={styles.cardTitle}>Server-Verbindung</Text>
+            <Text style={styles.cardTitle}>{t('profile.server')}</Text>
             <TouchableOpacity onPress={() => { setTempUrl(serverUrl); setEditServer(v => !v); }} style={{ marginLeft: 'auto' }}>
               <Ionicons name={editServer ? 'close' : 'pencil-outline'} size={16} color={COLORS.textMuted} />
             </TouchableOpacity>
@@ -544,7 +579,7 @@ export default function ProfileScreen() {
                 autoCorrect={false}
               />
               <TouchableOpacity style={styles.saveBtn} onPress={handleSaveServer}>
-                <Text style={styles.saveBtnText}>Speichern</Text>
+                <Text style={styles.saveBtnText}>{t('common.save')}</Text>
               </TouchableOpacity>
             </View>
           ) : (
@@ -555,7 +590,7 @@ export default function ProfileScreen() {
         {/* Logout */}
         <TouchableOpacity style={styles.logoutBtn} onPress={handleLogout} activeOpacity={0.85}>
           <Ionicons name="log-out-outline" size={18} color={COLORS.accent} />
-          <Text style={styles.logoutText}>Abmelden</Text>
+          <Text style={styles.logoutText}>{t('profile.logout')}</Text>
         </TouchableOpacity>
 
         <Text style={styles.version}>Hausmeister Pro v{APP_VERSION}</Text>
@@ -620,6 +655,12 @@ const styles = StyleSheet.create({
   urlInput:     { borderWidth: 1.5, borderColor: COLORS.border, borderRadius: 10, paddingHorizontal: 12, paddingVertical: 8, fontSize: 13, color: COLORS.text },
   saveBtn:      { backgroundColor: COLORS.primary, borderRadius: 10, paddingVertical: 10, alignItems: 'center' },
   saveBtnText:  { color: '#fff', fontWeight: '800', fontSize: 13 },
+  langHint:     { fontSize: 12, color: COLORS.textMuted, marginBottom: 10 },
+  langGrid:     { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+  langChip:     { borderWidth: 1.5, borderColor: COLORS.border, borderRadius: 12, paddingHorizontal: 14, paddingVertical: 9 },
+  langChipActive: { backgroundColor: COLORS.primary, borderColor: COLORS.primary },
+  langText:     { fontSize: 14, fontWeight: '700', color: COLORS.text },
+  langTextActive: { color: '#fff' },
   logoutBtn:    { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, backgroundColor: `${COLORS.accent}15`, borderRadius: 16, paddingVertical: 16, marginTop: 4 },
   logoutText:   { color: COLORS.accent, fontWeight: '800', fontSize: 15 },
   version:      { textAlign: 'center', color: COLORS.textLight, fontSize: 11, marginTop: 20 },

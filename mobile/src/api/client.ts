@@ -4,6 +4,7 @@
  */
 import * as SecureStore from 'expo-secure-store';
 import * as Network from 'expo-network';
+import { t } from '@/i18n';
 
 export const TOKEN_KEY   = 'hp_token';
 export const SERVER_KEY  = 'hp_server_url';
@@ -103,12 +104,12 @@ export async function apiFetch<T = unknown>(
     });
   } catch (err: any) {
     if (err?.name === 'AbortError') {
-      throw new Error('Verbindung zum Server hat zu lange gedauert. Bitte prüfe deine Internetverbindung.');
+      throw new Error(t('net.timeout'));
     }
     throw new Error(
       (await isOffline())
-        ? 'Keine Internetverbindung. Bitte prüfe dein Netzwerk und versuche es erneut.'
-        : 'Keine Verbindung zum Server. Bitte prüfe die Server-URL und deine Internetverbindung.',
+        ? t('net.offline')
+        : t('net.unreachable'),
     );
   } finally {
     clearTimeout(timer);

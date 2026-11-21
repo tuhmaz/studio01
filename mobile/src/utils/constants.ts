@@ -1,3 +1,4 @@
+import { hasKey, t, type Key } from '@/i18n';
 export const COLORS = {
   primary:    '#0f2850',
   primaryLight:'#1a3d70',
@@ -50,6 +51,8 @@ export const CATEGORY_LABELS: Record<string, string> = {
 
 /** Display name of a service code, including company-defined "custom_…" services. */
 export function categoryLabel(code: string): string {
+  const key = `svc.${code}` as Key;
+  if (hasKey(key)) return t(key);
   if (CATEGORY_LABELS[code]) return CATEGORY_LABELS[code];
   if (code.startsWith('custom_')) {
     const words = code.slice('custom_'.length).replace(/_/g, ' ');
