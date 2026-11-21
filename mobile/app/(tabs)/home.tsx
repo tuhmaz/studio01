@@ -7,6 +7,7 @@ import { useFocusEffect, router } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '@/context/AuthContext';
+import { useNotifications } from '@/notifications/NotificationsContext';
 import { apiData } from '@/api/client';
 import { isManagement as isManagementRole, isFieldRole } from '@/utils/roles';
 import { COLORS, categoryLabel } from '@/utils/constants';
@@ -81,6 +82,8 @@ const statusLabel = (status: string) =>
 
 export default function HomeScreen() {
   const { user } = useAuth();
+  const { unread, refresh: refreshUnread } = useNotifications();
+  useFocusEffect(useCallback(() => { refreshUnread(); }, [refreshUnread]));
   const isManagement = isManagementRole(user?.role);
 
   // Live clock — updates every minute
@@ -330,9 +333,23 @@ export default function HomeScreen() {
             <Text style={s.greetText}>{greeting()},</Text>
             <Text style={s.userName}>{user?.name?.split(' ')[0]}</Text>
           </View>
-          <View style={s.dateChip}>
-            <Ionicons name="calendar-outline" size={13} color="#fff" />
-            <Text style={s.dateChipText}>{formatDate(today)}</Text>
+          <View style={s.headerRight}>
+            <TouchableOpacity
+              style={s.bell}
+              onPress={() => router.push('/notifications')}
+              accessibilityLabel={t('notif.title')}
+            >
+              <Ionicons name="notifications-outline" size={20} color="#fff" />
+              {unread > 0 && (
+                <View style={s.bellBadge}>
+                  <Text style={s.bellBadgeText}>{unread > 99 ? '99+' : unread}</Text>
+                </View>
+              )}
+            </TouchableOpacity>
+            <View style={s.dateChip}>
+              <Ionicons name="calendar-outline" size={13} color="#fff" />
+              <Text style={s.dateChipText}>{formatDate(today)}</Text>
+            </View>
           </View>
         </View>
 
@@ -656,6 +673,35 @@ const s = StyleSheet.create({
     fontSize: 30,
     fontWeight: '900',
     marginTop: 2,
+  },
+  headerRight: {
+    alignItems: 'flex-end',
+    gap: 10,
+  },
+  bell: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    backgroundColor: 'rgba(255,255,255,0.15)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  bellBadge: {
+    position: 'absolute',
+    top: -3,
+    right: -3,
+    minWidth: 18,
+    height: 18,
+    paddingHorizontal: 4,
+    borderRadius: 9,
+    backgroundColor: COLORS.danger,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  bellBadgeText: {
+    color: '#fff',
+    fontSize: 10,
+    fontWeight: '800',
   },
   dateChip: {
     flexDirection: 'row',

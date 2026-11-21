@@ -291,6 +291,16 @@ export const de = {
   "winter.savedOfflineText": "Keine Verbindung. Der Eintrag wird automatisch gesendet, sobald wieder Netz da ist.",
   "winter.subtitle": "Objekt antippen, dann Einsatz eintragen",
   "winter.title": "Winterdienst",
+  "notif.title": "Benachrichtigungen",
+  "notif.empty": "Keine Benachrichtigungen",
+  "notif.markAll": "Alle gelesen",
+  "notif.channel": "Einsätze und Erinnerungen",
+  "notif.justNow": "gerade eben",
+  "notif.minAgo": "vor {n} Min.",
+  "notif.hoursAgo": "vor {n} Std.",
+  "notif.offline": "Benachrichtigungen brauchen Internet.",
+  "notif.permissionOff": "Push-Benachrichtigungen sind aus. In den Einstellungen des Handys einschalten, um neue Einsätze sofort zu sehen.",
+  "notif.openSettings": "Einstellungen öffnen",
 } as const;
 
 export type Key = keyof typeof de;

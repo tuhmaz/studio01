@@ -11,6 +11,7 @@
  *     workers the task is published right away, without it stays a draft
  *     for the office to assign
  */
+import { notifyAssignmentChanges } from '@/lib/notifications';
 import { withTenant } from '@/lib/db';
 import { travelRulesFromCompany } from '@/lib/geo';
 import { WINTER_CATEGORY } from '@/lib/services';
@@ -171,7 +172,10 @@ export async function planWinterDay({ companyId, date, force = false, dryRun = f
           ON CONFLICT (id) DO NOTHING
           RETURNING id
         `;
-        if (inserted.length) created += 1;
+        if (inserted.length) {
+          created += 1;
+          if (entry.published) await notifyAssignmentChanges(db, companyId, new Map(), [winterTaskId(entry.siteId, date)], createdBy);
+        }
         else entry.status = 'exists';
       }
     });

@@ -3,6 +3,7 @@ import { SessionPayload } from '@/lib/auth-server';
 import sql, { withTenant, type Db } from '@/lib/db';
 import { getRequestSession } from '@/lib/request-context';
 import { LEAD_ROLES, TeamLeadError, assertMayRecordTime } from '@/lib/team-lead';
+import { notifyAssignmentChanges, snapshotAssignments } from '@/lib/notifications';
 import { hasPermission, normalizeRole, Role } from '@/lib/permissions';
 import { ALWAYS_FORBIDDEN_WRITE_FIELDS } from '@/lib/security';
 import { MediaError, externalizeWorkLogMedia } from '@/lib/media';
@@ -513,7 +514,11 @@ export async function POST(req: NextRequest) {
           }
           if (table === 'users') assertRoleAssignment(rows, session);
           if (table === 'work_log_entries') await externalizeWorkLogMedia(db, rows, session);
+          const beforeInsert = table === 'job_assignments'
+            ? await snapshotAssignments(db, session.companyId, rows.map(r => String(r.id ?? '')))
+            : null;
           const inserted = await db`INSERT INTO ${db(table)} ${db(rows)} RETURNING *`;
+          if (beforeInsert) await notifyAssignmentChanges(db, session.companyId, beforeInsert, inserted.map(r => r.id as string), session.userId);
           return NextResponse.json({ data: inserted });
         }
 
@@ -536,6 +541,9 @@ export async function POST(req: NextRequest) {
           const ownRowsOnly = roleOf(session) === 'WORKER' && EMPLOYEE_SCOPED_TABLES.has(table)
             ? db`AND ${db(table)}.employee_id = ${session.userId}`
             : db``;
+          const beforeUpsert = table === 'job_assignments'
+            ? await snapshotAssignments(db, session.companyId, rows.map(r => String(r.id ?? '')))
+            : null;
           const upserted = await db`
             INSERT INTO ${db(table)} ${db(rows)}
             ON CONFLICT (id) DO UPDATE SET ${db(rows[0], ...updateColumns)}
@@ -544,6 +552,7 @@ export async function POST(req: NextRequest) {
             ${table === 'users' ? db`AND ${db(table)}.role <> 'CLIENT'` : db``}
             RETURNING *
           `;
+          if (beforeUpsert) await notifyAssignmentChanges(db, session.companyId, beforeUpsert, upserted.map(r => r.id as string), session.userId);
           return NextResponse.json({ data: upserted });
         }
 
@@ -583,9 +592,14 @@ export async function POST(req: NextRequest) {
           if (table === 'work_log_entries') await externalizeWorkLogMedia(db, rows, session);
           const conditions = filterConditions(table, filters);
           const whereClause = conditions.reduce((a, b) => db`${a} AND ${b}`);
+          const beforeUpdate = table === 'job_assignments'
+            ? await snapshotAssignments(db, session.companyId,
+                (await db`SELECT id FROM job_assignments WHERE ${whereClause}`).map(r => r.id as string))
+            : null;
           const updated = await db`
             UPDATE ${db(table)} SET ${db(rows[0])} WHERE ${whereClause} RETURNING *
           `;
+          if (beforeUpdate) await notifyAssignmentChanges(db, session.companyId, beforeUpdate, updated.map(r => r.id as string), session.userId);
           return NextResponse.json({ data: updated });
         }
 
@@ -595,7 +609,12 @@ export async function POST(req: NextRequest) {
           if (Object.keys(filters).length === 0) return err('delete requires at least one filter');
           const conditions = filterConditions(table, filters);
           const whereClause = conditions.reduce((a, b) => db`${a} AND ${b}`);
+          const beforeDelete = table === 'job_assignments'
+            ? await snapshotAssignments(db, session.companyId,
+                (await db`SELECT id FROM job_assignments WHERE ${whereClause}`).map(r => r.id as string))
+            : null;
           await db`DELETE FROM ${db(table)} WHERE ${whereClause}`;
+          if (beforeDelete) await notifyAssignmentChanges(db, session.companyId, beforeDelete, [], session.userId);
           return NextResponse.json({ data: null });
         }
 

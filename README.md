@@ -96,6 +96,36 @@ Workers are taken from the site's previous Winterdienst task; without
 them the task stays a draft for the office. Recording the work in the app
 marks the task as done.
 
+## Benachrichtigungen
+
+Bell in the web header and in the worker app (Heute → 🔔), plus push
+notifications on the phone in the app's language.
+
+| Event | Who |
+| --- | --- |
+| New published assignment, date moved, removed from team / deleted | assigned workers (not the planner) |
+| Winterdienst task planned automatically with a team | that team |
+| Defect report from the Kundenportal | ADMIN, MANAGER |
+| Still clocked in after 10 h (`NOTIFY_OPEN_SHIFT_HOURS`) | team leader, or the worker on solo tasks; office gets a summary |
+
+Setup:
+
+- Migration `0010_notifications.sql`; then `node scripts/fix-db-permissions.mjs`
+  if the app runs with a separate database role.
+- Crontab (needs `CRON_SECRET`): reminders + retry of failed pushes
+
+  ```
+  0-59/5 * * * *  curl -fsS -H "Authorization: Bearer $CRON_SECRET" https://<host>/api/cron/notifications
+  ```
+
+- Push goes through the Expo push service. Android needs Firebase Cloud
+  Messaging: create a Firebase project, put `google-services.json` into
+  `mobile/` with `"android": { "googleServicesFile": "./google-services.json" }`
+  in `app.json`, and upload the FCM V1 service-account key with
+  `eas credentials` (Android → Push notifications). Optional:
+  `EXPO_ACCESS_TOKEN` if "enhanced push security" is on; `PUSH_DISABLED=1`
+  turns sending off (bell still works).
+
 ## Leistungsnachweis
 
 Each site's services (Objekte → *Leistungen & Monate*, with the standard

@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import { getToken, setToken, clearToken, setUnauthorizedHandler } from '@/api/client';
+import { unregisterDevice } from '@/notifications/device';
 import { login as apiLogin, logout as apiLogout, verifySession, rememberProfile, rememberedProfile, MobileUser } from '@/api/auth';
 
 interface AuthState {
@@ -76,6 +77,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   const logout = async () => {
+    await unregisterDevice();
     await apiLogout();
     setTokenState(null);
     setUser(null);
