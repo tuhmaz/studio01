@@ -220,6 +220,7 @@ export default function TrackingPage() {
         status: row.status,
         isPlanPublished: row.is_plan_published,
         categories: row.categories ?? [],
+        teamLeads: (row.team_leads ?? []) as string[],
       })));
       setIsAssignmentsLoading(false);
     });
@@ -265,6 +266,11 @@ export default function TrackingPage() {
     return () => { cancelled = true; };
   }, [isWinterTask, activeAssignment?.jobSiteId, winterRefresh]);
   const winterMissing = isWinterTask && (winterSite?.entries_today ?? 0) === 0;
+
+  // Teamleiter-Regel: Hat der Einsatz einen Teamleiter, stempelt nur er das
+  // Team ein und aus; der Mitarbeiter sieht seinen Status und dokumentiert.
+  const teamLeads: string[] = (activeAssignment as { teamLeads?: string[] } | null)?.teamLeads ?? [];
+  const leadClocksForMe = !canManageTeam && teamLeads.length > 0;
 
   // ── Checkliste (Leistungsnachweis) ────────────────────────────────────────
   const hasChecklist = checklistCodes(activeAssignment?.categories).length > 0;
@@ -823,6 +829,18 @@ export default function TrackingPage() {
                     )}
                   </div>
                 )}
+                {leadClocksForMe ? (
+                  <div className={`w-full rounded-3xl border-2 p-5 flex items-start gap-3 ${isClockedIn ? 'border-emerald-200 bg-emerald-50' : 'border-primary/15 bg-primary/5'}`}>
+                    <Users className={`w-6 h-6 shrink-0 ${isClockedIn ? 'text-emerald-700' : 'text-primary'}`} />
+                    <div>
+                      <p className="font-black">{isClockedIn ? 'Sie sind eingestempelt' : 'Noch nicht eingestempelt'}</p>
+                      <p className="text-sm text-muted-foreground mt-0.5">
+                        Ein- und Ausstempeln übernimmt Ihr Teamleiter: <span className="font-bold text-foreground">{teamLeads.join(', ')}</span>.
+                        {isClockedIn ? ' Checkliste, Fotos und Notizen erfassen Sie selbst.' : ''}
+                      </p>
+                    </div>
+                  </div>
+                ) : (
                 <Button
                   size="lg"
                   disabled={isProcessing || cooldown || !hasContext}
@@ -837,6 +855,7 @@ export default function TrackingPage() {
                       : <><Play className="mr-3 h-6 w-6 fill-current" />Jetzt Einstempeln</>
                   }
                 </Button>
+                )}
 
                 {!isClockedIn && canManageTeam && (
                   <Button

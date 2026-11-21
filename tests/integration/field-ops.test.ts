@@ -6,6 +6,7 @@ import { Buffer } from 'node:buffer';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { POST as ops } from '@/app/api/field/ops/route';
 import { POST as check } from '@/app/api/checks/route';
+import { POST as dataApi } from '@/app/api/data/route';
 import { call, seed, sql, tokenFor, type Fixtures } from './helpers';
 
 let fx: Fixtures;
@@ -26,9 +27,9 @@ const run = async (role: 'WORKER' | 'LEADER' | 'ACCOUNTANT' | 'ADMIN', body: Rec
   call(ops, '/api/field/ops', await tokenFor(f(), role), body);
 
 describe('Einstempeln', () => {
-  it('stempelt das ganze Team mit richtigem Mitarbeiter ein – auch wenn ein Mitarbeiter es auslöst', async () => {
+  it('Teamleiter stempelt das ganze Team mit dem richtigen Mitarbeiter ein', async () => {
     const at = hoursAgo(2);
-    const res = await run('WORKER', { op: 'clock_in', assignmentId: 'job-a', requestId: 'req-in-0001', at: at.toISOString(), lat: 51.5, lng: 11.9, gpsVerified: true });
+    const res = await run('LEADER', { op: 'clock_in', assignmentId: 'job-a', requestId: 'req-in-0001', at: at.toISOString(), lat: 51.5, lng: 11.9, gpsVerified: true });
     expect(res.status).toBe(200);
     expect(res.json.data.ownEntryId).toBe('te-req-in-0001');
 
@@ -38,16 +39,17 @@ describe('Einstempeln', () => {
     // Zeitpunkt vom Gerät, nicht der Empfangszeit.
     expect(new Date(entries[0].clock_in_datetime).toISOString()).toBe(round5(at));
     expect(entries.find(e => e.id === 'te-req-in-0001')?.gps_verified).toBe(true);
+    expect(entries.find(e => e.employee_id === fx.a.users.LEADER.id)?.id).toBe('te-req-in-0001');
     expect((await sql`SELECT status FROM job_assignments WHERE id = 'job-a'`)[0].status).toBe('IN_PROGRESS');
   });
 
   it('ist bei Wiederholung idempotent – auch nach dem Ausstempeln', async () => {
     const body = { op: 'clock_in', assignmentId: 'job-a', requestId: 'req-in-0002' };
-    await run('WORKER', body);
-    await run('WORKER', body);
+    await run('LEADER', body);
+    await run('LEADER', body);
     expect((await sql`SELECT count(*)::int AS n FROM time_entries`)[0].n).toBe(2);
-    await run('WORKER', { op: 'clock_out', assignmentId: 'job-a', requestId: 'req-out-0002' });
-    const again = await run('WORKER', body);
+    await run('LEADER', { op: 'clock_out', assignmentId: 'job-a', requestId: 'req-out-0002' });
+    const again = await run('LEADER', body);
     expect(again.status).toBe(200);
     expect((await sql`SELECT count(*)::int AS n FROM time_entries WHERE status = 'OPEN'`)[0].n).toBe(0);
   });
@@ -68,10 +70,51 @@ describe('Einstempeln', () => {
   });
 });
 
+describe('Teamleiter-Regel', () => {
+  it('Mitarbeiter im Team mit Teamleiter stempeln nicht selbst – weder über die App noch über /api/data', async () => {
+    const res = await run('WORKER', { op: 'clock_in', assignmentId: 'job-a', requestId: 'req-rule-001' });
+    expect(res.status).toBe(403);
+    expect(res.json.error).toContain('Teamleiter (LEADER a)');
+    const worker = await tokenFor(fx.a, 'WORKER');
+    const viaData = await call(dataApi, '/api/data', worker, {
+      action: 'insert', table: 'time_entries',
+      data: { id: 'te-bypass', company_id: 'co-a', employee_id: fx.a.users.WORKER.id, job_assignment_id: 'job-a', clock_in_datetime: new Date().toISOString(), status: 'OPEN' },
+    });
+    expect(viaData.status).toBe(403);
+    expect((await sql`SELECT count(*)::int AS n FROM time_entries`)[0].n).toBe(0);
+
+    // Vom Teamleiter eingestempelt – selbst ausstempeln geht auch nicht.
+    await run('LEADER', { op: 'clock_in', assignmentId: 'job-a', requestId: 'req-rule-002' });
+    expect((await run('WORKER', { op: 'clock_out', assignmentId: 'job-a', requestId: 'req-rule-003' })).status).toBe(403);
+    const ownEntry = `te-req-rule-002-${fx.a.users.WORKER.id.slice(0, 8)}`;
+    const closeViaData = await call(dataApi, '/api/data', worker, {
+      action: 'update', table: 'time_entries', filters: { id: ownEntry },
+      data: { clock_out_datetime: new Date().toISOString(), status: 'SUBMITTED' },
+    });
+    expect(closeViaData.status).toBe(403);
+    expect((await sql`SELECT status FROM time_entries WHERE id = ${ownEntry}`)[0].status).toBe('OPEN');
+  });
+
+  it('Einzeleinsatz ohne Teamleiter stempelt der Mitarbeiter selbst', async () => {
+    await sql`UPDATE job_assignments SET assigned_worker_ids = ${sql.array([fx.a.users.WORKER.id])} WHERE id = 'job-a'`;
+    expect((await run('WORKER', { op: 'clock_in', assignmentId: 'job-a', requestId: 'req-solo-001' })).status).toBe(200);
+    expect((await run('WORKER', { op: 'clock_out', assignmentId: 'job-a', requestId: 'req-solo-002' })).status).toBe(200);
+  });
+
+  it('die Einsatzliste nennt den Teamleiter', async () => {
+    const res = await call(dataApi, '/api/data', await tokenFor(fx.a, 'WORKER'), {
+      action: 'tracking_assignments', table: 'job_assignments', today: new Date().toISOString().slice(0, 10),
+    });
+    expect(res.status).toBe(200);
+    const job = res.json.data.find((a: any) => a.id === 'job-a');
+    expect(job?.team_leads).toEqual(['LEADER a']);
+  });
+});
+
 describe('Ausstempeln', () => {
   it('rechnet die Minuten auf dem Server aus den Gerätezeiten und schließt den Einsatz', async () => {
-    await run('WORKER', { op: 'clock_in', assignmentId: 'job-a', requestId: 'req-in-0010', at: hoursAgo(5).toISOString() });
-    const out = await run('WORKER', { op: 'clock_out', assignmentId: 'job-a', requestId: 'req-out-0010', at: hoursAgo(1).toISOString(), travelBonusMinutes: -60 });
+    await run('LEADER', { op: 'clock_in', assignmentId: 'job-a', requestId: 'req-in-0010', at: hoursAgo(5).toISOString() });
+    const out = await run('LEADER', { op: 'clock_out', assignmentId: 'job-a', requestId: 'req-out-0010', at: hoursAgo(1).toISOString(), travelBonusMinutes: -60 });
     expect(out.json.data.closed).toBe(2);
     const entries = await sql`SELECT employee_id, status, actual_work_minutes, travel_bonus_minutes, submission_datetime FROM time_entries`;
     for (const e of entries) {
@@ -80,26 +123,26 @@ describe('Ausstempeln', () => {
       expect(e.submission_datetime).not.toBeNull();
     }
     // Fahrtzeit-Ausgleich nur für den, der ausstempelt.
-    expect(entries.find(e => e.employee_id === fx.a.users.WORKER.id)?.travel_bonus_minutes).toBe(-60);
-    expect(entries.find(e => e.employee_id === fx.a.users.LEADER.id)?.travel_bonus_minutes).toBe(0);
+    expect(entries.find(e => e.employee_id === fx.a.users.LEADER.id)?.travel_bonus_minutes).toBe(-60);
+    expect(entries.find(e => e.employee_id === fx.a.users.WORKER.id)?.travel_bonus_minutes).toBe(0);
     expect((await sql`SELECT status FROM job_assignments WHERE id = 'job-a'`)[0].status).toBe('COMPLETED');
 
     // Wiederholung ändert nichts.
-    const again = await run('WORKER', { op: 'clock_out', assignmentId: 'job-a', requestId: 'req-out-0010', at: new Date().toISOString() });
+    const again = await run('LEADER', { op: 'clock_out', assignmentId: 'job-a', requestId: 'req-out-0010', at: new Date().toISOString() });
     expect(again.json.data.closed).toBe(0);
     expect((await sql`SELECT actual_work_minutes FROM time_entries LIMIT 1`)[0].actual_work_minutes).toBe(240);
   });
 
   it('Ausstempelzeit vor dem Einstempeln ergibt 0 Minuten, nicht negativ', async () => {
-    await run('WORKER', { op: 'clock_in', assignmentId: 'job-a', requestId: 'req-in-0011', at: hoursAgo(1).toISOString() });
-    await run('WORKER', { op: 'clock_out', assignmentId: 'job-a', requestId: 'req-out-0011', at: hoursAgo(2).toISOString() });
+    await run('LEADER', { op: 'clock_in', assignmentId: 'job-a', requestId: 'req-in-0011', at: hoursAgo(1).toISOString() });
+    await run('LEADER', { op: 'clock_out', assignmentId: 'job-a', requestId: 'req-out-0011', at: hoursAgo(2).toISOString() });
     expect((await sql`SELECT actual_work_minutes FROM time_entries LIMIT 1`)[0].actual_work_minutes).toBe(0);
   });
 });
 
 describe('Notizen', () => {
   it('nimmt offline erzeugte Notizen mit Gerätezeit an, einmalig', async () => {
-    await run('WORKER', { op: 'clock_in', assignmentId: 'job-a', requestId: 'req-in-0020' });
+    await run('LEADER', { op: 'clock_in', assignmentId: 'job-a', requestId: 'req-in-0020' });
     const at = hoursAgo(0.5);
     const note = { op: 'note', id: 'note-offline-01', assignmentId: 'job-a', timeEntryId: 'te-req-in-0020', type: 'photo', content: JPEG, at: at.toISOString() };
     const first = await run('WORKER', note);
@@ -108,7 +151,8 @@ describe('Notizen', () => {
     await run('WORKER', note);
     const rows = await sql`SELECT time_entry_id, job_assignment_id, created_at FROM work_log_entries`;
     expect(rows).toHaveLength(1);
-    expect(rows[0].time_entry_id).toBe('te-req-in-0020');
+    // Der eigene Zeiteintrag des Mitarbeiters (vom Teamleiter angelegt).
+    expect(rows[0].time_entry_id).toBe(`te-req-in-0020-${fx.a.users.WORKER.id.slice(0, 8)}`);
     expect(new Date(rows[0].created_at).toISOString()).toBe(at.toISOString());
   });
 

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { SessionPayload } from '@/lib/auth-server';
 import sql, { withTenant, type Db } from '@/lib/db';
 import { getRequestSession } from '@/lib/request-context';
+import { LEAD_ROLES, TeamLeadError, assertMayRecordTime } from '@/lib/team-lead';
 import { hasPermission, normalizeRole, Role } from '@/lib/permissions';
 import { ALWAYS_FORBIDDEN_WRITE_FIELDS } from '@/lib/security';
 import { MediaError, externalizeWorkLogMedia } from '@/lib/media';
@@ -99,6 +100,7 @@ function err(msg: string, status = 400) {
 
 function safeDataError(error: unknown): { message: string; status: number } {
   if (error instanceof MediaError) return { message: error.message, status: 400 };
+  if (error instanceof TeamLeadError) return { message: error.message, status: 403 };
   // A database CHECK constraint rejected a value (e.g. an out-of-range setting).
   if ((error as { code?: string })?.code === '23514') return { message: 'Ungültiger Wert', status: 400 };
   const message = error instanceof Error ? error.message : String(error);
@@ -430,8 +432,14 @@ export async function POST(req: NextRequest) {
           const today = typeof body.today === 'string' ? body.today : null;
           if (!today) return err('today required');
 
+          // team_leads: wer das Team ein-/ausstempelt (Teamleiter-Regel).
           let query = db`
-            SELECT * FROM job_assignments
+            SELECT a.*,
+                   coalesce((SELECT array_agg(u.name ORDER BY u.name) FROM users u
+                              WHERE u.company_id = a.company_id
+                                AND u.id::text = ANY(a.assigned_worker_ids)
+                                AND u.role IN ${db(LEAD_ROLES as unknown as string[])}), '{}') AS team_leads
+              FROM job_assignments a
              WHERE company_id = ${session.companyId}
                AND is_plan_published = true
                AND (
@@ -500,6 +508,7 @@ export async function POST(req: NextRequest) {
           const rows = sanitizeRows(table, body.data, session);
           if (table === 'time_entries') {
             assertTimeEntryStatusAllowed(rows, session);
+            await assertMayRecordTime(db, session, rows.map(row => row.job_assignment_id as string | null));
             rows.forEach(row => normalizeTimeEntryRow(row));
           }
           if (table === 'users') assertRoleAssignment(rows, session);
@@ -513,6 +522,7 @@ export async function POST(req: NextRequest) {
           const rows = sanitizeRows(table, body.data, session);
           if (table === 'time_entries') {
             assertTimeEntryStatusAllowed(rows, session);
+            await assertMayRecordTime(db, session, rows.map(row => row.job_assignment_id as string | null));
             rows.forEach(row => normalizeTimeEntryRow(row));
           }
           if (table === 'users') assertRoleAssignment(rows, session);
@@ -551,6 +561,11 @@ export async function POST(req: NextRequest) {
           if (table === 'users') assertRoleAssignment(rows, session);
           if (table === 'time_entries') {
             assertTimeEntryStatusAllowed(rows, session);
+            const target = await db`
+              SELECT DISTINCT job_assignment_id FROM time_entries
+               WHERE ${filterConditions(table, filters).reduce((a, b) => db`${a} AND ${b}`)}
+            `;
+            await assertMayRecordTime(db, session, target.map(r => r.job_assignment_id as string | null));
             const id = filters.id;
             let existing: { clock_in_datetime?: string | null; clock_out_datetime?: string | null } | undefined;
             if (typeof id === 'string') {

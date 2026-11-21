@@ -15,6 +15,7 @@ import type { Db } from '@/lib/db';
 import type { SessionPayload } from '@/lib/auth-server';
 import { normalizeRole } from '@/lib/permissions';
 import { isDataUrl, storeDataUrl } from '@/lib/media';
+import { assertMayRecordTime } from '@/lib/team-lead';
 
 export class FieldError extends Error {
   constructor(message: string, public status = 400) {
@@ -104,6 +105,7 @@ export async function clockIn(db: Db, session: SessionPayload, input: ClockInInp
   const reqId = requestId(input.requestId);
   const at = roundToFive(clientTime(input.at));
   const assignment = await loadAssignment(db, session, input.assignmentId);
+  await assertMayRecordTime(db, session, [assignment.id]);
 
   // Schon verarbeitet (Antwort ging z. B. unterwegs verloren)? Dann nichts mehr tun.
   const [done] = await db`
@@ -172,6 +174,7 @@ export async function clockOut(db: Db, session: SessionPayload, input: ClockOutI
   requestId(input.requestId);
   const at = roundToFive(clientTime(input.at));
   const assignment = await loadAssignment(db, session, input.assignmentId);
+  await assertMayRecordTime(db, session, [assignment.id]);
   const bonus = input.travelBonusMinutes == null ? 0 : Math.round(Number(input.travelBonusMinutes));
   if (!Number.isFinite(bonus) || bonus < -120 || bonus > 240) throw new FieldError('Ungültiger Fahrtzeit-Ausgleich');
 

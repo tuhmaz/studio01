@@ -15,6 +15,8 @@ export interface Assignment {
   job_site_id: string | null;
   categories: string[];
   assigned_worker_ids: string[];
+  /** Zugeteilte Teamleiter – sie stempeln das Team ein und aus. */
+  team_leads?: string[];
 }
 
 export interface JobSite {

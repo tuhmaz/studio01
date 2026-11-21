@@ -29,6 +29,9 @@ function isRemoteSite(site?: JobSite | null) {
 export default function TrackingScreen() {
   const { user } = useAuth();
   const { lastSyncAt } = useSync();
+  // Teamleiter-Regel: hat ein Einsatz einen Teamleiter, stempelt nur er das Team.
+  const isWorker = user?.role === 'WORKER';
+  const leadsOf = (a: Assignment | null | undefined) => (isWorker ? a?.team_leads ?? [] : []);
 
   const [assignments,  setAssignments]  = useState<Assignment[]>([]);
   const [sites,        setSites]        = useState<Record<string, JobSite>>({});
@@ -328,6 +331,12 @@ export default function TrackingScreen() {
                 </Text>
               </TouchableOpacity>
             )}
+            {leadsOf(activeAssign).length > 0 ? (
+              <View style={styles.leadNote}>
+                <Ionicons name="people-outline" size={18} color="#fff" />
+                <Text style={styles.leadNoteText}>Ausstempeln übernimmt Ihr Teamleiter: {leadsOf(activeAssign).join(', ')}</Text>
+              </View>
+            ) : (
             <TouchableOpacity
               style={[styles.clockOutBtn, clocking && { opacity: 0.6 }]}
               onPress={clockOut}
@@ -342,6 +351,7 @@ export default function TrackingScreen() {
                   </>
               }
             </TouchableOpacity>
+            )}
           </View>
         )}
 
@@ -379,7 +389,11 @@ export default function TrackingScreen() {
                         </View>
                       ))}
                     </View>
+                    {leadsOf(a).length > 0 && (
+                      <Text style={styles.leadHint} numberOfLines={2}>Teamleiter {leadsOf(a).join(', ')} stempelt das Team ein</Text>
+                    )}
                   </View>
+                  {leadsOf(a).length === 0 && (
                   <TouchableOpacity
                     style={[styles.clockInBtn, clocking && { opacity: 0.6 }]}
                     onPress={() => clockIn(a)}
@@ -391,6 +405,7 @@ export default function TrackingScreen() {
                       : <><Ionicons name="play-circle" size={18} color="#fff" /><Text style={styles.clockInText}>START</Text></>
                     }
                   </TouchableOpacity>
+                  )}
                 </View>
               );
             })}
@@ -428,6 +443,9 @@ const styles = StyleSheet.create({
   activeAddr:   { fontSize: 11, color: 'rgba(255,255,255,0.6)', marginTop: 2 },
   timerRow:     { flexDirection: 'row', alignItems: 'center', gap: 6 },
   timerText:    { fontSize: 12, color: 'rgba(255,255,255,0.75)', fontWeight: '600' },
+  leadNote:     { flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: 'rgba(255,255,255,0.14)', borderRadius: 14, padding: 14, marginTop: 6 },
+  leadNoteText: { flex: 1, color: '#fff', fontSize: 13, fontWeight: '700' },
+  leadHint:     { marginTop: 6, fontSize: 12, color: COLORS.primary, fontWeight: '700' },
   clockOutBtn:  {
     backgroundColor: '#fff', borderRadius: 14, height: 52,
     flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8,

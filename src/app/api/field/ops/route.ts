@@ -15,6 +15,7 @@ import { hasPermission } from '@/lib/permissions';
 import { getRequestSession } from '@/lib/request-context';
 import { MediaError } from '@/lib/media';
 import { FieldError, addNote, clockIn, clockOut } from '@/lib/field-ops';
+import { TeamLeadError } from '@/lib/team-lead';
 
 export async function POST(req: NextRequest) {
   const session = await getRequestSession(req);
@@ -41,7 +42,9 @@ export async function POST(req: NextRequest) {
         throw new FieldError('Unbekannter Vorgang');
     }
   } catch (error) {
-    if (error instanceof FieldError) return NextResponse.json({ error: error.message }, { status: error.status });
+    if (error instanceof FieldError || error instanceof TeamLeadError) {
+      return NextResponse.json({ error: error.message }, { status: error.status });
+    }
     if (error instanceof MediaError) return NextResponse.json({ error: error.message }, { status: 400 });
     console.error('[field/ops]', error);
     return NextResponse.json({ error: 'Serverfehler' }, { status: 500 });
