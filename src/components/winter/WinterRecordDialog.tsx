@@ -16,6 +16,7 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
 import { useToast } from '@/hooks/use-toast';
+import { compressImage } from '@/lib/image-compress';
 import { ACTIVITIES, MATERIALS, NEEDS_MATERIAL, type Activity, type Material } from '@/lib/winter-labels';
 
 export interface RecordSite {
@@ -43,26 +44,6 @@ const MAX_BACKDATE_H = 72;
 function toLocalInput(date: Date) {
   const pad = (n: number) => String(n).padStart(2, '0');
   return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
-}
-
-async function compressImage(file: File): Promise<string> {
-  const url = URL.createObjectURL(file);
-  try {
-    const img = await new Promise<InstanceType<typeof window.Image>>((resolve, reject) => {
-      const el = new window.Image();
-      el.onload = () => resolve(el);
-      el.onerror = () => reject(new Error('Bild konnte nicht gelesen werden'));
-      el.src = url;
-    });
-    const scale = Math.min(1, 1600 / Math.max(img.width, img.height));
-    const canvas = window.document.createElement('canvas');
-    canvas.width = Math.round(img.width * scale);
-    canvas.height = Math.round(img.height * scale);
-    canvas.getContext('2d')?.drawImage(img, 0, 0, canvas.width, canvas.height);
-    return canvas.toDataURL('image/jpeg', 0.82);
-  } finally {
-    URL.revokeObjectURL(url);
-  }
 }
 
 function currentPosition(): Promise<{ lat: number; lng: number; accuracy: number } | null> {
