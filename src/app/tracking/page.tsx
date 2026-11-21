@@ -16,8 +16,10 @@ import {
 import {
   MapPin, Play, Square, Loader2, Ban,
   CheckCircle2, Hammer, Building2, Waves, Leaf,
-  TreePine, Users, Clock, Send, Edit
+  TreePine, Users, Clock, Send, Edit, Snowflake, AlertTriangle
 } from 'lucide-react';
+import { WinterRecordDialog, type RecordSite } from '@/components/winter/WinterRecordDialog';
+import { WINTER_CATEGORY } from '@/lib/services';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/db/provider';
 import NotesPanel from '@/components/tracking/NotesPanel';
@@ -241,6 +243,27 @@ export default function TrackingPage() {
     [assignments, selectedAssignmentId],
   );
   const isAllCompleted = !!assignments.length && assignments.every(a => a.status === 'COMPLETED');
+
+  // ── Winterdienst ──────────────────────────────────────────────────────────
+  // Einsätze mit der Kategorie WINTERDIENST brauchen einen Eintrag im
+  // Streuprotokoll; Ausstempeln allein ist kein Nachweis.
+  const isWinterTask = !!activeAssignment?.jobSiteId && (activeAssignment?.categories ?? []).includes(WINTER_CATEGORY);
+  const [winterSite, setWinterSite] = useState<(RecordSite & { entries_today: number }) | null>(null);
+  const [winterRecordOpen, setWinterRecordOpen] = useState(false);
+  const [winterRefresh, setWinterRefresh] = useState(0);
+  useEffect(() => {
+    if (!isWinterTask || !activeAssignment?.jobSiteId) { setWinterSite(null); return; }
+    let cancelled = false;
+    fetch('/api/winter/sites')
+      .then(r => (r.ok ? r.json() : { data: [] }))
+      .then(({ data }) => {
+        if (cancelled) return;
+        setWinterSite((data ?? []).find((w: { id: string }) => w.id === activeAssignment.jobSiteId) ?? null);
+      })
+      .catch(() => { if (!cancelled) setWinterSite(null); });
+    return () => { cancelled = true; };
+  }, [isWinterTask, activeAssignment?.jobSiteId, winterRefresh]);
+  const winterMissing = isWinterTask && (winterSite?.entries_today ?? 0) === 0;
 
   // ── Time Entries ───────────────────────────────────────────────────────────
   const [allTeamEntries, setAllTeamEntries] = useState<(TimeEntry & { jobAssignmentId: string })[]>([]);
@@ -763,6 +786,25 @@ export default function TrackingPage() {
               </CardContent>
 
               <CardFooter className="flex flex-col gap-4 px-8 pb-8 pt-2">
+                {isWinterTask && (
+                  <div className={`w-full rounded-3xl border-2 p-4 flex flex-col sm:flex-row sm:items-center gap-3 ${winterMissing ? 'border-sky-300 bg-sky-50' : 'border-emerald-200 bg-emerald-50'}`}>
+                    <div className="flex-1 min-w-0">
+                      <p className="font-black text-sm flex items-center gap-1.5 text-sky-900"><Snowflake className="w-4 h-4" /> Winterdienst-Einsatz</p>
+                      <p className="text-xs text-muted-foreground mt-0.5">
+                        {!winterSite
+                          ? 'Für dieses Objekt ist kein Winterdienst eingerichtet – bitte das Büro informieren.'
+                          : winterMissing
+                            ? 'Noch nicht im Streuprotokoll. Bitte nach dem Räumen/Streuen erfassen (mit Foto).'
+                            : `Heute ${winterSite.entries_today} Eintrag${winterSite.entries_today === 1 ? '' : 'e'} im Streuprotokoll.`}
+                      </p>
+                    </div>
+                    {winterSite && (
+                      <Button className="rounded-2xl font-black bg-sky-600 hover:bg-sky-700" onClick={() => setWinterRecordOpen(true)}>
+                        <Snowflake className="w-4 h-4 mr-2" /> Winterdienst erfassen
+                      </Button>
+                    )}
+                  </div>
+                )}
                 <Button
                   size="lg"
                   disabled={isProcessing || cooldown || !hasContext}
@@ -865,6 +907,14 @@ export default function TrackingPage() {
         </DialogContent>
       </Dialog>
 
+      {winterRecordOpen && winterSite && (
+        <WinterRecordDialog
+          site={winterSite}
+          onClose={() => setWinterRecordOpen(false)}
+          onSaved={() => { setWinterRecordOpen(false); setWinterRefresh(n => n + 1); }}
+        />
+      )}
+
       <AlertDialog open={showClockOutConfirm} onOpenChange={setShowClockOutConfirm}>
         <AlertDialogContent className="rounded-[2rem] border-none shadow-2xl">
           <AlertDialogHeader>
@@ -877,6 +927,16 @@ export default function TrackingPage() {
                 : 'Ihre Arbeitszeit wird erfasst und die Schicht beendet.'}
             </AlertDialogDescription>
           </AlertDialogHeader>
+          {winterMissing && winterSite && (
+            <div className="rounded-2xl border-2 border-red-200 bg-red-50 p-4 text-sm">
+              <p className="font-black text-red-700 flex items-center gap-1.5"><AlertTriangle className="w-4 h-4" /> Winterdienst noch nicht protokolliert</p>
+              <p className="text-red-700/80 mt-1">Ohne Eintrag im Streuprotokoll gibt es keinen Nachweis, dass geräumt/gestreut wurde.</p>
+              <Button size="sm" className="mt-3 rounded-xl font-black bg-sky-600 hover:bg-sky-700"
+                onClick={() => { setShowClockOutConfirm(false); setWinterRecordOpen(true); }}>
+                <Snowflake className="w-4 h-4 mr-1.5" /> Jetzt erfassen
+              </Button>
+            </div>
+          )}
           <AlertDialogFooter className="gap-3">
             <AlertDialogCancel className="rounded-2xl font-black">Abbrechen</AlertDialogCancel>
             <AlertDialogAction onClick={handleClockOutConfirmed} className="rounded-2xl font-black bg-destructive hover:bg-destructive/90">

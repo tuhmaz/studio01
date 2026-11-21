@@ -3,7 +3,7 @@
  * Time and GPS are captured on save; without signal the entry waits on the
  * phone and is sent automatically later.
  */
-import React, { useCallback, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import {
   ActivityIndicator, Alert, Image, Modal, RefreshControl, ScrollView, StyleSheet,
   Text, TextInput, TouchableOpacity, View,
@@ -12,7 +12,7 @@ import { StatusBar } from 'expo-status-bar';
 import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
 import * as Location from 'expo-location';
-import { useFocusEffect } from 'expo-router';
+import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import {
   ACTIVITIES, MATERIALS, discardQueuedEntry, fetchWinterSites, flushWinterQueue, newRequestId,
   queuedEntries, submitWinterEntry,
@@ -46,6 +46,15 @@ export default function WinterScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [offline, setOffline] = useState(false);
   const [site, setSite] = useState<WinterSite | null>(null);
+  // Aus der Zeiterfassung: "Winterdienst erfassen" öffnet direkt das Objekt.
+  const { siteId: requestedSiteId } = useLocalSearchParams<{ siteId?: string }>();
+
+  useEffect(() => {
+    if (!requestedSiteId || !sites) return;
+    const match = sites.find(s => s.id === requestedSiteId);
+    if (match) setSite(match);
+    router.setParams({ siteId: undefined });
+  }, [requestedSiteId, sites]);
 
   const load = useCallback(async () => {
     try {

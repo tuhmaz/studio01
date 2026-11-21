@@ -5,7 +5,7 @@ import {
 } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { Ionicons } from '@expo/vector-icons';
-import { useFocusEffect } from 'expo-router';
+import { router, useFocusEffect } from 'expo-router';
 import * as Location from 'expo-location';
 import * as Haptics from 'expo-haptics';
 import { useAuth } from '@/context/AuthContext';
@@ -13,6 +13,7 @@ import { apiData } from '@/api/client';
 import { COLORS, categoryLabel, GPS_RADIUS_METERS } from '@/utils/constants';
 import { gpsDistance, formatDuration, formatTime, elapsedMinutes, randomId } from '@/utils/helpers';
 import { ChecklistModal } from '@/components/Checklist';
+import { fetchWinterSites, queuedEntries } from '@/api/winter';
 
 interface Assignment { id: string; title: string; status: string; scheduled_date: string; job_site_id: string | null; categories: string[]; assigned_worker_ids: string[]; }
 interface JobSite    {
@@ -179,8 +180,43 @@ export default function TrackingScreen() {
     }
   };
 
+  /** Winterdienst-Einsatz ohne Eintrag im Streuprotokoll? (offline gespeicherte zählen mit) */
+  const winterProtocolMissing = async (): Promise<boolean> => {
+    const siteId = activeAssign?.job_site_id;
+    if (!siteId || !activeAssign?.categories.includes('WINTERDIENST')) return false;
+    const today = new Date().toDateString();
+    const queued = (await queuedEntries()).some(e => e.siteId === siteId && new Date(e.performedAt).toDateString() === today);
+    if (queued) return false;
+    try {
+      const winterSite = (await fetchWinterSites()).find(w => w.id === siteId);
+      return !!winterSite && winterSite.entries_today === 0;
+    } catch {
+      return false; // offline: nicht blockieren
+    }
+  };
+
+  const openWinterEntry = () => {
+    if (activeAssign?.job_site_id) router.push({ pathname: '/(tabs)/winter', params: { siteId: activeAssign.job_site_id } });
+  };
+
   const clockOut = async () => {
     if (!user || !activeEntry || clocking) return;
+    if (await winterProtocolMissing()) {
+      Alert.alert(
+        'Winterdienst nicht protokolliert',
+        'Für dieses Objekt gibt es heute noch keinen Eintrag im Streuprotokoll. Ohne Eintrag fehlt der Nachweis.',
+        [
+          { text: 'Jetzt erfassen', onPress: openWinterEntry },
+          { text: 'Trotzdem ausstempeln', style: 'destructive', onPress: () => { void confirmClockOut(); } },
+        ],
+      );
+      return;
+    }
+    await confirmClockOut();
+  };
+
+  const confirmClockOut = async () => {
+    if (!user || !activeEntry) return;
     const site = sites[activeAssign?.job_site_id ?? ''];
     let travelBonus = 0;
     if (isRemoteSite(site)) {
@@ -294,6 +330,12 @@ export default function TrackingScreen() {
                 Eingestempelt: {formatTime(activeEntry.clock_in_datetime)} — {formatDuration(elapsed)} gearbeitet
               </Text>
             </View>
+            {activeAssign.categories.includes('WINTERDIENST') && activeAssign.job_site_id && (
+              <TouchableOpacity style={styles.checklistBtn} onPress={openWinterEntry} activeOpacity={0.85}>
+                <Ionicons name="snow-outline" size={20} color="#fff" />
+                <Text style={styles.checklistText}>Winterdienst erfassen</Text>
+              </TouchableOpacity>
+            )}
             {activeAssign.categories.some(c => c !== 'WINTERDIENST') && (
               <TouchableOpacity style={styles.checklistBtn} onPress={() => setChecklistOpen(true)} activeOpacity={0.85}>
                 <Ionicons name="list-circle-outline" size={20} color="#fff" />

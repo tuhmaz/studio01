@@ -8,11 +8,10 @@
 import { createHash } from 'node:crypto';
 import type { Db } from '@/lib/db';
 
-import { ACTIVITIES, MATERIALS, type Activity, type Material } from '@/lib/winter-labels';
+import { ACTIVITIES, MATERIALS, NEEDS_MATERIAL, type Activity, type Material } from '@/lib/winter-labels';
 
 export { ACTIVITIES, MATERIALS, type Activity, type Material };
 
-const NEEDS_MATERIAL: Activity[] = ['gritting', 'clearing_gritting'];
 
 /** Entries may be recorded up to 72 h late (offline phones) but not in the future. */
 export const MAX_BACKDATE_MS = 72 * 60 * 60 * 1000;
