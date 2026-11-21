@@ -9,26 +9,15 @@ import { router, useFocusEffect } from 'expo-router';
 import * as Location from 'expo-location';
 import * as Haptics from 'expo-haptics';
 import { useAuth } from '@/context/AuthContext';
-import { apiData } from '@/api/client';
 import { COLORS, categoryLabel, GPS_RADIUS_METERS } from '@/utils/constants';
-import { gpsDistance, formatDuration, formatTime, elapsedMinutes, randomId } from '@/utils/helpers';
-import { ChecklistModal, fetchChecklist } from '@/components/Checklist';
+import { gpsDistance, formatDuration, formatTime, elapsedMinutes } from '@/utils/helpers';
+import { ChecklistModal } from '@/components/Checklist';
 import { fetchWinterSites, queuedEntries } from '@/api/winter';
-
-interface Assignment { id: string; title: string; status: string; scheduled_date: string; job_site_id: string | null; categories: string[]; assigned_worker_ids: string[]; }
-interface JobSite    {
-  id: string;
-  name: string;
-  address: string;
-  city: string;
-  lat: number | null;
-  lng: number | null;
-  is_remote?: boolean;
-  distance_from_hq?: number | null;
-  travel_time_from_hq?: number | null;
-  estimated_travel_time_minutes_from_hq?: number | null;
-}
-interface TimeEntry  { id: string; clock_in_datetime: string; status: string; job_assignment_id: string; employee_id: string; }
+import {
+  clockIn as submitClockIn, clockOut as submitClockOut, loadChecklist, loadTracking,
+  type Assignment, type JobSite, type TimeEntry,
+} from '@/sync/field';
+import { useSync } from '@/sync/SyncContext';
 
 function isRemoteSite(site?: JobSite | null) {
   if (!site) return false;
@@ -39,7 +28,7 @@ function isRemoteSite(site?: JobSite | null) {
 
 export default function TrackingScreen() {
   const { user } = useAuth();
-  const today    = new Date().toISOString().split('T')[0];
+  const { lastSyncAt } = useSync();
 
   const [assignments,  setAssignments]  = useState<Assignment[]>([]);
   const [sites,        setSites]        = useState<Record<string, JobSite>>({});
@@ -53,6 +42,7 @@ export default function TrackingScreen() {
   const [gpsStatus,    setGpsStatus]    = useState<'idle' | 'checking' | 'ok' | 'far'>('idle');
   const [checklistOpen, setChecklistOpen] = useState(false);
   const [checklistProgress, setChecklistProgress] = useState<{ done: number; total: number } | null>(null);
+  const [offlineSince, setOfflineSince] = useState<string | null>(null);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const load = useCallback(async (silent = false) => {
@@ -60,22 +50,16 @@ export default function TrackingScreen() {
     if (!silent) setLoading(true);
     setErrorMsg(null);
     try {
-      const [aRes, sRes, eRes] = await Promise.all([
-        apiData<Assignment[]>({ action: 'tracking_assignments', table: 'job_assignments', companyId: user.companyId, today, workerId: user.id }),
-        apiData<JobSite[]>({ action: 'query', table: 'job_sites', filters: { company_id: user.companyId } }),
-        apiData<TimeEntry[]>({ action: 'query', table: 'time_entries', filters: { employee_id: user.id, status: 'OPEN' } }),
-      ]);
-      const siteMap: Record<string, JobSite> = {};
-      (sRes.data ?? []).forEach(s => { siteMap[s.id] = s; });
-      setSites(siteMap);
-      setAssignments(aRes.data ?? []);
-
-      const open = (eRes.data ?? [])[0] ?? null;
-      setActiveEntry(open);
-      if (open) {
-        const a = (aRes.data ?? []).find(x => x.id === open.job_assignment_id) ?? null;
-        setActiveAssign(a);
-      }
+      // Online vom Server, sonst gespeicherter Stand – jeweils mit noch nicht
+      // gesendeten Vorgängen (z. B. offline eingestempelt) überlagert.
+      const data = await loadTracking(user);
+      setSites(data.sites);
+      setAssignments(data.assignments);
+      setOfflineSince(data.offline ? data.savedAt : null);
+      setActiveEntry(data.activeEntry);
+      setActiveAssign(data.activeEntry
+        ? data.assignments.find(x => x.id === data.activeEntry?.job_assignment_id) ?? null
+        : null);
     } catch (e: any) {
       console.warn('Tracking load error', e);
       setErrorMsg(e.message || 'Ein Fehler ist aufgetreten');
@@ -83,7 +67,10 @@ export default function TrackingScreen() {
       setLoading(false);
       setRefreshing(false);
     }
-  }, [user, today]);
+  }, [user]);
+
+  // Nach dem Senden des Postausgangs die echten Serverdaten zeigen.
+  useEffect(() => { if (lastSyncAt) void load(true); }, [lastSyncAt, load]);
 
   useFocusEffect(
     useCallback(() => {
@@ -136,40 +123,15 @@ export default function TrackingScreen() {
         lat = gps.lat; lng = gps.lng;
       }
 
-      const now = new Date().toISOString();
-
-      // كل العمال المحددين في المهمة — إذا لم يوجد أحد نسجّل المستخدم الحالي فقط
-      const workerIds: string[] = assignment.assigned_worker_ids?.length > 0
-        ? assignment.assigned_worker_ids
-        : [user.id];
-
-      // تحقق من العمال الذين سُجِّلوا مسبقاً
-      const existingRes = await apiData<TimeEntry[]>({
-        action: 'query', table: 'time_entries',
-        filters: { job_assignment_id: assignment.id, status: 'OPEN' },
+      // Ein Vorgang für das ganze Team; ohne Netz wartet er auf dem Handy
+      // (mit der Uhrzeit von jetzt) und wird später gesendet.
+      const result = await submitClockIn(user, assignment, site?.name ?? assignment.title, {
+        lat: site ? lat : null,
+        lng: site ? lng : null,
+        verified: !!site,
       });
-      const alreadyClockedIn = new Set((existingRes.data ?? []).map(e => e.employee_id));
-
-      // أنشئ time_entry لكل عامل غير مسجَّل
-      for (const workerId of workerIds) {
-        if (alreadyClockedIn.has(workerId)) continue;
-        await apiData({ action: 'insert', table: 'time_entries', data: {
-          id: `te-${randomId()}`,
-          company_id: user.companyId,
-          employee_id: workerId,
-          job_assignment_id: assignment.id,
-          job_site_id: assignment.job_site_id,
-          clock_in_datetime: now,
-          status: 'OPEN',
-          gps_verified: workerId === user.id ? !!site : false,
-          lat:  workerId === user.id ? lat : 0,
-          lng:  workerId === user.id ? lng : 0,
-          travel_bonus_minutes: 0,
-        }});
-      }
-
-      if (assignment.status === 'PENDING') {
-        await apiData({ action: 'update', table: 'job_assignments', filters: { id: assignment.id }, data: { status: 'IN_PROGRESS' } });
+      if (result === 'queued') {
+        Alert.alert('Offline eingestempelt', 'Kein Netz – die Einstempelzeit ist auf dem Handy gespeichert und wird automatisch gesendet.');
       }
       await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       await load();
@@ -203,7 +165,8 @@ export default function TrackingScreen() {
   const openChecklistItems = async (): Promise<string[]> => {
     if (!activeAssign || !activeAssign.categories.some(c => c !== 'WINTERDIENST')) return [];
     try {
-      const data = await fetchChecklist(activeAssign.id);
+      if (!user) return [];
+      const data = await loadChecklist(user, activeAssign.id);
       return data.items
         .filter(i => i.check?.status !== 'done' && i.check?.status !== 'not_possible')
         .map(i => i.label);
@@ -269,35 +232,12 @@ export default function TrackingScreen() {
       { text: 'Ausstempeln', style: 'destructive', onPress: async () => {
         setClocking(true);
         try {
-          const now = new Date().toISOString();
-
-          // جلب كل الـ time_entries المفتوحة لهذه المهمة (كل العمال)
-          const openRes = await apiData<TimeEntry[]>({
-            action: 'query', table: 'time_entries',
-            filters: { job_assignment_id: activeEntry.job_assignment_id, status: 'OPEN' },
-          });
-          const openEntries = openRes.data ?? [];
-
-          // إغلاق وقت كل عامل بناءً على وقت دخوله الخاص
-          for (const entry of openEntries) {
-            const minutes = elapsedMinutes(entry.clock_in_datetime);
-            const bonus   = entry.employee_id === user.id ? travelBonus : 0;
-            await apiData({ action: 'update', table: 'time_entries', filters: { id: entry.id }, data: {
-              clock_out_datetime:   now,
-              actual_work_minutes:  minutes,
-              travel_bonus_minutes: bonus,
-              status:               'SUBMITTED',
-              submission_datetime:  now,
-            }});
+          // Server schließt alle offenen Einträge des Einsatzes und rechnet die
+          // Minuten aus Ein- und Ausstempelzeit – auch wenn erst später gesendet.
+          const result = await submitClockOut(user, activeEntry.job_assignment_id, site?.name ?? activeAssign?.title ?? 'Einsatz', travelBonus);
+          if (result === 'queued') {
+            Alert.alert('Offline ausgestempelt', 'Kein Netz – die Ausstempelzeit ist gespeichert und wird automatisch gesendet.');
           }
-
-          // أغلق المهمة
-          await apiData({
-            action: 'update', table: 'job_assignments',
-            filters: { id: activeEntry.job_assignment_id },
-            data: { status: 'COMPLETED' },
-          });
-
           await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
           await load();
         } catch (e: any) {
@@ -336,6 +276,15 @@ export default function TrackingScreen() {
           </View>
         ) : null}
 
+        {offlineSince && (
+          <View style={styles.offlineNote}>
+            <Ionicons name="cloud-offline-outline" size={16} color="#92400e" />
+            <Text style={styles.offlineNoteText}>
+              Offline – gespeicherter Stand von {formatTime(offlineSince)}. Ein-/Ausstempeln, Checkliste und Notizen funktionieren und werden später gesendet.
+            </Text>
+          </View>
+        )}
+
         {/* Active shift card */}
         {activeEntry && activeAssign && (
           <View style={styles.activeCard}>
@@ -359,6 +308,12 @@ export default function TrackingScreen() {
                 Eingestempelt: {formatTime(activeEntry.clock_in_datetime)} — {formatDuration(elapsed)} gearbeitet
               </Text>
             </View>
+            {activeEntry.pending && (
+              <View style={styles.timerRow}>
+                <Ionicons name="cloud-upload-outline" size={16} color="#fde68a" />
+                <Text style={[styles.timerText, { color: '#fde68a' }]}>Auf dem Handy gespeichert – wird gesendet, sobald Netz da ist</Text>
+              </View>
+            )}
             {activeAssign.categories.includes('WINTERDIENST') && activeAssign.job_site_id && (
               <TouchableOpacity style={styles.checklistBtn} onPress={openWinterEntry} activeOpacity={0.85}>
                 <Ionicons name="snow-outline" size={20} color="#fff" />
@@ -455,6 +410,8 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
   },
   headerTitle:  { color: '#fff', fontSize: 22, fontWeight: '900' },
+  offlineNote:  { flexDirection: 'row', gap: 8, alignItems: 'flex-start', backgroundColor: '#fef3c7', borderRadius: 12, padding: 12, marginBottom: 14 },
+  offlineNoteText: { flex: 1, color: '#92400e', fontSize: 12, fontWeight: '600', lineHeight: 17 },
   activeCard:   {
     backgroundColor: COLORS.primary, borderRadius: 20, padding: 20,
     marginBottom: 20, gap: 14,

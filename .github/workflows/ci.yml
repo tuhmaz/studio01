@@ -43,6 +43,9 @@ jobs:
         with:
           node-version: 22
           cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            mobile/package-lock.json
 
       - run: npm ci
 
@@ -57,6 +60,16 @@ jobs:
 
       - name: Integration tests (tenant isolation, RLS, authorization)
         run: npm run test:integration
+
+      # Mitarbeiter-App: Typprüfung und Tests der Offline-Logik (Postausgang).
+      - name: Install mobile dependencies
+        run: npm ci --prefix mobile --ignore-scripts
+
+      - name: Mobile typecheck
+        run: npx tsc --noEmit -p mobile
+
+      - name: Mobile tests (offline outbox)
+        run: npm run test:mobile
 
       - name: Build
         run: npm run build

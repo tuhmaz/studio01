@@ -9,6 +9,8 @@ import Svg, { Path } from 'react-native-svg';
 import * as SecureStore from 'expo-secure-store';
 import { useFocusEffect } from 'expo-router';
 import { useAuth } from '@/context/AuthContext';
+import { useSync } from '@/sync/SyncContext';
+import { pendingOps } from '@/sync/outbox';
 import Constants from 'expo-constants';
 import { apiData, apiFetch } from '@/api/client';
 import { SERVER_KEY, DEFAULT_URL } from '@/api/client';
@@ -228,6 +230,7 @@ function SignaturePadModal({
 
 export default function ProfileScreen() {
   const { user, logout } = useAuth();
+  const { syncNow } = useSync();
   const [entries,       setEntries]       = useState<MonthEntry[]>([]);
   const [loading,       setLoading]       = useState(true);
   const [serverUrl,     setServerUrl]     = useState('');
@@ -350,11 +353,21 @@ export default function ProfileScreen() {
     Alert.alert('Gespeichert', 'Server-URL wurde aktualisiert. Bitte neu anmelden.');
   };
 
-  const handleLogout = () => {
-    Alert.alert('Abmelden', 'Wirklich abmelden?', [
-      { text: 'Abbrechen', style: 'cancel' },
-      { text: 'Abmelden', style: 'destructive', onPress: logout },
-    ]);
+  const handleLogout = async () => {
+    // Vorher noch senden, was geht – Abmelden ohne Netz verliert nichts:
+    // wartende Vorgänge bleiben diesem Benutzer zugeordnet auf dem Handy.
+    await syncNow();
+    const waiting = user ? (await pendingOps(user.id)).length : 0;
+    Alert.alert(
+      'Abmelden',
+      waiting > 0
+        ? `${waiting} Vorgang${waiting === 1 ? ' ist' : 'e sind'} noch nicht gesendet (kein Netz). Sie bleiben auf dem Handy und werden gesendet, sobald Sie sich wieder anmelden.`
+        : 'Wirklich abmelden?',
+      [
+        { text: 'Abbrechen', style: 'cancel' },
+        { text: 'Abmelden', style: 'destructive', onPress: logout },
+      ],
+    );
   };
 
   const handleSaveSignature = async (dataUrl: string) => {

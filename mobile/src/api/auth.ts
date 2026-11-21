@@ -1,4 +1,5 @@
-import { apiFetch, clearToken } from './client';
+import * as SecureStore from 'expo-secure-store';
+import { ApiError, apiFetch, clearToken } from './client';
 import { normalizeRole, type Role } from '@/utils/roles';
 
 export interface MobileUser {
@@ -30,6 +31,28 @@ export async function login(email: string, password: string): Promise<{ token: s
   };
 }
 
+const PROFILE_KEY = 'hp_profile';
+
+/** Profil lokal merken, damit die App auch ohne Netz startet. */
+export async function rememberProfile(user: MobileUser | null): Promise<void> {
+  if (user) await SecureStore.setItemAsync(PROFILE_KEY, JSON.stringify(user));
+  else await SecureStore.deleteItemAsync(PROFILE_KEY);
+}
+
+export async function rememberedProfile(): Promise<MobileUser | null> {
+  try {
+    const raw = await SecureStore.getItemAsync(PROFILE_KEY);
+    return raw ? (JSON.parse(raw) as MobileUser) : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Prüft die Sitzung beim Server.
+ * null = vom Server abgelehnt (abgelaufen/widerrufen) → abmelden.
+ * Wirft bei Netzproblemen → Sitzung behalten und offline weiterarbeiten.
+ */
 export async function verifySession(token: string): Promise<MobileUser | null> {
   try {
     const data = await apiFetch<{
@@ -42,8 +65,9 @@ export async function verifySession(token: string): Promise<MobileUser | null> {
       role:      normalizeRole(data.role),
       companyId: data.companyId,
     };
-  } catch {
-    return null;
+  } catch (error) {
+    if (error instanceof ApiError && (error.status === 401 || error.status === 403)) return null;
+    throw error;
   }
 }
 
@@ -55,4 +79,5 @@ export async function logout(): Promise<void> {
     // Offline or already-invalid token — local logout still proceeds.
   }
   await clearToken();
+  await rememberProfile(null);
 }

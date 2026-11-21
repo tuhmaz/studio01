@@ -1,41 +1,73 @@
-import { useEffect, useRef, useState } from 'react';
-import { View, Text, StyleSheet, Platform } from 'react-native';
+import { View, Text, StyleSheet, Platform, TouchableOpacity, Alert } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import * as Network from 'expo-network';
+import { useSync } from '@/sync/SyncContext';
 
 /**
- * Bottom overlay that appears when the device loses connectivity.
- * Renders nothing while online, so it never shifts the layout.
+ * Hinweis unten über der Tab-Leiste:
+ *  - rot    "Keine Verbindung · 3 warten"   (alles bleibt gespeichert)
+ *  - orange "Wird gesendet … 3"              (Netz da, Postausgang läuft)
+ *  - rot    "2 nicht gespeichert – antippen" (Server hat abgelehnt)
+ * Nichts zu tun → keine Anzeige, das Layout verschiebt sich nicht.
  */
 export function OfflineBanner() {
-  const [offline, setOffline] = useState(false);
-  const mounted = useRef(true);
+  const { online, pending, failed, syncNow, retry, discard } = useSync();
 
-  useEffect(() => {
-    mounted.current = true;
-    const check = async () => {
-      try {
-        const net = await Network.getNetworkStateAsync();
-        if (mounted.current) setOffline(net?.isConnected === false);
-      } catch {
-        // Ignore — assume online if the state can't be read.
-      }
-    };
-    check();
-    const id = setInterval(check, 4000);
-    return () => { mounted.current = false; clearInterval(id); };
-  }, []);
+  const showFailed = () => {
+    const list = failed.map(f => `• ${f.label}\n  ${f.error}`).join('\n\n');
+    Alert.alert(
+      `${failed.length} Vorgang${failed.length === 1 ? '' : 'e'} nicht gespeichert`,
+      `${list}\n\nBitte ggf. das Büro informieren.`,
+      [
+        { text: 'Schließen', style: 'cancel' },
+        { text: 'Erneut versuchen', onPress: () => { failed.forEach(f => { void retry(f); }); } },
+        {
+          text: 'Verwerfen',
+          style: 'destructive',
+          onPress: () => Alert.alert('Wirklich verwerfen?', 'Diese Vorgänge werden vom Handy gelöscht.', [
+            { text: 'Abbrechen', style: 'cancel' },
+            { text: 'Verwerfen', style: 'destructive', onPress: () => { failed.forEach(f => { void discard(f); }); } },
+          ]),
+        },
+      ],
+    );
+  };
 
-  if (!offline) return null;
-
-  return (
-    <View style={styles.wrap} pointerEvents="none">
-      <View style={styles.pill}>
-        <Ionicons name="cloud-offline-outline" size={15} color="#fff" />
-        <Text style={styles.text}>Keine Verbindung</Text>
+  if (failed.length > 0) {
+    return (
+      <View style={styles.wrap} pointerEvents="box-none">
+        <TouchableOpacity style={[styles.pill, { backgroundColor: '#b91c1c' }]} onPress={showFailed} activeOpacity={0.85}>
+          <Ionicons name="alert-circle-outline" size={15} color="#fff" />
+          <Text style={styles.text}>{failed.length} nicht gespeichert – antippen</Text>
+        </TouchableOpacity>
       </View>
-    </View>
-  );
+    );
+  }
+
+  if (!online) {
+    return (
+      <View style={styles.wrap} pointerEvents="none">
+        <View style={[styles.pill, { backgroundColor: '#dc2626' }]}>
+          <Ionicons name="cloud-offline-outline" size={15} color="#fff" />
+          <Text style={styles.text}>
+            Keine Verbindung{pending > 0 ? ` · ${pending} wartet${pending === 1 ? '' : 'en'} (gespeichert)` : ''}
+          </Text>
+        </View>
+      </View>
+    );
+  }
+
+  if (pending > 0) {
+    return (
+      <View style={styles.wrap} pointerEvents="box-none">
+        <TouchableOpacity style={[styles.pill, { backgroundColor: '#d97706' }]} onPress={() => { void syncNow(); }} activeOpacity={0.85}>
+          <Ionicons name="cloud-upload-outline" size={15} color="#fff" />
+          <Text style={styles.text}>Wird gesendet … {pending}</Text>
+        </TouchableOpacity>
+      </View>
+    );
+  }
+
+  return null;
 }
 
 const styles = StyleSheet.create({
@@ -50,7 +82,6 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 7,
-    backgroundColor: '#dc2626',
     borderRadius: 999,
     paddingHorizontal: 14,
     paddingVertical: 8,
