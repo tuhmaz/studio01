@@ -4,6 +4,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { COLORS } from '@/utils/constants';
 import { useAuth } from '@/context/AuthContext';
 import { isManagement } from '@/utils/roles';
+import { t } from '@/i18n';
 
 export default function TabLayout() {
   const { user } = useAuth();
@@ -32,14 +33,14 @@ export default function TabLayout() {
       <Tabs.Screen
         name="home"
         options={{
-          title: 'Heute',
+          title: t('tabs.home'),
           tabBarIcon: ({ color, size }) => <Ionicons name="home-outline" size={size} color={color} />,
         }}
       />
       <Tabs.Screen
         name="tracking"
         options={{
-          title: 'Stempeln',
+          title: t('tabs.tracking'),
           tabBarIcon: ({ color, size }) => <Ionicons name="time-outline" size={size} color={color} />,
           tabBarBadge: undefined,
         }}
@@ -47,28 +48,28 @@ export default function TabLayout() {
       <Tabs.Screen
         name="winter"
         options={{
-          title: 'Winter',
+          title: t('tabs.winter'),
           tabBarIcon: ({ color, size }) => <Ionicons name="snow-outline" size={size} color={color} />,
         }}
       />
       <Tabs.Screen
         name="notes"
         options={{
-          title: 'Notizen',
+          title: t('tabs.notes'),
           tabBarIcon: ({ color, size }) => <Ionicons name="camera-outline" size={size} color={color} />,
         }}
       />
       <Tabs.Screen
         name="profile"
         options={{
-          title: 'Profil',
+          title: t('tabs.profile'),
           tabBarIcon: ({ color, size }) => <Ionicons name="person-outline" size={size} color={color} />,
         }}
       />
       <Tabs.Screen
         name="planning"
         options={{
-          title: 'Planung',
+          title: t('tabs.planning'),
           href: isLeader ? '/planning' : null,
           tabBarIcon: ({ color, size }) => <Ionicons name="calendar-outline" size={size} color={color} />,
         }}

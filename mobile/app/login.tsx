@@ -10,6 +10,7 @@ import { useAuth } from '@/context/AuthContext';
 import { COLORS } from '@/utils/constants';
 import * as SecureStore from 'expo-secure-store';
 import { SERVER_KEY, DEFAULT_URL } from '@/api/client';
+import { t } from '@/i18n';
 
 export default function LoginScreen() {
   const { login } = useAuth();
@@ -37,19 +38,19 @@ export default function LoginScreen() {
       await SecureStore.setItemAsync(SERVER_KEY, url);
     }
     setShowSettings(false);
-    Alert.alert('Erfolg', 'Server-URL gespeichert');
+    Alert.alert(t('common.success'), t('login.serverSaved'));
   };
 
   const handleLogin = async () => {
     if (!email.trim() || !password.trim()) {
-      Alert.alert('Fehler', 'Bitte E-Mail und Passwort eingeben.');
+      Alert.alert(t('common.error'), t('login.missing'));
       return;
     }
     setLoading(true);
     try {
       await login(email.trim().toLowerCase(), password);
     } catch (e: any) {
-      Alert.alert('Anmeldung fehlgeschlagen', e?.message || 'Ungültige Anmeldedaten.');
+      Alert.alert(t('login.failed'), e?.message || t('login.invalid'));
     } finally {
       setLoading(false);
     }
@@ -69,7 +70,7 @@ export default function LoginScreen() {
             <Ionicons name="construct" size={40} color="#fff" />
           </View>
           <Text style={styles.brandTitle}>HAUSMEISTER PRO</Text>
-          <Text style={styles.brandSub}>Mitarbeiter-App</Text>
+          <Text style={styles.brandSub}>{t('login.appName')}</Text>
         </View>
 
         <TouchableOpacity 
@@ -82,11 +83,11 @@ export default function LoginScreen() {
 
         {/* Card */}
         <View style={styles.card}>
-          <Text style={styles.cardTitle}>Anmelden</Text>
+          <Text style={styles.cardTitle}>{t('login.title')}</Text>
 
           {/* Email */}
           <View style={styles.fieldGroup}>
-            <Text style={styles.label}>E-Mail</Text>
+            <Text style={styles.label}>{t('login.email')}</Text>
             <View style={styles.inputWrap}>
               <Ionicons name="mail-outline" size={18} color={COLORS.textMuted} style={styles.inputIcon} />
               <TextInput
@@ -105,7 +106,7 @@ export default function LoginScreen() {
 
           {/* Password */}
           <View style={styles.fieldGroup}>
-            <Text style={styles.label}>Passwort</Text>
+            <Text style={styles.label}>{t('login.password')}</Text>
             <View style={styles.inputWrap}>
               <Ionicons name="lock-closed-outline" size={18} color={COLORS.textMuted} style={styles.inputIcon} />
               <TextInput
@@ -133,7 +134,7 @@ export default function LoginScreen() {
           >
             {loading
               ? <ActivityIndicator color="#fff" />
-              : <Text style={styles.loginBtnText}>Anmelden</Text>
+              : <Text style={styles.loginBtnText}>{t('login.submit')}</Text>
             }
           </TouchableOpacity>
         </View>
@@ -150,8 +151,8 @@ export default function LoginScreen() {
       >
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
-            <Text style={styles.modalTitle}>Server-Einstellungen</Text>
-            <Text style={styles.modalSub}>Backend-URL eingeben (z.B. https://mbj.news)</Text>
+            <Text style={styles.modalTitle}>{t('login.serverTitle')}</Text>
+            <Text style={styles.modalSub}>{t('login.serverHint')}</Text>
             
             <TextInput
               style={styles.modalInput}
@@ -164,10 +165,10 @@ export default function LoginScreen() {
 
             <View style={styles.modalActions}>
               <TouchableOpacity style={styles.modalBtnCancel} onPress={() => setShowSettings(false)}>
-                <Text style={styles.modalBtnCancelText}>Abbrechen</Text>
+                <Text style={styles.modalBtnCancelText}>{t('common.cancel')}</Text>
               </TouchableOpacity>
               <TouchableOpacity style={styles.modalBtnSave} onPress={saveServerUrl}>
-                <Text style={styles.modalBtnSaveText}>Speichern</Text>
+                <Text style={styles.modalBtnSaveText}>{t('common.save')}</Text>
               </TouchableOpacity>
             </View>
           </View>

@@ -11,6 +11,7 @@ import { apiData } from '@/api/client';
 import { isManagement as isManagementRole, isFieldRole } from '@/utils/roles';
 import { COLORS, categoryLabel } from '@/utils/constants';
 import { formatDate, formatDateFull, formatTime, elapsedMinutes, formatDuration } from '@/utils/helpers';
+import { dateLocale, t, rtlFlip } from '@/i18n';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -59,13 +60,13 @@ interface Worker {
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
-const MONTH_NAMES = ['Januar','Februar','März','April','Mai','Juni','Juli','August','September','Oktober','November','Dezember'];
+const monthName = (m: number) => new Date(2000, m, 1).toLocaleDateString(dateLocale(), { month: 'long' });
 
 function greeting(): string {
   const h = new Date().getHours();
-  if (h < 12) return 'Guten Morgen';
-  if (h < 18) return 'Guten Tag';
-  return 'Guten Abend';
+  if (h < 12) return t('home.morning');
+  if (h < 18) return t('home.day');
+  return t('home.evening');
 }
 
 const STATUS_COLOR: Record<string, string> = {
@@ -73,11 +74,8 @@ const STATUS_COLOR: Record<string, string> = {
   IN_PROGRESS: '#3b82f6',
   COMPLETED:   COLORS.success,
 };
-const STATUS_LABEL: Record<string, string> = {
-  PENDING:     'Offen',
-  IN_PROGRESS: 'Aktiv',
-  COMPLETED:   'Fertig',
-};
+const statusLabel = (status: string) =>
+  status === 'PENDING' || status === 'IN_PROGRESS' || status === 'COMPLETED' ? t(`status.${status}`) : status;
 
 // ─── Screen ───────────────────────────────────────────────────────────────────
 
@@ -88,8 +86,8 @@ export default function HomeScreen() {
   // Live clock — updates every minute
   const [now, setNow] = useState(new Date());
   useEffect(() => {
-    const t = setInterval(() => setNow(new Date()), 60_000);
-    return () => clearInterval(t);
+    const timer = setInterval(() => setNow(new Date()), 60_000);
+    return () => clearInterval(timer);
   }, []);
 
   const today = now.toISOString().split('T')[0];
@@ -262,7 +260,7 @@ export default function HomeScreen() {
     } catch (e: any) {
       resetHomeState();
       console.warn('Home load error', e);
-      setErrorMsg(e.message || 'Ein Fehler ist aufgetreten');
+      setErrorMsg(e.message || t('common.genericError'));
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -309,16 +307,16 @@ export default function HomeScreen() {
   // ─── Stats config ──────────────────────────────────────────────────────────
   const stats = isManagement
     ? [
-        { label: 'Heute gesamt', value: todayAssignments.length, icon: 'calendar-outline',         color: COLORS.primary },
-        { label: 'Abgeschlossen', value: completedToday,         icon: 'checkmark-circle-outline', color: COLORS.success },
-        { label: 'Aktiv',         value: inProgressToday,        icon: 'time-outline',             color: '#3b82f6'      },
-        { label: 'Überfällig',    value: overdueAssignments.length, icon: 'alert-circle-outline',  color: COLORS.accent  },
+        { label: t('home.todayTotal'), value: todayAssignments.length, icon: 'calendar-outline',         color: COLORS.primary },
+        { label: t('home.completed'), value: completedToday,         icon: 'checkmark-circle-outline', color: COLORS.success },
+        { label: t('home.active'),         value: inProgressToday,        icon: 'time-outline',             color: '#3b82f6'      },
+        { label: t('home.overdue'),    value: overdueAssignments.length, icon: 'alert-circle-outline',  color: COLORS.accent  },
       ]
     : [
-        { label: 'Meine Einsätze', value: todayAssignments.length, icon: 'list-outline',           color: COLORS.primary },
-        { label: 'Erledigt',       value: completedToday,          icon: 'checkmark-circle-outline',color: COLORS.success },
-        { label: 'Aktiv',          value: inProgressToday,         icon: 'time-outline',           color: '#3b82f6'      },
-        { label: 'Offen',          value: pendingToday,            icon: 'ellipse-outline',        color: COLORS.warning },
+        { label: t('home.myAssignments'), value: todayAssignments.length, icon: 'list-outline',           color: COLORS.primary },
+        { label: t('home.done'),       value: completedToday,          icon: 'checkmark-circle-outline',color: COLORS.success },
+        { label: t('home.active'),          value: inProgressToday,         icon: 'time-outline',           color: '#3b82f6'      },
+        { label: t('home.open'),          value: pendingToday,            icon: 'ellipse-outline',        color: COLORS.warning },
       ];
 
   return (
@@ -364,10 +362,10 @@ export default function HomeScreen() {
         {errorMsg ? (
           <View style={{ backgroundColor: '#fee2e2', padding: 16, margin: 16, borderRadius: 8 }}>
             <Text style={{ color: '#b91c1c', textAlign: 'center', fontWeight: 'bold' }}>
-              Fehler beim Laden: {errorMsg}
+              {t('track.loadError', { error: errorMsg })}
             </Text>
             <TouchableOpacity onPress={() => load()} style={{ marginTop: 12, backgroundColor: '#b91c1c', padding: 8, borderRadius: 6 }}>
-              <Text style={{ color: 'white', textAlign: 'center' }}>Erneut versuchen</Text>
+              <Text style={{ color: 'white', textAlign: 'center' }}>{t('common.retry')}</Text>
             </TouchableOpacity>
           </View>
         ) : null}
@@ -384,9 +382,9 @@ export default function HomeScreen() {
                     <View style={s.pulseDot} />
                   </View>
                   <View style={{ flex: 1 }}>
-                    <Text style={s.activeShiftLabel}>AKTIVE SCHICHT</Text>
+                    <Text style={s.activeShiftLabel}>{t('track.activeShift')}</Text>
                     <Text style={s.activeShiftSite} numberOfLines={1}>
-                      {activeSite?.name ?? activeAssign?.title ?? 'Unbekannter Einsatz'}
+                      {activeSite?.name ?? activeAssign?.title ?? t('home.unknownAssignment')}
                     </Text>
                     {activeSite && (
                       <Text style={s.activeShiftAddr} numberOfLines={1}>
@@ -407,7 +405,7 @@ export default function HomeScreen() {
                   onPress={() => router.push('/(tabs)/tracking')}
                 >
                   <Ionicons name="stop-circle-outline" size={18} color={COLORS.primary} />
-                  <Text style={s.goToTrackingText}>Ausstempeln →</Text>
+                  <Text style={s.goToTrackingText}>{t('home.toClockOut')}</Text>
                 </TouchableOpacity>
               </View>
             )}
@@ -422,13 +420,13 @@ export default function HomeScreen() {
                 <View style={s.quickStartLeft}>
                   <Ionicons name="play-circle" size={32} color={COLORS.success} />
                   <View>
-                    <Text style={s.quickStartTitle}>Schicht starten</Text>
+                    <Text style={s.quickStartTitle}>{t('home.startShift')}</Text>
                     <Text style={s.quickStartSub}>
-                      {pendingToday + inProgressToday} Einsatz{pendingToday + inProgressToday !== 1 ? 'e' : ''} warten
+                      {pendingToday + inProgressToday === 1 ? t('home.waitingOne') : t('home.waitingMany', { count: pendingToday + inProgressToday })}
                     </Text>
                   </View>
                 </View>
-                <Ionicons name="chevron-forward" size={22} color={COLORS.primary} />
+                <Ionicons style={rtlFlip} name="chevron-forward" size={22} color={COLORS.primary} />
               </TouchableOpacity>
             )}
 
@@ -440,20 +438,20 @@ export default function HomeScreen() {
               ]}>
                 <View style={s.periodCardHeader}>
                   <Ionicons name="calendar-number-outline" size={13} color={COLORS.primary} />
-                  <Text style={s.periodCardTitle}>ABRECHNUNGSZEITRAUM</Text>
+                  <Text style={s.periodCardTitle}>{t('home.billingPeriod')}</Text>
                 </View>
                 <Text style={s.periodRange}>
-                  21. {MONTH_NAMES[prevMonth]} – 20. {MONTH_NAMES[month]} {year}
+                  {t('profile.period', { from: monthName(prevMonth), to: monthName(month), year })}
                 </Text>
                 <View style={s.periodStats}>
                   <View style={s.periodStat}>
                     <Text style={s.periodStatValue}>{formatDuration(periodMinutes)}</Text>
-                    <Text style={s.periodStatLabel}>Vergütet</Text>
+                    <Text style={s.periodStatLabel}>{t('home.paid')}</Text>
                   </View>
                   <View style={s.periodStatDiv} />
                   <View style={s.periodStat}>
                     <Text style={s.periodStatValue}>{periodEntries}</Text>
-                    <Text style={s.periodStatLabel}>Einsätze</Text>
+                    <Text style={s.periodStatLabel}>{t('home.assignments')}</Text>
                   </View>
                 </View>
               </View>
@@ -464,14 +462,14 @@ export default function HomeScreen() {
               <View style={s.leaderCard}>
                 <View style={s.leaderCardHeader}>
                   <Ionicons name="bar-chart-outline" size={16} color="#fff" />
-                  <Text style={s.leaderCardTitle}>ROUTEN-ÜBERSICHT — HEUTE</Text>
+                  <Text style={s.leaderCardTitle}>{t('home.routeOverview')}</Text>
                 </View>
                 <View style={s.leaderStats}>
                   {[
-                    { label: 'Abgeschlossen', value: completedToday,            color: '#4ade80' },
-                    { label: 'In Bearbeitung', value: inProgressToday,          color: '#60a5fa' },
-                    { label: 'Ausstehend',     value: pendingToday,             color: '#fbbf24' },
-                    { label: 'Mitarbeiter',    value: workers.length,           color: '#c084fc' },
+                    { label: t('home.completed'), value: completedToday,            color: '#4ade80' },
+                    { label: t('home.inProgress'), value: inProgressToday,          color: '#60a5fa' },
+                    { label: t('home.pending'),     value: pendingToday,             color: '#fbbf24' },
+                    { label: t('home.workers'),    value: workers.length,           color: '#c084fc' },
                   ].map(({ label, value, color }) => (
                     <View key={label} style={s.leaderStatRow}>
                       <Text style={s.leaderStatLabel}>{label}</Text>
@@ -484,7 +482,7 @@ export default function HomeScreen() {
                   onPress={() => router.push('/(tabs)/planning')}
                 >
                   <Ionicons name="add-circle-outline" size={16} color={COLORS.primary} />
-                  <Text style={s.leaderActionText}>Einsatz planen</Text>
+                  <Text style={s.leaderActionText}>{t('home.planAssignment')}</Text>
                 </TouchableOpacity>
               </View>
             )}
@@ -494,7 +492,7 @@ export default function HomeScreen() {
               <>
                 <SectionHeader
                   icon="alert-circle"
-                  title={`ÜBERFÄLLIG (${overdueAssignments.length})`}
+                  title={t('home.overdueTitle', { count: overdueAssignments.length })}
                   color={COLORS.accent}
                 />
                 {overdueAssignments.map(a => (
@@ -512,19 +510,19 @@ export default function HomeScreen() {
             {/* ══ Today's assignments ══ */}
             <SectionHeader
               icon="today-outline"
-              title={`HEUTE — ${formatDateFull(today)}`}
+              title={t('home.todayTitle', { date: formatDateFull(today) })}
               color={COLORS.primary}
             />
             {todayAssignments.length === 0 ? (
               <View style={s.emptyBox}>
                 <Ionicons name="checkmark-done-circle-outline" size={52} color={COLORS.border} />
-                <Text style={s.emptyTitle}>Keine Einsätze für heute</Text>
+                <Text style={s.emptyTitle}>{t('home.noAssignments')}</Text>
                 {isManagement && (
                   <TouchableOpacity
                     style={s.emptyAction}
                     onPress={() => router.push('/(tabs)/planning')}
                   >
-                    <Text style={s.emptyActionText}>Einsatz planen</Text>
+                    <Text style={s.emptyActionText}>{t('home.planAssignment')}</Text>
                   </TouchableOpacity>
                 )}
               </View>
@@ -586,7 +584,7 @@ function AssignmentCard({
               <View style={[s.activeDot, { backgroundColor: statusColor }]} />
             )}
             <Text style={[s.statusBadgeText, { color: statusColor }]}>
-              {STATUS_LABEL[a.status] ?? a.status}
+              {statusLabel(a.status)}
             </Text>
           </View>
         </View>

@@ -13,6 +13,10 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
 import { MediaImage } from '@/components/MediaImage';
+import { hasKey, t, type Key } from '@/i18n';
+import { de } from '@/i18n/locales/de';
+
+const QUICK_REASONS = ['check.reason.noAccess', 'check.reason.parked', 'check.reason.weather', 'check.reason.noMaterial'] as const;
 import { useAuth } from '@/context/AuthContext';
 import { COLORS } from '@/utils/constants';
 import { checkService, loadChecklist, type ChecklistData, type ChecklistItem as Item } from '@/sync/field';
@@ -20,7 +24,7 @@ import { checkService, loadChecklist, type ChecklistData, type ChecklistItem as 
 async function takePhoto(): Promise<string | null> {
   const perm = await ImagePicker.requestCameraPermissionsAsync();
   if (!perm.granted) {
-    Alert.alert('Berechtigung fehlt', 'Bitte Kamerazugriff erlauben.');
+    Alert.alert(t('common.permissionMissing'), t('common.allowCamera'));
     return null;
   }
   const result = await ImagePicker.launchCameraAsync({ base64: true, quality: 0.5 });
@@ -40,7 +44,7 @@ export function ChecklistModal({ assignmentId, onClose }: { assignmentId: string
     try {
       setData(await loadChecklist(user, assignmentId));
     } catch (e: any) {
-      Alert.alert('Checkliste nicht verfügbar', e?.message ?? 'Bitte Verbindung prüfen.');
+      Alert.alert(t('check.unavailable'), e?.message ?? t('check.checkConnection'));
       onClose(0, 0);
     }
   }, [assignmentId, onClose, user]);
@@ -55,7 +59,7 @@ export function ChecklistModal({ assignmentId, onClose }: { assignmentId: string
       await checkService(user, assignmentId, item, body);
       await load();
     } catch (e: any) {
-      Alert.alert('Nicht gespeichert', e?.message ?? 'Bitte erneut versuchen.');
+      Alert.alert(t('common.notSaved'), e?.message ?? t('check.tryAgain'));
     } finally {
       setBusy(null);
     }
@@ -93,7 +97,7 @@ export function ChecklistModal({ assignmentId, onClose }: { assignmentId: string
             <Ionicons name="close" size={26} color="#fff" />
           </TouchableOpacity>
           <View style={{ flex: 1 }}>
-            <Text style={s.title} numberOfLines={1}>Checkliste</Text>
+            <Text style={s.title} numberOfLines={1}>{t('check.title')}</Text>
             <Text style={s.sub} numberOfLines={1}>{data?.assignment.site?.name ?? data?.assignment.title ?? ''}</Text>
           </View>
           {data && <Text style={s.counter}>{finished}/{items.length}</Text>}
@@ -102,10 +106,10 @@ export function ChecklistModal({ assignmentId, onClose }: { assignmentId: string
         <ScrollView contentContainerStyle={{ padding: 16, paddingBottom: 40 }}>
           {!data && <ActivityIndicator color={COLORS.primary} style={{ marginTop: 40 }} />}
           {data?.offline && (
-            <Text style={s.offline}>Offline – alles wird auf dem Handy gespeichert und später gesendet.</Text>
+            <Text style={s.offline}>{t('check.offline')}</Text>
           )}
           {data && items.length === 0 && (
-            <Text style={s.empty}>Für diesen Einsatz sind keine Leistungen hinterlegt.</Text>
+            <Text style={s.empty}>{t('check.empty')}</Text>
           )}
           {items.map(item => {
             const status = item.check?.status;
@@ -113,11 +117,11 @@ export function ChecklistModal({ assignmentId, onClose }: { assignmentId: string
             return (
               <View key={item.code} style={[s.card, status === 'done' && s.cardDone, status === 'not_possible' && s.cardFailed]}>
                 <View style={s.row}>
-                  <Text style={s.label}>{item.label}</Text>
+                  <Text style={s.label}>{hasKey(`svc.${item.code}`) ? t(`svc.${item.code}` as Key) : item.label}</Text>
                   {isBusy && <ActivityIndicator color={COLORS.primary} />}
                 </View>
-                {status === 'not_possible' && <Text style={s.reason}>Nicht möglich: {item.check?.reason}</Text>}
-                {item.check?.pending && <Text style={s.pending}>Auf dem Handy gespeichert – wird gesendet</Text>}
+                {status === 'not_possible' && <Text style={s.reason}>{t('check.notPossible', { reason: item.check?.reason ?? '' })}</Text>}
+                {item.check?.pending && <Text style={s.pending}>{t('check.pending')}</Text>}
 
                 <View style={s.photos}>
                   {item.check?.before_url
@@ -131,11 +135,11 @@ export function ChecklistModal({ assignmentId, onClose }: { assignmentId: string
                 <View style={s.actions}>
                   <TouchableOpacity style={s.btn} onPress={() => before(item)} disabled={isBusy}>
                     <Ionicons name="camera-outline" size={18} color={COLORS.primary} />
-                    <Text style={s.btnText}>Vorher</Text>
+                    <Text style={s.btnText}>{t('check.before')}</Text>
                   </TouchableOpacity>
                   <TouchableOpacity style={s.btn} onPress={() => after(item)} disabled={isBusy}>
                     <Ionicons name="camera" size={18} color={COLORS.primary} />
-                    <Text style={s.btnText}>Nachher</Text>
+                    <Text style={s.btnText}>{t('check.after')}</Text>
                   </TouchableOpacity>
                   <TouchableOpacity
                     style={[s.iconBtn, status === 'not_possible' && { backgroundColor: COLORS.danger }]}
@@ -156,28 +160,31 @@ export function ChecklistModal({ assignmentId, onClose }: { assignmentId: string
             );
           })}
           {data && items.length > 0 && (
-            <Text style={s.hint}>Nachher-Foto markiert die Leistung automatisch als erledigt.</Text>
+            <Text style={s.hint}>{t('check.hint')}</Text>
           )}
         </ScrollView>
 
         <Modal visible={reasonFor !== null} transparent animationType="fade" onRequestClose={() => setReasonFor(null)}>
           <View style={s.overlay}>
             <View style={s.dialog}>
-              <Text style={s.dialogTitle}>Warum nicht möglich?</Text>
+              <Text style={s.dialogTitle}>{t('check.whyNot')}</Text>
               <View style={s.quickReasons}>
-                {['Kein Zugang', 'Zugeparkt', 'Wetter', 'Material fehlt'].map(r => (
-                  <TouchableOpacity key={r} style={s.quick} onPress={() => setReason(r)}>
-                    <Text style={s.quickText}>{r}</Text>
+                {/* Anzeige in der Sprache des Mitarbeiters, gespeichert auf Deutsch –
+                    der Grund steht im Leistungsnachweis der Hausverwaltung. */}
+                {QUICK_REASONS.map(key => (
+                  <TouchableOpacity key={key} style={s.quick} onPress={() => setReason(de[key])}>
+                    <Text style={s.quickText}>{t(key)}</Text>
                   </TouchableOpacity>
                 ))}
               </View>
-              <TextInput style={s.input} value={reason} onChangeText={setReason} placeholder="Grund" placeholderTextColor={COLORS.textLight} />
+              <TextInput style={s.input} value={reason} onChangeText={setReason} placeholder={t('check.reason')} placeholderTextColor={COLORS.textLight} />
+              <Text style={s.hint}>{t('check.reasonHint')}</Text>
               <View style={s.dialogActions}>
                 <TouchableOpacity onPress={() => { setReasonFor(null); setReason(''); }}>
-                  <Text style={s.cancel}>Abbrechen</Text>
+                  <Text style={s.cancel}>{t('common.cancel')}</Text>
                 </TouchableOpacity>
                 <TouchableOpacity onPress={submitReason} disabled={reason.trim().length < 3}>
-                  <Text style={[s.confirm, reason.trim().length < 3 && { opacity: 0.4 }]}>Speichern</Text>
+                  <Text style={[s.confirm, reason.trim().length < 3 && { opacity: 0.4 }]}>{t('common.save')}</Text>
                 </TouchableOpacity>
               </View>
             </View>

@@ -1,6 +1,7 @@
 import { View, Text, StyleSheet, Platform, TouchableOpacity, Alert } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useSync } from '@/sync/SyncContext';
+import { t } from '@/i18n';
 
 /**
  * Hinweis unten über der Tab-Leiste:
@@ -15,17 +16,17 @@ export function OfflineBanner() {
   const showFailed = () => {
     const list = failed.map(f => `• ${f.label}\n  ${f.error}`).join('\n\n');
     Alert.alert(
-      `${failed.length} Vorgang${failed.length === 1 ? '' : 'e'} nicht gespeichert`,
-      `${list}\n\nBitte ggf. das Büro informieren.`,
+      failed.length === 1 ? t('sync.failedOne') : t('sync.failedMany', { count: failed.length }),
+      `${list}\n\n${t('sync.informOffice')}`,
       [
-        { text: 'Schließen', style: 'cancel' },
-        { text: 'Erneut versuchen', onPress: () => { failed.forEach(f => { void retry(f); }); } },
+        { text: t('common.close'), style: 'cancel' },
+        { text: t('common.retry'), onPress: () => { failed.forEach(f => { void retry(f); }); } },
         {
-          text: 'Verwerfen',
+          text: t('sync.discard'),
           style: 'destructive',
-          onPress: () => Alert.alert('Wirklich verwerfen?', 'Diese Vorgänge werden vom Handy gelöscht.', [
-            { text: 'Abbrechen', style: 'cancel' },
-            { text: 'Verwerfen', style: 'destructive', onPress: () => { failed.forEach(f => { void discard(f); }); } },
+          onPress: () => Alert.alert(t('sync.discardConfirm'), t('sync.discardText'), [
+            { text: t('common.cancel'), style: 'cancel' },
+            { text: t('sync.discard'), style: 'destructive', onPress: () => { failed.forEach(f => { void discard(f); }); } },
           ]),
         },
       ],
@@ -37,7 +38,7 @@ export function OfflineBanner() {
       <View style={styles.wrap} pointerEvents="box-none">
         <TouchableOpacity style={[styles.pill, { backgroundColor: '#b91c1c' }]} onPress={showFailed} activeOpacity={0.85}>
           <Ionicons name="alert-circle-outline" size={15} color="#fff" />
-          <Text style={styles.text}>{failed.length} nicht gespeichert – antippen</Text>
+          <Text style={styles.text}>{t('sync.failedPill', { count: failed.length })}</Text>
         </TouchableOpacity>
       </View>
     );
@@ -49,7 +50,7 @@ export function OfflineBanner() {
         <View style={[styles.pill, { backgroundColor: '#dc2626' }]}>
           <Ionicons name="cloud-offline-outline" size={15} color="#fff" />
           <Text style={styles.text}>
-            Keine Verbindung{pending > 0 ? ` · ${pending} wartet${pending === 1 ? '' : 'en'} (gespeichert)` : ''}
+            {pending > 0 ? t('sync.offlineWaiting', { count: pending }) : t('sync.offline')}
           </Text>
         </View>
       </View>
@@ -61,7 +62,7 @@ export function OfflineBanner() {
       <View style={styles.wrap} pointerEvents="box-none">
         <TouchableOpacity style={[styles.pill, { backgroundColor: '#d97706' }]} onPress={() => { void syncNow(); }} activeOpacity={0.85}>
           <Ionicons name="cloud-upload-outline" size={15} color="#fff" />
-          <Text style={styles.text}>Wird gesendet … {pending}</Text>
+          <Text style={styles.text}>{t('sync.sending', { count: pending })}</Text>
         </TouchableOpacity>
       </View>
     );

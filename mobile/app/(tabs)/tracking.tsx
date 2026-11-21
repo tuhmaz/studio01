@@ -18,6 +18,7 @@ import {
   type Assignment, type JobSite, type TimeEntry,
 } from '@/sync/field';
 import { useSync } from '@/sync/SyncContext';
+import { t } from '@/i18n';
 
 function isRemoteSite(site?: JobSite | null) {
   if (!site) return false;
@@ -65,7 +66,7 @@ export default function TrackingScreen() {
         : null);
     } catch (e: any) {
       console.warn('Tracking load error', e);
-      setErrorMsg(e.message || 'Ein Fehler ist aufgetreten');
+      setErrorMsg(e.message || t('common.genericError'));
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -106,7 +107,7 @@ export default function TrackingScreen() {
       const dist = gpsDistance(lat, lng, site.lat, site.lng);
       if (dist > GPS_RADIUS_METERS) {
         setGpsStatus('far');
-        Alert.alert('Zu weit entfernt', `Sie sind ${Math.round(dist)}m vom Objekt entfernt. Erlaubt: ${GPS_RADIUS_METERS}m.`);
+        Alert.alert(t('track.tooFar'), t('track.tooFarText', { dist: Math.round(dist), max: GPS_RADIUS_METERS }));
         return { ok: false, lat, lng };
       }
     }
@@ -134,12 +135,12 @@ export default function TrackingScreen() {
         verified: !!site,
       });
       if (result === 'queued') {
-        Alert.alert('Offline eingestempelt', 'Kein Netz – die Einstempelzeit ist auf dem Handy gespeichert und wird automatisch gesendet.');
+        Alert.alert(t('track.offlineIn'), t('track.offlineInText'));
       }
       await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       await load();
     } catch (e: any) {
-      Alert.alert('Fehler', e?.message || 'Einstempeln fehlgeschlagen');
+      Alert.alert(t('common.error'), e?.message || t('track.clockInFailed'));
     } finally {
       setClocking(false);
     }
@@ -183,11 +184,11 @@ export default function TrackingScreen() {
     const open = await openChecklistItems();
     if (open.length) {
       Alert.alert(
-        `${open.length} Leistung${open.length === 1 ? '' : 'en'} ohne Rückmeldung`,
-        `${open.join(', ')}\n\nIm Leistungsnachweis steht sonst „keine Rückmeldung“.`,
+        open.length === 1 ? t('track.openOne') : t('track.openMany', { count: open.length }),
+        t('track.openText', { items: open.join(', ') }),
         [
-          { text: 'Zur Checkliste', onPress: () => setChecklistOpen(true) },
-          { text: 'Trotzdem ausstempeln', style: 'destructive', onPress: () => { void clockOutAfterChecklist(); } },
+          { text: t('track.toChecklist'), onPress: () => setChecklistOpen(true) },
+          { text: t('track.clockOutAnyway'), style: 'destructive', onPress: () => { void clockOutAfterChecklist(); } },
         ],
       );
       return;
@@ -198,11 +199,11 @@ export default function TrackingScreen() {
   const clockOutAfterChecklist = async () => {
     if (await winterProtocolMissing()) {
       Alert.alert(
-        'Winterdienst nicht protokolliert',
-        'Für dieses Objekt gibt es heute noch keinen Eintrag im Streuprotokoll. Ohne Eintrag fehlt der Nachweis.',
+        t('track.winterMissing'),
+        t('track.winterMissingText'),
         [
-          { text: 'Jetzt erfassen', onPress: openWinterEntry },
-          { text: 'Trotzdem ausstempeln', style: 'destructive', onPress: () => { void confirmClockOut(); } },
+          { text: t('track.recordNow'), onPress: openWinterEntry },
+          { text: t('track.clockOutAnyway'), style: 'destructive', onPress: () => { void confirmClockOut(); } },
         ],
       );
       return;
@@ -230,21 +231,21 @@ export default function TrackingScreen() {
       if (!foundNearby) travelBonus = -60;
     }
 
-    Alert.alert('Ausstempeln', 'Schicht für alle Mitarbeiter beenden?', [
-      { text: 'Abbrechen', style: 'cancel' },
-      { text: 'Ausstempeln', style: 'destructive', onPress: async () => {
+    Alert.alert(t('track.clockOut'), t('track.clockOutConfirm'), [
+      { text: t('common.cancel'), style: 'cancel' },
+      { text: t('track.clockOut'), style: 'destructive', onPress: async () => {
         setClocking(true);
         try {
           // Server schließt alle offenen Einträge des Einsatzes und rechnet die
           // Minuten aus Ein- und Ausstempelzeit – auch wenn erst später gesendet.
-          const result = await submitClockOut(user, activeEntry.job_assignment_id, site?.name ?? activeAssign?.title ?? 'Einsatz', travelBonus);
+          const result = await submitClockOut(user, activeEntry.job_assignment_id, site?.name ?? activeAssign?.title ?? t('track.assignment'), travelBonus);
           if (result === 'queued') {
-            Alert.alert('Offline ausgestempelt', 'Kein Netz – die Ausstempelzeit ist gespeichert und wird automatisch gesendet.');
+            Alert.alert(t('track.offlineOut'), t('track.offlineOutText'));
           }
           await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
           await load();
         } catch (e: any) {
-          Alert.alert('Fehler', e?.message);
+          Alert.alert(t('common.error'), e?.message);
         } finally {
           setClocking(false);
         }
@@ -258,7 +259,7 @@ export default function TrackingScreen() {
     <View style={styles.container}>
       <StatusBar style="light" />
       <View style={styles.header}>
-        <Text style={styles.headerTitle}>Zeiterfassung</Text>
+        <Text style={styles.headerTitle}>{t('track.title')}</Text>
         {gpsStatus === 'checking' && <ActivityIndicator color="#fff" size="small" />}
         {gpsStatus === 'ok'  && <Ionicons name="location" size={18} color="#4ade80" />}
         {gpsStatus === 'far' && <Ionicons name="location-outline" size={18} color={COLORS.accent} />}
@@ -271,10 +272,10 @@ export default function TrackingScreen() {
         {errorMsg ? (
           <View style={{ backgroundColor: '#fee2e2', padding: 16, marginBottom: 16, borderRadius: 8 }}>
             <Text style={{ color: '#b91c1c', textAlign: 'center', fontWeight: 'bold' }}>
-              Fehler beim Laden: {errorMsg}
+              {t('track.loadError', { error: errorMsg })}
             </Text>
             <TouchableOpacity onPress={() => load()} style={{ marginTop: 12, backgroundColor: '#b91c1c', padding: 8, borderRadius: 6 }}>
-              <Text style={{ color: 'white', textAlign: 'center' }}>Erneut versuchen</Text>
+              <Text style={{ color: 'white', textAlign: 'center' }}>{t('common.retry')}</Text>
             </TouchableOpacity>
           </View>
         ) : null}
@@ -283,7 +284,7 @@ export default function TrackingScreen() {
           <View style={styles.offlineNote}>
             <Ionicons name="cloud-offline-outline" size={16} color="#92400e" />
             <Text style={styles.offlineNoteText}>
-              Offline – gespeicherter Stand von {formatTime(offlineSince)}. Ein-/Ausstempeln, Checkliste und Notizen funktionieren und werden später gesendet.
+              {t('track.offlineNote', { time: formatTime(offlineSince) })}
             </Text>
           </View>
         )}
@@ -296,7 +297,7 @@ export default function TrackingScreen() {
                 <View style={styles.pulseDot} />
               </View>
               <View style={{ flex: 1 }}>
-                <Text style={styles.activeLabel}>AKTIVE SCHICHT</Text>
+                <Text style={styles.activeLabel}>{t('track.activeShift')}</Text>
                 <Text style={styles.activeSite} numberOfLines={1}>
                   {sites[activeAssign.job_site_id ?? '']?.name ?? activeAssign.title}
                 </Text>
@@ -308,33 +309,33 @@ export default function TrackingScreen() {
             <View style={styles.timerRow}>
               <Ionicons name="time-outline" size={16} color="rgba(255,255,255,0.7)" />
               <Text style={styles.timerText}>
-                Eingestempelt: {formatTime(activeEntry.clock_in_datetime)} — {formatDuration(elapsed)} gearbeitet
+                {t('track.clockedInSince', { time: formatTime(activeEntry.clock_in_datetime), duration: formatDuration(elapsed) })}
               </Text>
             </View>
             {activeEntry.pending && (
               <View style={styles.timerRow}>
                 <Ionicons name="cloud-upload-outline" size={16} color="#fde68a" />
-                <Text style={[styles.timerText, { color: '#fde68a' }]}>Auf dem Handy gespeichert – wird gesendet, sobald Netz da ist</Text>
+                <Text style={[styles.timerText, { color: '#fde68a' }]}>{t('track.pendingSync')}</Text>
               </View>
             )}
             {activeAssign.categories.includes('WINTERDIENST') && activeAssign.job_site_id && (
               <TouchableOpacity style={styles.checklistBtn} onPress={openWinterEntry} activeOpacity={0.85}>
                 <Ionicons name="snow-outline" size={20} color="#fff" />
-                <Text style={styles.checklistText}>Winterdienst erfassen</Text>
+                <Text style={styles.checklistText}>{t('track.recordWinter')}</Text>
               </TouchableOpacity>
             )}
             {activeAssign.categories.some(c => c !== 'WINTERDIENST') && (
               <TouchableOpacity style={styles.checklistBtn} onPress={() => setChecklistOpen(true)} activeOpacity={0.85}>
                 <Ionicons name="list-circle-outline" size={20} color="#fff" />
                 <Text style={styles.checklistText}>
-                  Checkliste{checklistProgress ? ` (${checklistProgress.done}/${checklistProgress.total})` : ''}
+                  {t('track.checklist')}{checklistProgress ? ` (${checklistProgress.done}/${checklistProgress.total})` : ''}
                 </Text>
               </TouchableOpacity>
             )}
             {leadsOf(activeAssign).length > 0 ? (
               <View style={styles.leadNote}>
                 <Ionicons name="people-outline" size={18} color="#fff" />
-                <Text style={styles.leadNoteText}>Ausstempeln übernimmt Ihr Teamleiter: {leadsOf(activeAssign).join(', ')}</Text>
+                <Text style={styles.leadNoteText}>{t('track.leadClocksOut', { names: leadsOf(activeAssign).join(', ') })}</Text>
               </View>
             ) : (
             <TouchableOpacity
@@ -347,7 +348,7 @@ export default function TrackingScreen() {
                 ? <ActivityIndicator color={COLORS.primary} />
                 : <>
                     <Ionicons name="stop-circle-outline" size={20} color={COLORS.primary} />
-                    <Text style={styles.clockOutText}>AUSSTEMPELN</Text>
+                    <Text style={styles.clockOutText}>{t('track.clockOutButton')}</Text>
                   </>
               }
             </TouchableOpacity>
@@ -366,13 +367,13 @@ export default function TrackingScreen() {
         {!activeEntry && (
           <>
             <Text style={styles.sectionTitle}>
-              {loading ? 'Laden…' : `${pendingAssignments.length} Einsätze verfügbar`}
+              {loading ? t('common.loading') : t('track.available', { count: pendingAssignments.length })}
             </Text>
             {loading && <ActivityIndicator color={COLORS.primary} style={{ marginTop: 40 }} />}
             {!loading && pendingAssignments.length === 0 && (
               <View style={styles.emptyBox}>
                 <Ionicons name="checkmark-done-circle-outline" size={48} color={COLORS.border} />
-                <Text style={styles.emptyText}>Alle Einsätze abgeschlossen</Text>
+                <Text style={styles.emptyText}>{t('track.allDone')}</Text>
               </View>
             )}
             {pendingAssignments.map(a => {
@@ -390,7 +391,7 @@ export default function TrackingScreen() {
                       ))}
                     </View>
                     {leadsOf(a).length > 0 && (
-                      <Text style={styles.leadHint} numberOfLines={2}>Teamleiter {leadsOf(a).join(', ')} stempelt das Team ein</Text>
+                      <Text style={styles.leadHint} numberOfLines={2}>{t('track.leadClocksIn', { names: leadsOf(a).join(', ') })}</Text>
                     )}
                   </View>
                   {leadsOf(a).length === 0 && (
@@ -402,7 +403,7 @@ export default function TrackingScreen() {
                   >
                     {clocking
                       ? <ActivityIndicator color="#fff" size="small" />
-                      : <><Ionicons name="play-circle" size={18} color="#fff" /><Text style={styles.clockInText}>START</Text></>
+                      : <><Ionicons name="play-circle" size={18} color="#fff" /><Text style={styles.clockInText}>{t('track.start')}</Text></>
                     }
                   </TouchableOpacity>
                   )}
