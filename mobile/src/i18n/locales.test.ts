@@ -33,7 +33,7 @@ describe('Übersetzungen', () => {
   }
 
   it("jeder t('…')-Aufruf im Code hat einen Eintrag", () => {
-    const root = join(__dirname, '..', '..');
+    const root = join(process.cwd(), 'mobile');
     const files = [...sources(join(root, 'app')), ...sources(join(root, 'src'))];
     const missing: string[] = [];
     for (const f of files) {
