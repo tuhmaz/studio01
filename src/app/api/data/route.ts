@@ -15,6 +15,7 @@ const TABLE_COLUMNS = {
     'id', 'name', 'site_name', 'address', 'city', 'postal_code', 'tax_number',
     'phone', 'email', 'website', 'logo_data', 'created_at',
     'hq_lat', 'hq_lng', 'remote_threshold_km', 'remote_bonus_minutes',
+    'winter_auto_plan', 'winter_plan_min_temp_c',
   ]),
   job_assignments: new Set([
     'id', 'company_id', 'job_site_id', 'title', 'scheduled_date', 'status',
