@@ -32,8 +32,11 @@ export const SERVICE_CATALOG: Record<string, CatalogEntry> = {
 /** Kategorie der Tourplan-Aufgaben, die aus einer Mängelmeldung entstehen. */
 export const DEFECT_CATEGORY = 'MAENGEL';
 
+/** Kategorie der Winterdienst-Einsätze (dokumentiert im Streuprotokoll, nicht in der Checkliste). */
+export const WINTER_CATEGORY = 'WINTERDIENST';
+
 /** Categories that are documented elsewhere and are not part of the checklist. */
-export const NON_CHECKLIST_CATEGORIES = new Set(['WINTERDIENST']);
+export const NON_CHECKLIST_CATEGORIES = new Set([WINTER_CATEGORY]);
 
 export interface SiteService {
   isActive?: boolean;

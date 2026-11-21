@@ -13,8 +13,9 @@
  */
 import { withTenant } from '@/lib/db';
 import { travelRulesFromCompany } from '@/lib/geo';
+import { WINTER_CATEGORY } from '@/lib/services';
 
-export const WINTER_CATEGORY = 'WINTERDIENST';
+export { WINTER_CATEGORY };
 
 export interface Forecast {
   available: boolean;
@@ -179,7 +180,13 @@ export async function planWinterDay({ companyId, date, force = false, dryRun = f
   return { date, thresholdC, created, sites: result };
 }
 
-/** Marks the day's Winterdienst task of a site as done once work is recorded. */
+/**
+ * Recording Winterdienst work completes the day's Winterdienst task(s) of the
+ * site — the auto-planned one as well as tasks created by hand in the
+ * Einsatzplanung — as long as the task is only about Winterdienst (a task
+ * that also carries other services stays open for its checklist) and nobody
+ * is still clocked in on it (their clock-out completes it).
+ */
 export async function completeWinterTask(
   db: Parameters<Parameters<typeof withTenant>[1]>[0],
   companyId: string,
@@ -187,9 +194,17 @@ export async function completeWinterTask(
   performedAt: Date,
 ) {
   await db`
-    UPDATE job_assignments SET status = 'COMPLETED'
-     WHERE id = ${winterTaskId(siteId, berlinDate(performedAt))}
-       AND company_id = ${companyId}
-       AND status <> 'COMPLETED'
+    UPDATE job_assignments a SET status = 'COMPLETED'
+     WHERE a.company_id = ${companyId}
+       AND a.job_site_id = ${siteId}
+       AND a.scheduled_date = ${berlinDate(performedAt)}
+       AND a.categories = ARRAY[${WINTER_CATEGORY}]::text[]
+       AND a.status <> 'COMPLETED'
+       AND NOT EXISTS (
+             SELECT 1 FROM time_entries t
+              WHERE t.company_id = a.company_id
+                AND t.job_assignment_id = a.id
+                AND t.clock_out_datetime IS NULL
+           )
   `;
 }

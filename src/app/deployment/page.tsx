@@ -1,7 +1,7 @@
 
 "use client";
 
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Shell } from '@/components/layout/Shell';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -29,10 +29,11 @@ import {
   Lightbulb,
   Zap,
   Info,
+  Snowflake,
 } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { useToast } from '@/hooks/use-toast';
-import { serviceLabel } from '@/lib/services';
+import { WINTER_CATEGORY, serviceLabel } from '@/lib/services';
 import { useAuth } from '@/db/provider';
 import { useQuery } from '@/db/use-query';
 import { UserRole, JobSite } from '@/lib/types';
@@ -173,6 +174,17 @@ export default function DeploymentPage() {
         .filter(([, details]) => isServiceDueInMonth(details, currentMonth))
     : [];
 
+  // Winterdienst ist eine eigene Kategorie: nur so erscheint der Einsatz im
+  // Winterdienst-Modul und wird mit dem Streuprotokoll abgeglichen.
+  const siteHasWinter = !!(currentSite as { winter_service_enabled?: boolean } | undefined)?.winter_service_enabled;
+  const inWinterSeason = [9, 10, 11, 0, 1, 2, 3].includes(selectedDate.getMonth());
+  const [includeWinter, setIncludeWinter] = useState(false);
+  useEffect(() => {
+    // Vorauswahl: Winterobjekt in der Saison ohne andere fällige Leistungen → Winterdienst-Einsatz.
+    setIncludeWinter(siteHasWinter && inWinterSeason && dueServices.length === 0);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedSite, siteHasWinter, inWinterSeason]);
+
   const handleSaveDeployment = async () => {
     if (!selectedSite || selectedWorkers.length === 0) {
       toast({
@@ -185,12 +197,32 @@ export default function DeploymentPage() {
 
     const existing = todaysDeployments?.find(d => d.jobSiteId === selectedSite);
     if (existing) {
-      toast({ variant: 'destructive', title: 'Bereits eingeplant', description: 'Für diesen Standort existiert bereits ein Einsatz am selben Tag.' });
+      toast({
+        variant: 'destructive',
+        title: 'Bereits eingeplant',
+        description: existing.categories?.includes(WINTER_CATEGORY)
+          ? 'Für diesen Standort gibt es an diesem Tag schon einen Winterdienst-Einsatz (evtl. automatisch geplant). Bitte im Tourplan bearbeiten.'
+          : 'Für diesen Standort existiert bereits ein Einsatz am selben Tag.',
+      });
+      return;
+    }
+    if (dueServices.length === 0 && !includeWinter) {
+      toast({
+        variant: 'destructive',
+        title: 'Keine Leistung ausgewählt',
+        description: siteHasWinter
+          ? 'Für diesen Monat sind keine Leistungen fällig. Für einen Winterdienst-Einsatz bitte „Winterdienst“ anhaken.'
+          : 'Für dieses Objekt sind in diesem Monat keine Leistungen hinterlegt (Objekte → Leistungen & Monate).',
+      });
       return;
     }
 
     const assignmentId = `assign-${crypto.randomUUID()}`;
-    const activeCategories = dueServices.map(([code]) => code);
+    const activeCategories = [
+      ...dueServices.map(([code]) => code),
+      ...(includeWinter ? [WINTER_CATEGORY] : []),
+    ];
+    const onlyWinter = includeWinter && dueServices.length === 0;
 
     const res = await fetch('/api/data', {
       method: 'POST',
@@ -204,7 +236,7 @@ export default function DeploymentPage() {
           job_site_id: selectedSite,
           assigned_worker_ids: selectedWorkers,
           scheduled_date: selectedDateString,
-          title: currentSite?.name || 'Tageseinsatz',
+          title: onlyWinter ? 'Winterdienst' : currentSite?.name || 'Tageseinsatz',
           status: 'PENDING',
           is_plan_published: true,
           categories: activeCategories,
@@ -432,6 +464,18 @@ export default function DeploymentPage() {
                               )}
                           </div>
                         </div>
+                        {siteHasWinter && (
+                          <label className={`sm:col-span-2 flex items-start gap-3 p-4 rounded-2xl border cursor-pointer transition ${includeWinter ? 'bg-sky-50 border-sky-300' : 'bg-muted/20 border-dashed'}`}>
+                            <Checkbox checked={includeWinter} onCheckedChange={v => setIncludeWinter(!!v)} className="mt-0.5" />
+                            <span>
+                              <span className="flex items-center gap-1.5 text-sm font-black text-sky-900"><Snowflake className="w-4 h-4" /> Winterdienst (Räumen / Streuen)</span>
+                              <span className="block text-[11px] text-muted-foreground mt-0.5">
+                                Der Einsatz erscheint im Winterdienst-Modul. Der Mitarbeiter dokumentiert ihn in der App bzw. in der Zeiterfassung
+                                („Winterdienst erfassen“) – erst dieser Eintrag ist der Nachweis im Streuprotokoll.
+                              </span>
+                            </span>
+                          </label>
+                        )}
                       </div>
                     )}
 
@@ -569,6 +613,7 @@ export default function DeploymentPage() {
                         <div className="min-w-0 flex-1 pr-2">
                           <div className="flex items-center gap-1.5">
                             {isSonder && <Zap className="w-3 h-3 text-amber-600 shrink-0" />}
+                            {dep.categories?.includes(WINTER_CATEGORY) && <Snowflake className="w-3 h-3 text-sky-600 shrink-0" />}
                             <p className={`font-black text-xs truncate ${isSonder ? 'text-amber-800' : ''}`}>
                               {isSonder ? dep.title : site?.name ?? dep.title}
                             </p>
