@@ -264,9 +264,21 @@ export interface ParsedSite {
  * @param workbook الكتاب المُحلَّل بـ SheetJS (للحصول على القيم النصية)
  * @param rawData البيانات الخام للملف (Uint8Array) لقراءة ألوان الخلايا مباشرة من XML
  */
+export interface SiteTravel {
+  distanceKm: number;
+  travelMinutes: number;
+  isRemote: boolean;
+}
+
+export interface ParseExcelOptions {
+  /** Computes distance and travel time from the company's headquarters (see /api/geo/route). */
+  computeTravel?: (site: { address: string; city: string; postalCode: string }) => Promise<SiteTravel | null>;
+}
+
 export async function parseExcelDirect(
   workbook: XLSX.WorkBook,
-  rawData: Uint8Array
+  rawData: Uint8Array,
+  options: ParseExcelOptions = {},
 ): Promise<ParsedSite[]> {
   const sitesMap = new Map<string, ParsedSite>();
 
@@ -300,41 +312,18 @@ export async function parseExcelDirect(
       let estimatedTravelTimeMinutesFromHQ = 0;
       let isRemote = false;
 
-      try {
-        const query = [address, city, postalCode, 'Deutschland'].filter(Boolean).join(', ');
-        const url = `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(query)}&limit=1&countrycodes=de`;
-        const res = await fetch(url, { headers: { 'User-Agent': 'HausmeisterPro/1.0' } });
-        const data = await res.json();
-
-        if (data && data.length > 0) {
-          const siteLat = parseFloat(data[0].lat);
-          const siteLng = parseFloat(data[0].lon);
-
-          const hqLat = 52.0189651;
-          const hqLng = 11.7265854;
-
-          const osrmUrl = `https://router.project-osrm.org/route/v1/driving/${hqLng},${hqLat};${siteLng},${siteLat}?overview=false`;
-          const osrmRes = await fetch(osrmUrl);
-          const osrmData = await osrmRes.json();
-
-          if (osrmData.code === 'Ok' && osrmData.routes && osrmData.routes.length > 0) {
-            const distanceMeters = osrmData.routes[0].distance;
-            const durationSeconds = osrmData.routes[0].duration;
-
-            distanceFromHQ = parseFloat((distanceMeters / 1000).toFixed(1));
-            estimatedTravelTimeMinutesFromHQ = Math.round(durationSeconds / 60);
-            
-            if (distanceFromHQ > 95) {
-              isRemote = true;
-              estimatedTravelTimeMinutesFromHQ += 60; // +1 Std. bei > 95km
-            }
+      if (options.computeTravel) {
+        try {
+          const travel = await options.computeTravel({ address, city, postalCode });
+          if (travel) {
+            distanceFromHQ = travel.distanceKm;
+            estimatedTravelTimeMinutesFromHQ = travel.travelMinutes;
+            isRemote = travel.isRemote;
           }
+        } catch (e) {
+          console.error('Route calc failed for', city, e);
         }
-        // Nominatim Rate-Limit einhalten (max 1 Request pro Sekunde)
-        await new Promise(r => setTimeout(r, 1100));
-      } catch (e) {
-        console.error("Route calc failed for", city, e);
-        // Auch bei Fehler kurz warten
+        // Nominatim allows one request per second.
         await new Promise(r => setTimeout(r, 1100));
       }
 

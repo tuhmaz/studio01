@@ -406,58 +406,41 @@ function AddEditSiteDialog({ open, site, nextId, availableRegions, onSave, onClo
   const handleCalculateDistance = async () => {
     try {
       setCalculatingDistance(true);
-      // HQ Coordinates: Johannes-R.-Becher-Straße 25 39218 Schönebeck (Elbe)
-      const hqLat = 52.0189651;
-      const hqLng = 11.7265854;
+      // Server-side: uses this company's headquarters and remote-site rule (Einstellungen).
+      const res = await fetch('/api/geo/route', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          address: form.address,
+          city: form.city,
+          postalCode: form.postalCode,
+          lat: parseFloat(form.latitude),
+          lng: parseFloat(form.longitude),
+        }),
+      });
+      const result = await res.json();
+      if (!res.ok) throw new Error(result?.error || 'Die Distanz konnte nicht berechnet werden.');
 
-      let siteLat = parseFloat(form.latitude);
-      let siteLng = parseFloat(form.longitude);
+      set('latitude', String(result.lat));
+      set('longitude', String(result.lng));
 
-      // 1. Geocode site if lat/lng are missing
-      if (!siteLat || !siteLng || isNaN(siteLat) || isNaN(siteLng)) {
-        const query = [form.address, form.city, form.postalCode, 'Deutschland'].filter(Boolean).join(', ');
-        const url = `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(query)}&limit=1&countrycodes=de`;
-        const res = await fetch(url, { headers: { 'User-Agent': 'HausmeisterPro/1.0' } });
-        const data = await res.json();
-        if (data && data.length > 0) {
-          siteLat = parseFloat(data[0].lat);
-          siteLng = parseFloat(data[0].lon);
-          set('latitude', String(siteLat));
-          set('longitude', String(siteLng));
-        } else {
-          throw new Error('Adresse konnte nicht gefunden werden.');
-        }
-      }
-
-      // 2. OSRM calculation
-      const osrmUrl = `https://router.project-osrm.org/route/v1/driving/${hqLng},${hqLat};${siteLng},${siteLat}?overview=false`;
-      const osrmRes = await fetch(osrmUrl);
-      const osrmData = await osrmRes.json();
-
-      if (osrmData.code === 'Ok' && osrmData.routes && osrmData.routes.length > 0) {
-        const distanceMeters = osrmData.routes[0].distance;
-        const durationSeconds = osrmData.routes[0].duration;
-
-        const distanceKm = (distanceMeters / 1000).toFixed(1);
-        const durationMinutes = Math.round(durationSeconds / 60);
-
-        set('distanceFromHQ', distanceKm);
-        set('estimatedTravelTimeMinutesFromHQ', String(durationMinutes));
-
-        // Check if remote (> 95km)
-        if (parseFloat(distanceKm) > 95) {
-          set('isRemote', true);
-        } else {
-          set('isRemote', false);
-        }
-
+      if (result.hqMissing) {
         toast({
-          title: 'Berechnung erfolgreich',
-          description: `Distanz: ${distanceKm} km, Dauer: ${durationMinutes} Min.`,
+          title: 'Firmensitz fehlt',
+          description: 'Koordinaten gespeichert. Für Fahrzeiten bitte den Firmensitz unter Einstellungen bestimmen.',
         });
-      } else {
-        throw new Error('Routenberechnung fehlgeschlagen.');
+        return;
       }
+      if (result.distanceKm == null) throw new Error('Routenberechnung fehlgeschlagen.');
+
+      set('distanceFromHQ', String(result.distanceKm));
+      set('estimatedTravelTimeMinutesFromHQ', String(result.travelMinutes));
+      set('isRemote', Boolean(result.isRemote));
+
+      toast({
+        title: 'Berechnung erfolgreich',
+        description: `Distanz: ${result.distanceKm} km, Fahrtzeit: ${result.travelMinutes} Min.${result.isRemote ? ' (Fernobjekt)' : ''}`,
+      });
     } catch (e: any) {
       toast({
         title: 'Fehler bei der Berechnung',
@@ -918,7 +901,18 @@ export default function JobsPage() {
         const workbook = XLSX.read(data, { type: 'array', raw: false, cellStyles: true, sheetStubs: true });
 
         setImportStatus('Extrahiere Liegenschaften und Leistungskatalog...');
-        const sites = await parseExcelDirect(workbook, data);
+        const sites = await parseExcelDirect(workbook, data, {
+          computeTravel: async site => {
+            const res = await fetch('/api/geo/route', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify(site),
+            });
+            if (!res.ok) return null;
+            const r = await res.json();
+            return r.distanceKm == null ? null : { distanceKm: r.distanceKm, travelMinutes: r.travelMinutes, isRemote: r.isRemote };
+          },
+        });
 
         if (sites.length === 0) {
           throw new Error('Keine Liegenschaften im Masterplan gefunden. Bitte prüfen Sie das Dateiformat.');

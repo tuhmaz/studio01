@@ -37,7 +37,7 @@ export default function EntryPage() {
         <div className="inline-flex p-3 bg-primary/10 rounded-2xl mb-4">
           <MapPin className="text-primary w-10 h-10" />
         </div>
-        <h1 className="text-5xl font-black text-primary mb-4 uppercase tracking-tighter">Tuhmaz Hausmeister Pro</h1>
+        <h1 className="text-5xl font-black text-primary mb-4 uppercase tracking-tighter">Hausmeister Pro</h1>
         <p className="text-muted-foreground text-xl font-medium">Betriebsführungssystem | Version 2026</p>
       </div>
 
