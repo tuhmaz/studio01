@@ -5,7 +5,7 @@
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import {
-  STATUS_TEXT,
+  itemStatusText,
   fmtReportDate,
   fmtReportTime,
   type LeistungsnachweisReport,
@@ -61,8 +61,8 @@ export async function exportLeistungsnachweisPdf(report: LeistungsnachweisReport
     const row = [
       i === 0 ? fmtReportDate(v.date) : '',
       item.label,
-      STATUS_TEXT[item.status] + (item.reason ? `: ${item.reason}` : ''),
-      item.checkedAt ? `${fmtReportTime(item.checkedAt)} ${item.employeeName ?? ''}`.trim() : '',
+      itemStatusText(item) + (item.reason ? `: ${item.reason}` : ''),
+      item.checkedAt && !item.byOffice ? `${fmtReportTime(item.checkedAt)} ${item.employeeName ?? ''}`.trim() : '',
       [item.beforeUrl ? 'vorher' : '', item.afterUrl ? 'nachher' : ''].filter(Boolean).join(' / '),
     ];
     if (showWorkerNames) row.splice(1, 0, i === 0 ? v.workers.join(', ') || '—' : '');

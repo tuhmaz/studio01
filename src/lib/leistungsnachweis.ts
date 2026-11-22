@@ -47,7 +47,7 @@ export async function buildLeistungsnachweis(
   `;
   const checks = visits.length
     ? await db`
-        SELECT job_assignment_id, service_code, status, reason, checked_at, employee_name, before_media_id, after_media_id
+        SELECT job_assignment_id, service_code, status, reason, checked_at, employee_name, before_media_id, after_media_id, source
           FROM service_checks
          WHERE company_id = ${companyId} AND job_assignment_id = ANY(${db.array(visits.map(v => v.id))}::text[])
       `
@@ -75,6 +75,7 @@ export async function buildLeistungsnachweis(
           reason: c?.reason ?? null,
           checkedAt: finished ? c.checked_at : null,
           employeeName: finished && showWorkerNames ? c.employee_name : null,
+          byOffice: finished && c.source === 'office',
           beforeUrl: c?.before_media_id ? mediaUrl(c.before_media_id) : null,
           afterUrl: c?.after_media_id ? mediaUrl(c.after_media_id) : null,
         };

@@ -9,6 +9,8 @@ export interface ReportItem {
   reason: string | null;
   checkedAt: string | null;
   employeeName: string | null;
+  /** Vom Büro nachgetragen, nicht vor Ort abgehakt. */
+  byOffice: boolean;
   beforeUrl: string | null;
   afterUrl: string | null;
 }
@@ -44,6 +46,11 @@ export interface LeistungsnachweisReport {
     open: number;
     compliancePercent: number | null;
   };
+}
+
+/** Statustext inkl. Kennzeichnung eines Nachtrags. */
+export function itemStatusText(item: Pick<ReportItem, 'status' | 'byOffice'>): string {
+  return item.byOffice && item.status === 'done' ? 'erledigt (Nachtrag Büro)' : STATUS_TEXT[item.status];
 }
 
 export const STATUS_TEXT: Record<ItemStatus, string> = { done: 'erledigt', not_possible: 'nicht möglich', open: 'offen' };
