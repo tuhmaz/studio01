@@ -1,4 +1,5 @@
 'use client';
+import Link from 'next/link';
 
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { Shell } from '@/components/layout/Shell';
@@ -1113,6 +1114,9 @@ export default function JobsPage() {
               disabled={isParsing}
             >
               <Trash2 className="mr-2 h-5 w-5" /> LEEREN
+            </Button>
+            <Button variant="outline" size="lg" className="font-black rounded-2xl h-14 px-6 border-primary/30" asChild>
+              <Link href="/import?type=sites"><FileSpreadsheet className="mr-2 h-5 w-5" /> EXCEL-IMPORT</Link>
             </Button>
             <Button
               variant="outline"
