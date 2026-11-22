@@ -8,6 +8,8 @@ import {
   itemStatusText,
   fmtReportDate,
   fmtReportTime,
+  fmtMonthLabel,
+  isYearPeriod,
   type LeistungsnachweisReport,
 } from '@/lib/leistungsnachweis-types';
 
@@ -29,11 +31,18 @@ async function toDataUrl(url: string): Promise<string | null> {
   }
 }
 
-export async function exportLeistungsnachweisPdf(report: LeistungsnachweisReport, monthLabel: string): Promise<void> {
+export interface LeistungsnachweisPdf {
+  blob: Blob;
+  filename: string;
+}
+
+/** Erstellt das PDF (für Vorschau und Download). */
+export async function buildLeistungsnachweisPdf(report: LeistungsnachweisReport, monthLabel: string): Promise<LeistungsnachweisPdf> {
   const doc = new jsPDF({ unit: 'mm', format: 'a4' });
   const M = 14;
   const W = doc.internal.pageSize.getWidth();
   const { company, site, totals, showWorkerNames } = report;
+  doc.setProperties({ title: `Leistungsnachweis ${site.name} – ${monthLabel}`, author: company.name, creator: 'Hausmeister Pro' });
 
   doc.setFont('helvetica', 'bold'); doc.setFontSize(16);
   doc.text('Leistungsnachweis', M, 18);
@@ -47,11 +56,41 @@ export async function exportLeistungsnachweisPdf(report: LeistungsnachweisReport
   doc.text(
     totals.planned
       ? `${totals.done} von ${totals.planned} Leistungen erbracht (${totals.compliancePercent?.toLocaleString('de-DE')} %)`
-      : 'Keine geplanten Leistungen in diesem Monat',
+      : 'Keine geplanten Leistungen im Zeitraum',
     M, 41,
   );
   doc.setFont('helvetica', 'normal'); doc.setFontSize(9);
   doc.text(`${totals.visits} Einsätze · ${totals.notPossible} nicht möglich · ${totals.open} ohne Rückmeldung`, M, 46);
+
+  let startY = 52;
+  // Jahresbericht: erst die Übersicht je Monat, dann die Einzelnachweise.
+  if (isYearPeriod(report.month) && report.byMonth.length) {
+    doc.setFont('helvetica', 'bold'); doc.setFontSize(10);
+    doc.text('Übersicht je Monat', M, startY);
+    autoTable(doc, {
+      startY: startY + 3,
+      head: [['Monat', 'Einsätze', 'Geplant', 'Erledigt', 'Nicht möglich', 'Ohne Rückmeldung', 'Quote']],
+      body: [
+        ...report.byMonth.map(m => [
+          fmtMonthLabel(m.month), m.visits, m.planned, m.done, m.notPossible, m.open,
+          m.compliancePercent == null ? '—' : `${m.compliancePercent.toLocaleString('de-DE')} %`,
+        ]),
+        ['Gesamt', totals.visits, totals.planned, totals.done, totals.notPossible, totals.open,
+          totals.compliancePercent == null ? '—' : `${totals.compliancePercent.toLocaleString('de-DE')} %`],
+      ],
+      margin: { left: M, right: M },
+      styles: { font: 'helvetica', fontSize: 8.5, cellPadding: 1.8, lineColor: [220, 224, 230], lineWidth: 0.15 },
+      headStyles: { fillColor: [15, 40, 80], textColor: 255, fontStyle: 'bold' },
+      columnStyles: { 1: { halign: 'right' }, 2: { halign: 'right' }, 3: { halign: 'right' }, 4: { halign: 'right' }, 5: { halign: 'right' }, 6: { halign: 'right' } },
+      didParseCell: data => {
+        if (data.section === 'body' && data.row.index === report.byMonth.length) data.cell.styles.fontStyle = 'bold';
+      },
+    });
+    doc.addPage();
+    doc.setFont('helvetica', 'bold'); doc.setFontSize(12);
+    doc.text('Einzelnachweise', M, 18);
+    startY = 24;
+  }
 
   const head = showWorkerNames
     ? ['Datum', 'Team', 'Leistung', 'Status', 'Erfasst', 'Fotos']
@@ -69,7 +108,7 @@ export async function exportLeistungsnachweisPdf(report: LeistungsnachweisReport
     return row;
   }));
   autoTable(doc, {
-    startY: 52,
+    startY,
     head: [head],
     body,
     margin: { left: M, right: M },
@@ -126,5 +165,21 @@ export async function exportLeistungsnachweisPdf(report: LeistungsnachweisReport
     doc.setTextColor(0);
   }
   const safe = site.name.replace(/[^\w-]+/g, '_').slice(0, 40);
-  doc.save(`Leistungsnachweis_${safe}_${report.month}.pdf`);
+  return { blob: doc.output('blob'), filename: `Leistungsnachweis_${safe}_${report.month}.pdf` };
+}
+
+/** Datei herunterladen (ohne Vorschau). */
+export function downloadPdf({ blob, filename }: LeistungsnachweisPdf) {
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 10_000);
+}
+
+export async function exportLeistungsnachweisPdf(report: LeistungsnachweisReport, monthLabel: string): Promise<void> {
+  downloadPdf(await buildLeistungsnachweisPdf(report, monthLabel));
 }

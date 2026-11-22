@@ -1,11 +1,11 @@
 /**
- * GET /api/portal/leistungsnachweis?siteId=…&month=YYYY-MM
+ * GET /api/portal/leistungsnachweis?siteId=…&month=YYYY-MM | YYYY (ganzes Jahr)
  * Leistungsnachweis für ein Objekt der eigenen Hausverwaltung.
  */
 import { NextRequest, NextResponse } from 'next/server';
 import { withTenant } from '@/lib/db';
 import { buildLeistungsnachweis } from '@/lib/leistungsnachweis';
-import { monthRange } from '@/lib/leistungsnachweis-types';
+import { periodRange } from '@/lib/leistungsnachweis-types';
 import {
   PortalError,
   portalErrorResponse,
@@ -23,7 +23,7 @@ export async function GET(req: NextRequest) {
   const month = req.nextUrl.searchParams.get('month') ?? '';
 
   try {
-    if (!monthRange(month)) throw new PortalError('month (YYYY-MM) erforderlich');
+    if (!periodRange(month)) throw new PortalError('month (YYYY-MM oder YYYY) erforderlich');
     const report = await withTenant(session.companyId, async db => {
       await portalSite(db, session, siteId);
       return buildLeistungsnachweis(db, session.companyId, siteId as string, month, {

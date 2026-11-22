@@ -13,7 +13,7 @@
  */
 import type { Db } from '@/lib/db';
 import { checklistCodes, serviceLabel, type SiteService } from '@/lib/services';
-import { monthRange } from '@/lib/leistungsnachweis-types';
+import { periodRange } from '@/lib/leistungsnachweis-types';
 import { berlinToday } from '@/lib/notifications';
 
 export class NachtragError extends Error {
@@ -27,8 +27,8 @@ export async function nachtragen(
   session: { companyId: string; userId: string; name: string },
   { siteId, month, assignmentId }: { siteId: string; month: string; assignmentId?: string | null },
 ): Promise<{ visits: number; services: number }> {
-  const range = monthRange(month);
-  if (!range) throw new NachtragError('Ungültiger Monat');
+  const range = periodRange(month);
+  if (!range) throw new NachtragError('Ungültiger Zeitraum');
   const { companyId } = session;
   const [site] = await db`SELECT services FROM job_sites WHERE id = ${siteId} AND company_id = ${companyId}`;
   if (!site) throw new NachtragError('Objekt nicht gefunden', 404);

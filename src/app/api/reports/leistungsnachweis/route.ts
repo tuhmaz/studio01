@@ -1,5 +1,5 @@
 /**
- * GET /api/reports/leistungsnachweis?siteId=…&month=YYYY-MM
+ * GET /api/reports/leistungsnachweis?siteId=…&month=YYYY-MM | YYYY (ganzes Jahr)
  *
  * Monthly proof of service for one site (see src/lib/leistungsnachweis.ts).
  * Internal view: always with worker names. Requires reports.export.
@@ -9,7 +9,7 @@ import { withTenant } from '@/lib/db';
 import { hasPermission } from '@/lib/permissions';
 import { getRequestSession } from '@/lib/request-context';
 import { buildLeistungsnachweis } from '@/lib/leistungsnachweis';
-import { monthRange } from '@/lib/leistungsnachweis-types';
+import { periodRange } from '@/lib/leistungsnachweis-types';
 
 export async function GET(req: NextRequest) {
   const session = await getRequestSession(req);
@@ -18,7 +18,7 @@ export async function GET(req: NextRequest) {
 
   const siteId = req.nextUrl.searchParams.get('siteId');
   const month = req.nextUrl.searchParams.get('month') ?? '';
-  if (!siteId || !monthRange(month)) return NextResponse.json({ error: 'siteId und month (YYYY-MM) erforderlich' }, { status: 400 });
+  if (!siteId || !periodRange(month)) return NextResponse.json({ error: 'siteId und month (YYYY-MM oder YYYY) erforderlich' }, { status: 400 });
 
   try {
     const report = await withTenant(session.companyId, db => buildLeistungsnachweis(db, session.companyId, siteId, month, {

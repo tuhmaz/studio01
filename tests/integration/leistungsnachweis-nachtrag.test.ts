@@ -88,3 +88,51 @@ describe('Nachtrag', () => {
     expect(other.status).toBe(404);
   });
 });
+
+describe('Jahresbericht', () => {
+  it('ganzes Jahr: alle Einsätze, Kennzahlen je Monat; Nachtrag für das Jahr', async () => {
+    await sql`
+      INSERT INTO job_assignments (id, company_id, job_site_id, title, scheduled_date, categories, assigned_worker_ids, is_plan_published)
+      VALUES ('job-aug', 'co-a', ${fx.a.jobSiteId}, 'Objekt', '2026-08-10', ${sql.array(['AR_Hof'])}, ${sql.array([fx.a.users.WORKER.id])}, true),
+             ('job-2025', 'co-a', ${fx.a.jobSiteId}, 'Objekt', '2025-12-10', ${sql.array(['AR_Hof'])}, ${sql.array([fx.a.users.WORKER.id])}, true)
+    `;
+    const worker = await tokenFor(fx.a, 'WORKER');
+    await call(check, '/api/checks', worker, { assignmentId: 'job-aug', serviceCode: 'AR_Hof', status: 'done' });
+
+    const req = new NextRequest(`http://localhost/api/reports/leistungsnachweis?siteId=${fx.a.jobSiteId}&month=2026`, {
+      headers: { authorization: `Bearer ${await tokenFor(fx.a, 'ADMIN')}` },
+    });
+    const res = await report(req);
+    expect(res.status).toBe(200);
+    const json = await res.json();
+    expect(json.visits.map((v: any) => v.date)).toEqual(['2026-08-10', '2026-09-28']);
+    expect(json.byMonth).toEqual([
+      { month: '2026-08', visits: 1, planned: 1, done: 1, notPossible: 0, open: 0, compliancePercent: 100 },
+      { month: '2026-09', visits: 1, planned: 2, done: 0, notPossible: 0, open: 2, compliancePercent: 0 },
+    ]);
+    expect(json.totals).toMatchObject({ visits: 2, planned: 3, done: 1, open: 2 });
+
+    expect((await post('ADMIN', { siteId: fx.a.jobSiteId, month: '2026' })).json.data).toEqual({ visits: 1, services: 2 });
+
+    const bad = new NextRequest(`http://localhost/api/reports/leistungsnachweis?siteId=${fx.a.jobSiteId}&month=26`, {
+      headers: { authorization: `Bearer ${await tokenFor(fx.a, 'ADMIN')}` },
+    });
+    expect((await report(bad)).status).toBe(400);
+  });
+});
+
+describe('Zeitraum', () => {
+  it('künftige Einsätze erscheinen nicht im Nachweis', async () => {
+    await sql`
+      INSERT INTO job_assignments (id, company_id, job_site_id, title, scheduled_date, categories, assigned_worker_ids, is_plan_published)
+      VALUES ('job-future', 'co-a', ${fx.a.jobSiteId}, 'Objekt', (now() AT TIME ZONE 'Europe/Berlin')::date + 2,
+              ${sql.array(['AR_Hof'])}, ${sql.array([fx.a.users.WORKER.id])}, true)
+    `;
+    const [{ y }] = await sql`SELECT to_char((now() AT TIME ZONE 'Europe/Berlin')::date + 2, 'YYYY') AS y`;
+    const req = new NextRequest(`http://localhost/api/reports/leistungsnachweis?siteId=${fx.a.jobSiteId}&month=${y}`, {
+      headers: { authorization: `Bearer ${await tokenFor(fx.a, 'ADMIN')}` },
+    });
+    const json = await (await report(req)).json();
+    expect(json.visits.map((v: any) => v.id)).not.toContain('job-future');
+  });
+});

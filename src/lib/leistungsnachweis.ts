@@ -9,7 +9,8 @@
  */
 import type { Db } from '@/lib/db';
 import { checklistCodes, serviceLabel, type SiteService } from '@/lib/services';
-import { monthRange, type LeistungsnachweisReport } from '@/lib/leistungsnachweis-types';
+import { berlinToday } from '@/lib/notifications';
+import { periodRange, type LeistungsnachweisReport, type MonthTotals } from '@/lib/leistungsnachweis-types';
 
 export interface BuildOptions {
   showWorkerNames: boolean;
@@ -24,7 +25,7 @@ export async function buildLeistungsnachweis(
   month: string,
   options: BuildOptions,
 ): Promise<LeistungsnachweisReport | null> {
-  const range = monthRange(month);
+  const range = periodRange(month);
   if (!range) return null;
 
   const [site] = await db`
@@ -43,6 +44,8 @@ export async function buildLeistungsnachweis(
        AND a.job_site_id = ${siteId}
        AND a.is_plan_published
        AND a.scheduled_date >= ${range.first} AND a.scheduled_date < ${range.next}
+       -- Nachweis = was bis heute fällig war; künftige Einsätze zählen nicht als „ohne Rückmeldung“.
+       AND a.scheduled_date <= ${berlinToday()}
      ORDER BY a.scheduled_date, a.id
   `;
   const checks = visits.length
@@ -59,13 +62,21 @@ export async function buildLeistungsnachweis(
   let planned = 0;
   let done = 0;
   let notPossible = 0;
+  const perMonth = new Map<string, MonthTotals>();
+  const monthOf = (date: string) => {
+    const key = date.slice(0, 7);
+    if (!perMonth.has(key)) perMonth.set(key, { month: key, visits: 0, planned: 0, done: 0, notPossible: 0, open: 0, compliancePercent: null });
+    return perMonth.get(key)!;
+  };
   const rows = visits
     .map(v => {
       const items = checklistCodes(v.categories).map(code => {
         const c = checkMap.get(`${v.id}|${code}`);
+        const m = monthOf(v.date);
         planned += 1;
-        if (c?.status === 'done') done += 1;
-        if (c?.status === 'not_possible') notPossible += 1;
+        m.planned += 1;
+        if (c?.status === 'done') { done += 1; m.done += 1; }
+        if (c?.status === 'not_possible') { notPossible += 1; m.notPossible += 1; }
         const finished = !!c && c.status !== 'started';
         return {
           code,
@@ -91,11 +102,22 @@ export async function buildLeistungsnachweis(
     })
     .filter(v => v.items.length > 0);
 
+  rows.forEach(v => { monthOf(v.date).visits += 1; });
+  const byMonth = [...perMonth.values()]
+    .filter(m => m.planned > 0)
+    .sort((a, b) => a.month.localeCompare(b.month))
+    .map(m => ({
+      ...m,
+      open: m.planned - m.done - m.notPossible,
+      compliancePercent: Math.round((m.done / m.planned) * 1000) / 10,
+    }));
+
   return {
     site: { id: site.id, name: site.name, address: site.address, city: site.city, postalCode: site.postal_code },
     company: company as LeistungsnachweisReport['company'],
     month,
     showWorkerNames,
+    byMonth,
     visits: rows,
     totals: {
       visits: rows.length,
