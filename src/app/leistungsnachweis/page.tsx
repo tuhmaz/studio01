@@ -6,9 +6,14 @@
  * the property manager (Hausverwaltung).
  */
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { ClipboardCheck, Download, Loader2 } from 'lucide-react';
+import { CheckCheck, ClipboardCheck, Download, Loader2 } from 'lucide-react';
 import { Shell } from '@/components/layout/Shell';
 import { Button } from '@/components/ui/button';
+import {
+  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription,
+  AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
+import { hasPermission } from '@/lib/permissions';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { LeistungsnachweisView } from '@/components/reports/LeistungsnachweisView';
 import { useAuth } from '@/db/provider';
@@ -31,6 +36,9 @@ export default function LeistungsnachweisPage() {
   const [report, setReport] = useState<LeistungsnachweisReport | null>(null);
   const [loading, setLoading] = useState(false);
   const [exporting, setExporting] = useState(false);
+  const [busyId, setBusyId] = useState<string | null>(null);
+  const [confirmMonth, setConfirmMonth] = useState(false);
+  const canNachtrag = hasPermission({ role } as Parameters<typeof hasPermission>[0], 'time_entries.approve');
 
   useEffect(() => {
     fetch('/api/data', {
@@ -66,6 +74,35 @@ export default function LeistungsnachweisPage() {
 
   const monthLabel = months.find(m => m.value === month)?.label ?? month;
 
+  // Offene Leistungen vergangener Einsätze (bis heute) – Kandidaten für den Nachtrag.
+  const today = new Intl.DateTimeFormat('en-CA', { timeZone: 'Europe/Berlin', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date());
+  const openPast = (report?.visits ?? [])
+    .filter(v => v.date <= today)
+    .reduce((n, v) => n + v.items.filter(i => i.status === 'open').length, 0);
+
+  const nachtrag = async (assignmentId: string | null, method: 'POST' | 'DELETE' = 'POST') => {
+    setBusyId(assignmentId ?? 'month');
+    try {
+      const res = await fetch('/api/reports/leistungsnachweis/nachtrag', {
+        method,
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(method === 'POST' ? { siteId, month, assignmentId } : { assignmentId }),
+      });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json?.error);
+      toast({
+        title: method === 'POST'
+          ? `${json.data.services} Leistungen nachgetragen`
+          : 'Nachtrag zurückgenommen',
+      });
+      await load();
+    } catch (e: any) {
+      toast({ title: 'Nicht gespeichert', description: e?.message, variant: 'destructive' });
+    } finally {
+      setBusyId(null);
+    }
+  };
+
   const exportPdf = async () => {
     if (!report) return;
     setExporting(true);
@@ -99,6 +136,12 @@ export default function LeistungsnachweisPage() {
               <SelectTrigger className="w-44 h-10 rounded-xl font-bold"><SelectValue /></SelectTrigger>
               <SelectContent>{months.map(m => <SelectItem key={m.value} value={m.value}>{m.label}</SelectItem>)}</SelectContent>
             </Select>
+            {canNachtrag && openPast > 0 && (
+              <Button variant="outline" className="h-10 rounded-xl font-bold gap-2" onClick={() => setConfirmMonth(true)} disabled={busyId !== null}>
+                {busyId === 'month' ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCheck className="w-4 h-4" />}
+                Offene nachtragen ({openPast})
+              </Button>
+            )}
             <Button className="h-10 rounded-xl font-black gap-2" onClick={exportPdf} disabled={!report?.visits.length || exporting}>
               {exporting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />} PDF
             </Button>
@@ -110,7 +153,27 @@ export default function LeistungsnachweisPage() {
           loading={loading || sites === null}
           monthLabel={monthLabel}
           emptyHint={'Leistungen und Monate werden in der Objekt-Ansicht unter „Leistungen & Monate“ festgelegt.'}
+          onNachtrag={canNachtrag ? id => nachtrag(id) : undefined}
+          onUndo={canNachtrag ? id => nachtrag(id, 'DELETE') : undefined}
+          busyId={busyId}
         />
+
+        <AlertDialog open={confirmMonth} onOpenChange={setConfirmMonth}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>{openPast} offene Leistungen als erledigt nachtragen?</AlertDialogTitle>
+              <AlertDialogDescription>
+                Alle Einsätze in {monthLabel} bis heute, für die es keine Rückmeldung gibt. Im Leistungsnachweis
+                (auch im PDF und im Kundenportal) steht dann „erledigt (Nachtrag Büro)“ – ohne Uhrzeit und ohne Fotos.
+                Rückmeldungen vom Mitarbeiter bleiben unverändert. Je Einsatz kann der Nachtrag zurückgenommen werden.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel>Abbrechen</AlertDialogCancel>
+              <AlertDialogAction onClick={() => nachtrag(null)}>Nachtragen</AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
       </div>
     </Shell>
   );

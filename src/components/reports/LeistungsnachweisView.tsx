@@ -1,18 +1,19 @@
 'use client';
 
 /** Anzeige eines Leistungsnachweises: Kennzahlen + Einsätze mit Leistungen und Fotos. */
-import { CheckCircle2, CircleDashed, Image as ImageIcon, Loader2, XCircle } from 'lucide-react';
+import { CheckCircle2, CircleDashed, Image as ImageIcon, Loader2, Undo2, XCircle } from 'lucide-react';
+import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import {
-  STATUS_TEXT,
   fmtReportDate,
+  itemStatusText,
   fmtReportTime,
   type ItemStatus,
   type LeistungsnachweisReport,
 } from '@/lib/leistungsnachweis-types';
 
-function StatusIcon({ status }: { status: ItemStatus }) {
-  if (status === 'done') return <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />;
+function StatusIcon({ status, byOffice }: { status: ItemStatus; byOffice?: boolean }) {
+  if (status === 'done') return <CheckCircle2 className={`w-4 h-4 shrink-0 ${byOffice ? 'text-emerald-600/50' : 'text-emerald-600'}`} />;
   if (status === 'not_possible') return <XCircle className="w-4 h-4 text-red-600 shrink-0" />;
   return <CircleDashed className="w-4 h-4 text-gray-400 shrink-0" />;
 }
@@ -22,9 +23,18 @@ interface Props {
   loading: boolean;
   monthLabel: string;
   emptyHint?: string;
+  /** Nur intern (Verwaltung): offene Leistungen eines vergangenen Einsatzes nachtragen / zurücknehmen. */
+  onNachtrag?: (assignmentId: string) => void;
+  onUndo?: (assignmentId: string) => void;
+  busyId?: string | null;
 }
 
-export function LeistungsnachweisView({ report, loading, monthLabel, emptyHint }: Props) {
+function berlinToday() {
+  return new Intl.DateTimeFormat('en-CA', { timeZone: 'Europe/Berlin', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date());
+}
+
+export function LeistungsnachweisView({ report, loading, monthLabel, emptyHint, onNachtrag, onUndo, busyId }: Props) {
+  const today = berlinToday();
   const t = report?.totals;
   const showTeam = report?.showWorkerNames ?? true;
 
@@ -65,17 +75,36 @@ export function LeistungsnachweisView({ report, loading, monthLabel, emptyHint }
                   <div>
                     <p className="font-black">{fmtReportDate(v.date)}</p>
                     {showTeam && <p className="text-xs text-muted-foreground mt-1">{v.workers.join(', ') || 'ohne Team'}</p>}
+                    {onNachtrag && v.date <= today && v.items.some(i => i.status === 'open') && (
+                      <Button
+                        variant="outline" size="sm" className="mt-3 h-8 rounded-lg text-xs font-bold gap-1.5"
+                        disabled={busyId === v.id}
+                        onClick={() => onNachtrag(v.id)}
+                      >
+                        {busyId === v.id ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <CheckCircle2 className="w-3.5 h-3.5" />}
+                        Als erledigt nachtragen
+                      </Button>
+                    )}
+                    {onUndo && v.items.some(i => i.byOffice) && (
+                      <Button
+                        variant="ghost" size="sm" className="mt-2 h-7 rounded-lg text-xs text-muted-foreground gap-1.5"
+                        disabled={busyId === v.id}
+                        onClick={() => onUndo(v.id)}
+                      >
+                        <Undo2 className="w-3.5 h-3.5" /> Nachtrag zurücknehmen
+                      </Button>
+                    )}
                   </div>
                   <ul className="space-y-2">
                     {v.items.map(item => (
                       <li key={item.code} className="flex items-start gap-3">
-                        <StatusIcon status={item.status} />
+                        <StatusIcon status={item.status} byOffice={item.byOffice} />
                         <div className="flex-1 min-w-0">
                           <p className="text-sm font-bold">{item.label}</p>
                           <p className="text-xs text-muted-foreground">
                             {item.status === 'open'
                               ? 'keine Rückmeldung'
-                              : [STATUS_TEXT[item.status], fmtReportTime(item.checkedAt), item.employeeName].filter(Boolean).join(' · ')}
+                              : [itemStatusText(item), item.byOffice ? null : fmtReportTime(item.checkedAt), item.employeeName].filter(Boolean).join(' · ')}
                             {item.reason ? ` — ${item.reason}` : ''}
                           </p>
                         </div>
