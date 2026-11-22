@@ -19,8 +19,9 @@ import { LeistungsnachweisView } from '@/components/reports/LeistungsnachweisVie
 import { useAuth } from '@/db/provider';
 import { useToast } from '@/hooks/use-toast';
 import { UserRole } from '@/lib/types';
-import { lastMonths, type LeistungsnachweisReport } from '@/lib/leistungsnachweis-types';
-import { exportLeistungsnachweisPdf } from '@/lib/leistungsnachweis-pdf';
+import { periodOptions, type LeistungsnachweisReport } from '@/lib/leistungsnachweis-types';
+import { buildLeistungsnachweisPdf, type LeistungsnachweisPdf } from '@/lib/leistungsnachweis-pdf';
+import { PdfPreviewDialog } from '@/components/reports/PdfPreviewDialog';
 
 interface SiteOption { id: string; name: string; city: string }
 
@@ -29,13 +30,14 @@ export default function LeistungsnachweisPage() {
   const { toast } = useToast();
   const role = (userProfile?.role ?? 'WORKER') as UserRole;
 
-  const months = useMemo(() => lastMonths(12), []);
+  const months = useMemo(() => periodOptions(), []);
   const [month, setMonth] = useState(months[0].value);
   const [sites, setSites] = useState<SiteOption[] | null>(null);
   const [siteId, setSiteId] = useState<string>('');
   const [report, setReport] = useState<LeistungsnachweisReport | null>(null);
   const [loading, setLoading] = useState(false);
   const [exporting, setExporting] = useState(false);
+  const [preview, setPreview] = useState<{ pdf: LeistungsnachweisPdf | null; error: string | null } | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [confirmMonth, setConfirmMonth] = useState(false);
   const canNachtrag = hasPermission({ role } as Parameters<typeof hasPermission>[0], 'time_entries.approve');
@@ -106,10 +108,11 @@ export default function LeistungsnachweisPage() {
   const exportPdf = async () => {
     if (!report) return;
     setExporting(true);
+    setPreview({ pdf: null, error: null });
     try {
-      await exportLeistungsnachweisPdf(report, monthLabel);
+      setPreview({ pdf: await buildLeistungsnachweisPdf(report, monthLabel), error: null });
     } catch (e: any) {
-      toast({ title: 'PDF konnte nicht erstellt werden', description: e?.message, variant: 'destructive' });
+      setPreview({ pdf: null, error: `PDF konnte nicht erstellt werden${e?.message ? `: ${e.message}` : ''}` });
     } finally {
       setExporting(false);
     }
@@ -133,7 +136,7 @@ export default function LeistungsnachweisPage() {
               </SelectContent>
             </Select>
             <Select value={month} onValueChange={setMonth}>
-              <SelectTrigger className="w-44 h-10 rounded-xl font-bold"><SelectValue /></SelectTrigger>
+              <SelectTrigger className="w-52 h-10 rounded-xl font-bold"><SelectValue /></SelectTrigger>
               <SelectContent>{months.map(m => <SelectItem key={m.value} value={m.value}>{m.label}</SelectItem>)}</SelectContent>
             </Select>
             {canNachtrag && openPast > 0 && (
@@ -143,7 +146,7 @@ export default function LeistungsnachweisPage() {
               </Button>
             )}
             <Button className="h-10 rounded-xl font-black gap-2" onClick={exportPdf} disabled={!report?.visits.length || exporting}>
-              {exporting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />} PDF
+              {exporting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />} PDF ansehen
             </Button>
           </div>
         </div>
@@ -158,12 +161,20 @@ export default function LeistungsnachweisPage() {
           busyId={busyId}
         />
 
+        <PdfPreviewDialog
+          open={preview !== null}
+          onOpenChange={open => { if (!open) setPreview(null); }}
+          pdf={preview?.pdf ?? null}
+          error={preview?.error}
+          title={`Leistungsnachweis · ${sites?.find(x => x.id === siteId)?.name ?? ''} · ${monthLabel}`}
+        />
+
         <AlertDialog open={confirmMonth} onOpenChange={setConfirmMonth}>
           <AlertDialogContent>
             <AlertDialogHeader>
               <AlertDialogTitle>{openPast} offene Leistungen als erledigt nachtragen?</AlertDialogTitle>
               <AlertDialogDescription>
-                Alle Einsätze in {monthLabel} bis heute, für die es keine Rückmeldung gibt. Im Leistungsnachweis
+                Alle Einsätze im Zeitraum {monthLabel} bis heute, für die es keine Rückmeldung gibt. Im Leistungsnachweis
                 (auch im PDF und im Kundenportal) steht dann „erledigt (Nachtrag Büro)“ – ohne Uhrzeit und ohne Fotos.
                 Rückmeldungen vom Mitarbeiter bleiben unverändert. Je Einsatz kann der Nachtrag zurückgenommen werden.
               </AlertDialogDescription>

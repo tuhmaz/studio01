@@ -5,6 +5,8 @@ import { CheckCircle2, CircleDashed, Image as ImageIcon, Loader2, Undo2, XCircle
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import {
+  fmtMonthLabel,
+  isYearPeriod,
   fmtReportDate,
   itemStatusText,
   fmtReportTime,
@@ -59,19 +61,65 @@ export function LeistungsnachweisView({ report, loading, monthLabel, emptyHint, 
         </div>
       )}
 
+      {!loading && report && isYearPeriod(report.month) && report.byMonth.length > 0 && (
+        <Card className="rounded-3xl border-none shadow-lg overflow-hidden">
+          <CardContent className="p-0 overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead className="bg-muted/50 text-[10px] font-black uppercase tracking-widest text-muted-foreground">
+                <tr>
+                  <th className="text-left px-5 py-3">Monat</th>
+                  <th className="text-right px-3 py-3">Einsätze</th>
+                  <th className="text-right px-3 py-3">Erledigt</th>
+                  <th className="text-right px-3 py-3">Nicht möglich</th>
+                  <th className="text-right px-3 py-3">Ohne Rückmeldung</th>
+                  <th className="text-left px-5 py-3 w-[28%]">Quote</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y">
+                {report.byMonth.map(m => (
+                  <tr key={m.month}>
+                    <td className="px-5 py-2.5 font-bold">
+                      <a href={`#monat-${m.month}`} className="hover:underline">{fmtMonthLabel(m.month)}</a>
+                    </td>
+                    <td className="text-right px-3 tabular-nums">{m.visits}</td>
+                    <td className="text-right px-3 tabular-nums">{m.done} / {m.planned}</td>
+                    <td className="text-right px-3 tabular-nums">{m.notPossible}</td>
+                    <td className="text-right px-3 tabular-nums">{m.open}</td>
+                    <td className="px-5">
+                      <div className="flex items-center gap-2">
+                        <div className="h-2 flex-1 rounded-full bg-muted overflow-hidden">
+                          <div className="h-full bg-emerald-600" style={{ width: `${m.compliancePercent ?? 0}%` }} />
+                        </div>
+                        <span className="text-xs font-bold tabular-nums w-12 text-right">{(m.compliancePercent ?? 0).toLocaleString('de-DE')} %</span>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </CardContent>
+        </Card>
+      )}
+
       <Card className="rounded-3xl border-none shadow-lg overflow-hidden">
         <CardContent className="p-0">
           {loading ? (
             <div className="flex justify-center py-16"><Loader2 className="w-5 h-5 animate-spin text-muted-foreground" /></div>
           ) : !report || report.visits.length === 0 ? (
             <p className="text-sm text-muted-foreground text-center py-16 px-6">
-              Keine Einsätze mit Leistungen für dieses Objekt in {monthLabel}.
+              Keine Einsätze mit Leistungen für dieses Objekt im Zeitraum {monthLabel}.
               {emptyHint ? ` ${emptyHint}` : ''}
             </p>
           ) : (
             <div className="divide-y">
-              {report.visits.map(v => (
-                <div key={v.id} className="p-5 grid grid-cols-1 md:grid-cols-[180px_1fr] gap-4">
+              {report.visits.map((v, index) => (
+                <div key={v.id}>
+                {isYearPeriod(report.month) && v.date.slice(0, 7) !== report.visits[index - 1]?.date.slice(0, 7) && (
+                  <p id={`monat-${v.date.slice(0, 7)}`} className="px-5 py-2 bg-muted/50 text-xs font-black uppercase tracking-widest text-muted-foreground scroll-mt-20">
+                    {fmtMonthLabel(v.date.slice(0, 7))}
+                  </p>
+                )}
+                <div className="p-5 grid grid-cols-1 md:grid-cols-[180px_1fr] gap-4">
                   <div>
                     <p className="font-black">{fmtReportDate(v.date)}</p>
                     {showTeam && <p className="text-xs text-muted-foreground mt-1">{v.workers.join(', ') || 'ohne Team'}</p>}
@@ -123,6 +171,7 @@ export function LeistungsnachweisView({ report, loading, monthLabel, emptyHint, 
                       </li>
                     ))}
                   </ul>
+                </div>
                 </div>
               ))}
             </div>

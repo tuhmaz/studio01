@@ -34,7 +34,10 @@ export interface LeistungsnachweisReport {
     phone: string | null;
     email: string | null;
   };
+  /** Zeitraum: 'YYYY-MM' (Monat) oder 'YYYY' (ganzes Jahr). */
   month: string;
+  /** Kennzahlen je Monat (beim Monatsbericht genau ein Eintrag). */
+  byMonth: MonthTotals[];
   /** false im Kundenportal, wenn der Dienstleister keine Mitarbeiternamen zeigt. */
   showWorkerNames: boolean;
   visits: ReportVisit[];
@@ -53,6 +56,16 @@ export function itemStatusText(item: Pick<ReportItem, 'status' | 'byOffice'>): s
   return item.byOffice && item.status === 'done' ? 'erledigt (Nachtrag Büro)' : STATUS_TEXT[item.status];
 }
 
+export interface MonthTotals {
+  month: string;
+  visits: number;
+  planned: number;
+  done: number;
+  notPossible: number;
+  open: number;
+  compliancePercent: number | null;
+}
+
 export const STATUS_TEXT: Record<ItemStatus, string> = { done: 'erledigt', not_possible: 'nicht möglich', open: 'offen' };
 
 const MONTH_RE = /^(\d{4})-(0[1-9]|1[0-2])$/;
@@ -67,6 +80,26 @@ export function monthRange(month: string): { first: string; next: string } | nul
     first: `${month}-01`,
     next: m === 12 ? `${year + 1}-01-01` : `${match[1]}-${String(m + 1).padStart(2, '0')}-01`,
   };
+}
+
+/** "2026" → ganzes Jahr, "2026-11" → Monat; sonst null. */
+export function periodRange(period: string): { first: string; next: string } | null {
+  if (/^\d{4}$/.test(period)) return { first: `${period}-01-01`, next: `${Number(period) + 1}-01-01` };
+  return monthRange(period);
+}
+
+export const isYearPeriod = (period: string) => /^\d{4}$/.test(period);
+
+export const fmtMonthLabel = (month: string) =>
+  new Date(`${month}-15T12:00:00Z`).toLocaleDateString('de-DE', { month: 'long', year: 'numeric' });
+
+/** Auswahl: die letzten 12 Monate, danach ganze Jahre (aktuelles + 2 vorherige). */
+export function periodOptions(now = new Date()) {
+  const year = now.getFullYear();
+  return [
+    ...lastMonths(12, now),
+    ...[year, year - 1, year - 2].map(y => ({ value: String(y), label: `Ganzes Jahr ${y}` })),
+  ];
 }
 
 export function lastMonths(count: number, now = new Date()) {

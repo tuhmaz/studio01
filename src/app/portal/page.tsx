@@ -24,8 +24,9 @@ import { LeistungsnachweisView } from '@/components/reports/LeistungsnachweisVie
 import { useAuth } from '@/db/provider';
 import { useToast } from '@/hooks/use-toast';
 import { compressImage } from '@/lib/image-compress';
-import { lastMonths, type LeistungsnachweisReport } from '@/lib/leistungsnachweis-types';
-import { exportLeistungsnachweisPdf } from '@/lib/leistungsnachweis-pdf';
+import { periodOptions, type LeistungsnachweisReport } from '@/lib/leistungsnachweis-types';
+import { buildLeistungsnachweisPdf, type LeistungsnachweisPdf } from '@/lib/leistungsnachweis-pdf';
+import { PdfPreviewDialog } from '@/components/reports/PdfPreviewDialog';
 
 interface PortalSite {
   id: string;
@@ -108,7 +109,7 @@ async function api<T>(url: string, init?: Parameters<typeof fetch>[1]): Promise<
 export default function PortalPage() {
   const { userProfile, logout, changePassword } = useAuth();
   const { toast } = useToast();
-  const months = useMemo(() => lastMonths(12), []);
+  const months = useMemo(() => periodOptions(), []);
 
   const [overview, setOverview] = useState<Overview | null>(null);
   const [siteId, setSiteId] = useState('');
@@ -119,6 +120,7 @@ export default function PortalPage() {
   const [defects, setDefects] = useState<Defect[] | null>(null);
   const [loading, setLoading] = useState(false);
   const [exporting, setExporting] = useState(false);
+  const [preview, setPreview] = useState<{ pdf: LeistungsnachweisPdf | null; error: string | null } | null>(null);
   const [defectForm, setDefectForm] = useState({ title: '', description: '', photo: '' });
   const [sending, setSending] = useState(false);
   const [pwOpen, setPwOpen] = useState(false);
@@ -173,10 +175,11 @@ export default function PortalPage() {
   const exportPdf = async () => {
     if (!report) return;
     setExporting(true);
+    setPreview({ pdf: null, error: null });
     try {
-      await exportLeistungsnachweisPdf(report, monthLabel);
-    } catch (e) {
-      fail('PDF konnte nicht erstellt werden', e);
+      setPreview({ pdf: await buildLeistungsnachweisPdf(report, monthLabel), error: null });
+    } catch (e: any) {
+      setPreview({ pdf: null, error: `PDF konnte nicht erstellt werden${e?.message ? `: ${e.message}` : ''}` });
     } finally {
       setExporting(false);
     }
@@ -310,7 +313,7 @@ export default function PortalPage() {
                       </Select>
                       {tab === 'leistung' && (
                         <Button className="h-10 rounded-xl font-black gap-2" onClick={exportPdf} disabled={!report?.visits.length || exporting || loading}>
-                          {exporting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />} PDF
+                          {exporting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />} PDF ansehen
                         </Button>
                       )}
                     </div>
@@ -510,6 +513,13 @@ export default function PortalPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+      <PdfPreviewDialog
+        open={preview !== null}
+        onOpenChange={open => { if (!open) setPreview(null); }}
+        pdf={preview?.pdf ?? null}
+        error={preview?.error}
+        title={`Leistungsnachweis · ${site?.name ?? ''} · ${monthLabel}`}
+      />
     </div>
   );
 }

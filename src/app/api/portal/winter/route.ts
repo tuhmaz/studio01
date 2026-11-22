@@ -7,7 +7,7 @@
  */
 import { NextRequest, NextResponse } from 'next/server';
 import { withTenant } from '@/lib/db';
-import { monthRange } from '@/lib/leistungsnachweis-types';
+import { periodRange } from '@/lib/leistungsnachweis-types';
 import { verifyWinterChain } from '@/lib/winter';
 import { ACTIVITIES, MATERIALS } from '@/lib/winter-labels';
 import {
@@ -27,8 +27,8 @@ export async function GET(req: NextRequest) {
   const month = req.nextUrl.searchParams.get('month') ?? '';
 
   try {
-    const range = monthRange(month);
-    if (!range) throw new PortalError('month (YYYY-MM) erforderlich');
+    const range = periodRange(month);
+    if (!range) throw new PortalError('month (YYYY-MM oder YYYY) erforderlich');
     const result = await withTenant(session.companyId, async db => {
       const site = await portalSite(db, session, siteId);
       const showNames = await portalShowsWorkerNames(db, session.companyId);
