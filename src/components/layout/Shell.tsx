@@ -24,6 +24,7 @@ import { Label } from '@/components/ui/label';
 import { useAuth } from '@/db/provider';
 import { useToast } from '@/hooks/use-toast';
 import { useCompanyBranding } from '@/hooks/use-company';
+import { NotificationBell } from '@/components/layout/NotificationBell';
 
 interface ShellProps {
   children: React.ReactNode;
@@ -172,6 +173,7 @@ export function Shell({ children, userRole, userName }: ShellProps) {
             </h2>
           </div>
           <div className="flex items-center gap-3">
+            <NotificationBell />
             <Badge className="bg-primary/5 text-primary border-none font-black text-[10px] px-3">
               SYSTEM LIVE: 2026
             </Badge>

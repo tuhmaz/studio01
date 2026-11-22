@@ -6,6 +6,8 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { AuthProvider, useAuth } from '@/context/AuthContext';
 import { OfflineBanner } from '@/components/OfflineBanner';
 import { SyncProvider } from '@/sync/SyncContext';
+import { I18nProvider } from '@/i18n';
+import { NotificationsProvider } from '@/notifications/NotificationsContext';
 import { COLORS } from '@/utils/constants';
 
 function RootLayoutNav() {
@@ -31,6 +33,7 @@ function RootLayoutNav() {
       <Stack screenOptions={{ headerShown: false }}>
         <Stack.Screen name="login" />
         <Stack.Screen name="(tabs)" />
+        <Stack.Screen name="notifications" />
       </Stack>
       <OfflineBanner />
     </>
@@ -41,11 +44,15 @@ export default function RootLayout() {
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
       <SafeAreaProvider>
-        <AuthProvider>
-          <SyncProvider>
-            <RootLayoutNav />
-          </SyncProvider>
-        </AuthProvider>
+        <I18nProvider>
+          <AuthProvider>
+            <NotificationsProvider>
+              <SyncProvider>
+                <RootLayoutNav />
+              </SyncProvider>
+            </NotificationsProvider>
+          </AuthProvider>
+        </I18nProvider>
       </SafeAreaProvider>
     </GestureHandlerRootView>
   );

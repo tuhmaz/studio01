@@ -9,6 +9,7 @@
  * "Eingeplant", nach Abschluss "Erledigt".
  */
 import { randomUUID } from 'node:crypto';
+import { createNotifications, officeUserIds, scheduleDelivery } from '@/lib/notifications';
 import { NextRequest, NextResponse } from 'next/server';
 import { withTenant } from '@/lib/db';
 import { isDataUrl, mediaIdFromUrl, storeDataUrl } from '@/lib/media';
@@ -119,6 +120,16 @@ export async function POST(req: NextRequest) {
                 ${assignmentId}, ${session.userId}, ${session.name})
         RETURNING *
       `;
+      // Büro (Verwaltung) informieren.
+      const [client] = await db`SELECT name FROM clients WHERE id = ${session.clientId} AND company_id = ${session.companyId}`;
+      const office = await officeUserIds(db, session.companyId);
+      await createNotifications(db, session.companyId, office.map(userId => ({
+        userId,
+        kind: 'defect.new' as const,
+        data: { site: site.name, client: client?.name ?? session.name, text: title },
+        link: '/kunden',
+      })));
+      if (office.length) scheduleDelivery();
       return { ...(row as Record<string, any>), site_name: site.name, assignment_status: 'PENDING', assignment_published: false, planned_date: null };
     });
 

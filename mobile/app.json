@@ -65,6 +65,12 @@
         {
           "supportsRTL": true
         }
+      ],
+      [
+        "expo-notifications",
+        {
+          "color": "#0f2850"
+        }
       ]
     ],
     "experiments": {

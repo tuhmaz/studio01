@@ -43,4 +43,9 @@ describe('Übersetzungen', () => {
     }
     expect(missing).toEqual([]);
   });
+
+  it('I18nProvider ist im Root-Layout eingebunden (sonst bleibt die App immer Deutsch)', () => {
+    const layout = readFileSync(join(process.cwd(), 'mobile', 'app', '_layout.tsx'), 'utf8');
+    expect(layout).toMatch(/<I18nProvider>/);
+  });
 });
