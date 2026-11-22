@@ -299,4 +299,5 @@ export const ro: Dict = {
   "notif.offline": "Notificările au nevoie de internet.",
   "notif.permissionOff": "Notificările push sunt oprite. Porniți-le din setările telefonului pentru a vedea imediat sarcinile noi.",
   "notif.openSettings": "Deschide setările",
+  "login.forgot": "Ai uitat parola?",
 };

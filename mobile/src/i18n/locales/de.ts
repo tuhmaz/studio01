@@ -301,6 +301,7 @@ export const de = {
   "notif.offline": "Benachrichtigungen brauchen Internet.",
   "notif.permissionOff": "Push-Benachrichtigungen sind aus. In den Einstellungen des Handys einschalten, um neue Einsätze sofort zu sehen.",
   "notif.openSettings": "Einstellungen öffnen",
+  "login.forgot": "Passwort vergessen?",
 } as const;
 
 export type Key = keyof typeof de;

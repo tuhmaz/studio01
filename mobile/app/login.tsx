@@ -2,14 +2,14 @@ import React, { useState, useEffect } from 'react';
 import {
   View, Text, TextInput, TouchableOpacity, StyleSheet,
   KeyboardAvoidingView, Platform, ActivityIndicator,
-  Alert, ScrollView, Modal,
+  Alert, ScrollView, Modal, Linking,
 } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '@/context/AuthContext';
 import { COLORS } from '@/utils/constants';
 import * as SecureStore from 'expo-secure-store';
-import { SERVER_KEY, DEFAULT_URL } from '@/api/client';
+import { SERVER_KEY, DEFAULT_URL, getServerUrl } from '@/api/client';
 import { t } from '@/i18n';
 
 export default function LoginScreen() {
@@ -137,6 +137,17 @@ export default function LoginScreen() {
               : <Text style={styles.loginBtnText}>{t('login.submit')}</Text>
             }
           </TouchableOpacity>
+
+          {/* Passwort vergessen: Seite auf dem Server im Browser öffnen */}
+          <TouchableOpacity
+            style={styles.forgotBtn}
+            onPress={async () => {
+              const base = (await getServerUrl()).replace(/\/+$/, '');
+              Linking.openURL(`${base}/passwort-vergessen`).catch(() => Alert.alert(t('common.error'), t('net.unreachable')));
+            }}
+          >
+            <Text style={styles.forgotText}>{t('login.forgot')}</Text>
+          </TouchableOpacity>
         </View>
 
         <Text style={styles.footer}>© Hausmeister Pro</Text>
@@ -211,6 +222,8 @@ const styles = StyleSheet.create({
   },
   loginBtnDisabled: { opacity: 0.7 },
   loginBtnText:     { color: '#fff', fontWeight: '900', fontSize: 16, letterSpacing: 1 },
+  forgotBtn:        { alignSelf: 'center', paddingVertical: 12, paddingHorizontal: 8, marginTop: 6 },
+  forgotText:       { color: COLORS.primary, fontWeight: '700', fontSize: 14 },
   footer:           { textAlign: 'center', color: 'rgba(255,255,255,0.35)', fontSize: 11, marginTop: 28 },
   settingsBtn: {
     position: 'absolute',

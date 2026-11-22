@@ -11,6 +11,8 @@ import { createSession } from '@/lib/auth-server';
 import { writeAuditLog } from '@/lib/audit';
 import { getRequestIp, getUserAgent } from '@/lib/request-context';
 import { companyIdFromName, isSignupEnabled, validateSignup } from '@/lib/signup';
+import { mailEnabled } from '@/lib/mail';
+import { sendVerification } from '@/lib/account-mail';
 
 const WINDOW_MS = 60 * 60 * 1000;
 const MAX_SIGNUPS_PER_IP = 5;
@@ -97,5 +99,9 @@ export async function POST(req: NextRequest) {
   });
 
   await createSession({ userId: user.id, companyId, role: 'ADMIN', name, email });
+  // Bestätigung der Adresse anfordern (die Anmeldung funktioniert schon vorher).
+  if (mailEnabled()) {
+    await sendVerification(user.id).catch(error => console.error('[auth/register] verify mail', error));
+  }
   return NextResponse.json({ companyId, userId: user.id }, { status: 201 });
 }

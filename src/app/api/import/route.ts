@@ -20,7 +20,7 @@ export async function POST(req: NextRequest) {
   const session = await getRequestSession(req);
   if (!session) return NextResponse.json({ error: 'Nicht authentifiziert' }, { status: 401 });
 
-  let body: { type?: unknown; rows?: unknown; dryRun?: unknown };
+  let body: { type?: unknown; rows?: unknown; dryRun?: unknown; sendInvites?: unknown };
   try {
     body = await req.json();
   } catch {
@@ -43,7 +43,7 @@ export async function POST(req: NextRequest) {
   try {
     const result = type === 'sites'
       ? await importSites(session, rows, { dryRun })
-      : await importUsers(session, rows, { dryRun });
+      : await importUsers(session, rows, { dryRun, sendInvites: body.sendInvites === true });
     if (!dryRun && result.created > 0) {
       await writeAuditLog({
         session,
