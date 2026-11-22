@@ -16,12 +16,17 @@ export default function EntryPage() {
   const [email,    setEmail]    = useState('');
   const [password, setPassword] = useState('');
   const [signupEnabled, setSignupEnabled] = useState(false);
+  const [resetEnabled, setResetEnabled] = useState(false);
 
   useEffect(() => {
     fetch('/api/auth/register')
       .then(r => r.json())
       .then(info => setSignupEnabled(info?.enabled === true))
       .catch(() => setSignupEnabled(false));
+    fetch('/api/auth/password/forgot')
+      .then(r => r.json())
+      .then(info => setResetEnabled(info?.enabled === true))
+      .catch(() => setResetEnabled(false));
   }, []);
 
   const handleLogin = async (e: React.FormEvent) => {
@@ -68,7 +73,12 @@ export default function EntryPage() {
             </div>
           </div>
           <div className="space-y-2">
-            <Label htmlFor="password">Passwort</Label>
+            <div className="flex items-center justify-between">
+              <Label htmlFor="password">Passwort</Label>
+              {resetEnabled && (
+                <Link href="/passwort-vergessen" className="text-xs font-bold text-primary hover:underline">Passwort vergessen?</Link>
+              )}
+            </div>
             <div className="relative">
               <Lock className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
               <Input

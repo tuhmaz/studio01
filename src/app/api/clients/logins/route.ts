@@ -6,6 +6,9 @@
  *                                       Sitzung wird beim nächsten Aufruf abgewiesen)
  */
 import bcrypt from 'bcryptjs';
+import { mailEnabled } from '@/lib/mail';
+import { sendInvite } from '@/lib/account-mail';
+import { generatePassword } from '@/lib/import/run';
 import { NextRequest, NextResponse } from 'next/server';
 import sql, { withTenant } from '@/lib/db';
 import { hasPermission } from '@/lib/permissions';
@@ -28,7 +31,9 @@ export async function POST(req: NextRequest) {
     const clientId = typeof body.clientId === 'string' ? body.clientId : '';
     const name = cleanText(body.name, 200);
     const email = (cleanText(body.email, 200) ?? '').toLowerCase();
-    const password = String(body.password ?? '');
+    const invite = body.sendInvite === true;
+    if (invite && !mailEnabled()) throw new PortalError('E-Mail-Versand ist auf diesem Server nicht eingerichtet.', 503);
+    const password = invite ? generatePassword(24) : String(body.password ?? '');
     if (!clientId || !name || !email) throw new PortalError('Name und E-Mail sind erforderlich.');
     if (!isValidEmail(email)) throw new PortalError('Bitte eine gültige E-Mail-Adresse eingeben.');
     if (password.length < MIN_PASSWORD_LENGTH) throw new PortalError(`Passwort muss mindestens ${MIN_PASSWORD_LENGTH} Zeichen haben.`);
@@ -54,7 +59,16 @@ export async function POST(req: NextRequest) {
       newValue: { clientId, email },
       ipAddress: getRequestIp(req), userAgent: getUserAgent(req),
     });
-    return NextResponse.json({ id: user.id }, { status: 201 });
+    let inviteError: string | null = null;
+    if (invite) {
+      try {
+        await sendInvite(user.id, { userId: session.userId, name: session.name });
+      } catch (error) {
+        console.error('[clients/logins] invite', error);
+        inviteError = 'Zugang angelegt, aber die Einladung konnte nicht gesendet werden.';
+      }
+    }
+    return NextResponse.json({ id: user.id, invited: invite && !inviteError, inviteError }, { status: 201 });
   } catch (error) {
     if ((error as { code?: string })?.code === '23505') {
       return NextResponse.json({ error: 'Diese E-Mail-Adresse ist bereits registriert.' }, { status: 409 });

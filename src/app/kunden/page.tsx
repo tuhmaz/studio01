@@ -107,7 +107,8 @@ export default function KundenPage() {
   const [saving, setSaving] = useState(false);
   const [loginFor, setLoginFor] = useState<Client | null>(null);
   const [loginForm, setLoginForm] = useState({ name: '', email: '', password: '' });
-  const [createdLogin, setCreatedLogin] = useState<{ email: string; password: string } | null>(null);
+  const [createdLogin, setCreatedLogin] = useState<{ email: string; password: string; invited?: boolean } | null>(null);
+  const [loginInvite, setLoginInvite] = useState(true);
   const [drafts, setDrafts] = useState<Record<string, { status: DefectStatus; response: string }>>({});
 
   const fail = useCallback((title: string, e: unknown) => {
@@ -183,8 +184,15 @@ export default function KundenPage() {
     if (!loginFor) return;
     setSaving(true);
     try {
-      await api('/api/clients/logins', { method: 'POST', body: JSON.stringify({ clientId: loginFor.id, ...loginForm }) });
-      setCreatedLogin({ email: loginForm.email.trim().toLowerCase(), password: loginForm.password });
+      const invite = !!userProfile?.mailEnabled && loginInvite;
+      const result = await api<{ invited?: boolean; inviteError?: string | null }>('/api/clients/logins', {
+        method: 'POST',
+        body: JSON.stringify(invite
+          ? { clientId: loginFor.id, name: loginForm.name, email: loginForm.email, sendInvite: true }
+          : { clientId: loginFor.id, ...loginForm }),
+      });
+      if (result?.inviteError) toast({ variant: 'destructive', title: 'Einladung nicht gesendet', description: result.inviteError });
+      setCreatedLogin({ email: loginForm.email.trim().toLowerCase(), password: invite ? '' : loginForm.password, invited: invite && !!result?.invited });
       await load();
     } catch (e) {
       fail('Zugang konnte nicht angelegt werden', e);
@@ -502,12 +510,24 @@ export default function KundenPage() {
           </DialogHeader>
           {createdLogin ? (
             <div className="space-y-3">
-              <p className="text-sm font-medium text-emerald-700">Zugang angelegt. Diese Daten jetzt weitergeben – das Passwort wird nicht noch einmal angezeigt.</p>
-              <pre className="rounded-xl bg-muted p-4 text-sm whitespace-pre-wrap">{credentialsText}</pre>
+              {createdLogin.password ? (
+                <>
+                  <p className="text-sm font-medium text-emerald-700">Zugang angelegt. Diese Daten jetzt weitergeben – das Passwort wird nicht noch einmal angezeigt.</p>
+                  <pre className="rounded-xl bg-muted p-4 text-sm whitespace-pre-wrap">{credentialsText}</pre>
+                </>
+              ) : (
+                <p className="text-sm font-medium text-emerald-700">
+                  {createdLogin.invited
+                    ? `Zugang angelegt. Einladung an ${createdLogin.email} gesendet – die Person legt ihr Passwort selbst fest (Link 7 Tage gültig).`
+                    : 'Zugang angelegt. Die Einladung konnte nicht gesendet werden.'}
+                </p>
+              )}
               <DialogFooter>
-                <Button variant="outline" onClick={() => { void window.navigator.clipboard?.writeText(credentialsText); toast({ title: 'Kopiert' }); }}>
-                  <Copy className="w-4 h-4 mr-2" /> Kopieren
-                </Button>
+                {createdLogin.password && (
+                  <Button variant="outline" onClick={() => { void window.navigator.clipboard?.writeText(credentialsText); toast({ title: 'Kopiert' }); }}>
+                    <Copy className="w-4 h-4 mr-2" /> Kopieren
+                  </Button>
+                )}
                 <Button onClick={() => setLoginFor(null)}>Fertig</Button>
               </DialogFooter>
             </div>
@@ -521,6 +541,16 @@ export default function KundenPage() {
                 <Label>E-Mail (Login)</Label>
                 <Input type="email" value={loginForm.email} onChange={e => setLoginForm({ ...loginForm, email: e.target.value })} className="h-11" />
               </div>
+              {userProfile?.mailEnabled && (
+                <label className="flex items-start gap-3 rounded-xl border bg-muted/30 p-3 cursor-pointer">
+                  <Checkbox checked={loginInvite} onCheckedChange={v => setLoginInvite(v === true)} className="mt-0.5" />
+                  <span className="text-sm">
+                    <span className="font-bold block">Per E-Mail einladen</span>
+                    <span className="text-muted-foreground">Die Person legt ihr Passwort über einen Link selbst fest.</span>
+                  </span>
+                </label>
+              )}
+              {!(userProfile?.mailEnabled && loginInvite) && (
               <div className="space-y-2">
                 <Label>Passwort</Label>
                 <div className="flex gap-2">
@@ -531,6 +561,7 @@ export default function KundenPage() {
                 </div>
                 <p className="text-xs text-muted-foreground">{loginForm.password.length}/12 Zeichen mindestens. Die Person kann es nach der Anmeldung ändern.</p>
               </div>
+              )}
               <DialogFooter>
                 <Button variant="outline" onClick={() => setLoginFor(null)}>Abbrechen</Button>
                 <Button onClick={saveLogin} disabled={saving} className="font-bold">

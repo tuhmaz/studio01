@@ -96,6 +96,25 @@ Workers are taken from the site's previous Winterdienst task; without
 them the task stays a draft for the office. Recording the work in the app
 marks the task as done.
 
+## E-Mail
+
+Own mailbox via SMTP (IONOS, Strato, Google Workspace, …). Set `SMTP_HOST`,
+`SMTP_PORT`, `SMTP_SECURE` (true for 465), `SMTP_USER`, `SMTP_PASS`,
+`MAIL_FROM` and `NEXT_PUBLIC_APP_URL` (the public https address – every link
+in an email points there, never to the request's Host header). Then
+Einstellungen → E-Mail-Versand → „Testmail an mich senden“.
+
+- **Einladung** (Team, Excel-Import, Portal-Zugänge): the person sets their own
+  password via a link (7 days, single use). Team → ✉ also sends a new link to
+  someone who forgot their password.
+- **Passwort vergessen** (login page and worker app): link valid 60 minutes,
+  single use; afterwards all devices are signed out. The answer never reveals
+  whether an address exists; limited per address and IP.
+- **Bestätigung** of the address after self-service sign-up; a banner offers a
+  new link until it is confirmed. Existing accounts count as confirmed.
+- Only the SHA-256 of a link is stored (`auth_tokens`, migration 0012).
+- Without SMTP, sending is off; in development mails are printed to the log.
+
 ## Benachrichtigungen
 
 Bell in the web header and in the worker app (Heute → 🔔), plus push

@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useEffect, useRef, useState } from 'react';
+import { MailSettingsCard } from '@/components/settings/MailSettingsCard';
 import { Shell } from '@/components/layout/Shell';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -498,6 +499,8 @@ export default function SettingsPage() {
             </CardContent>
           </Card>
         )}
+
+        {canManageSettings && !loading && <MailSettingsCard />}
 
         {/* Bottom save */}
         {!loading && (

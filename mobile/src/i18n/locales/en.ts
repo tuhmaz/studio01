@@ -299,4 +299,5 @@ export const en: Dict = {
   "notif.offline": "Notifications need internet.",
   "notif.permissionOff": "Push notifications are off. Turn them on in the phone settings to see new assignments right away.",
   "notif.openSettings": "Open settings",
+  "login.forgot": "Forgot password?",
 };

@@ -299,4 +299,5 @@ export const pl: Dict = {
   "notif.offline": "Powiadomienia wymagają internetu.",
   "notif.permissionOff": "Powiadomienia push są wyłączone. Włącz je w ustawieniach telefonu, aby od razu widzieć nowe zlecenia.",
   "notif.openSettings": "Otwórz ustawienia",
+  "login.forgot": "Nie pamiętasz hasła?",
 };

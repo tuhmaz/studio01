@@ -25,6 +25,7 @@ import { useAuth } from '@/db/provider';
 import { useToast } from '@/hooks/use-toast';
 import { useCompanyBranding } from '@/hooks/use-company';
 import { NotificationBell } from '@/components/layout/NotificationBell';
+import { VerifyEmailBanner } from '@/components/layout/VerifyEmailBanner';
 
 interface ShellProps {
   children: React.ReactNode;
@@ -182,6 +183,7 @@ export function Shell({ children, userRole, userName }: ShellProps) {
             </Badge>
           </div>
         </header>
+        <div className="print:hidden"><VerifyEmailBanner /></div>
         <main className="flex-1 p-6 md:p-8 max-w-7xl mx-auto w-full print:p-0 print:max-w-none">
           {children}
         </main>

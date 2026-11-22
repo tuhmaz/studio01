@@ -4,6 +4,9 @@ import sql, { withTenant } from '@/lib/db';
 import { hasPermission, isAdminLike } from '@/lib/permissions';
 import { writeAuditLog } from '@/lib/audit';
 import { getRequestIp, getRequestSession, getUserAgent } from '@/lib/request-context';
+import { mailEnabled } from '@/lib/mail';
+import { sendInvite } from '@/lib/account-mail';
+import { generatePassword } from '@/lib/import/run';
 
 const ALLOWED_ROLES = ['ADMIN', 'MANAGER', 'ACCOUNTANT', 'LEADER', 'WORKER'] as const;
 const CONTRACT_TYPES = ['MINIJOB', 'MIDIJOB', 'VOLLZEIT', 'TEILZEIT'] as const;
@@ -61,7 +64,10 @@ export async function POST(req: NextRequest) {
 
   const name = String(body.name ?? '').trim();
   const email = String(body.email ?? '').toLowerCase().trim();
-  const password = String(body.password ?? '');
+  // Einladung per E-Mail: der Mitarbeiter legt sein Passwort selbst fest.
+  const invite = body.sendInvite === true;
+  if (invite && !mailEnabled()) return bad('E-Mail-Versand ist auf diesem Server nicht eingerichtet.', 503);
+  const password = invite ? generatePassword(24) : String(body.password ?? '');
   const role = String(body.role ?? 'WORKER').toUpperCase();
   const companyId = session.companyId;
 
@@ -148,7 +154,16 @@ export async function POST(req: NextRequest) {
       userAgent: getUserAgent(req),
     });
 
-    return NextResponse.json({ userId: user.id }, { status: 201 });
+    let inviteError: string | null = null;
+    if (invite) {
+      try {
+        await sendInvite(user.id, { userId: session.userId, name: session.name });
+      } catch (error) {
+        console.error('[provision-user] invite', error);
+        inviteError = 'Konto angelegt, aber die Einladung konnte nicht gesendet werden. Bitte in der Liste erneut senden.';
+      }
+    }
+    return NextResponse.json({ userId: user.id, invited: invite && !inviteError, inviteError }, { status: 201 });
   } catch (err: any) {
     console.error('[provision-user]', err?.code, err?.message ?? err);
     const { status, error } = describeDbError(err);

@@ -12,6 +12,10 @@ export interface UserProfile {
   role: UserRole;
   name: string;
   email: string;
+  /** false = Adresse noch nicht bestätigt (Hinweis oben in der App). */
+  emailVerified?: boolean;
+  /** Kann der Server E-Mails senden (Einladungen, Passwort vergessen)? */
+  mailEnabled?: boolean;
 }
 
 interface AuthState {
@@ -42,6 +46,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
             role:      data.role,
             name:      data.name,
             email:     data.email,
+            emailVerified: data.emailVerified,
+            mailEnabled:   data.mailEnabled,
           };
           setUserProfile(profile);
           syncLocalStorage(profile);
@@ -75,6 +81,12 @@ export function AppProvider({ children }: { children: ReactNode }) {
       };
       setUserProfile(profile);
       syncLocalStorage(profile);
+      // E-Mail-Status nachladen (für den Bestätigungshinweis und Einladungen).
+      fetch('/api/auth/me').then(r => (r.ok ? r.json() : null)).then(me => {
+        if (me?.userId === profile.id) {
+          setUserProfile(p => (p ? { ...p, emailVerified: me.emailVerified, mailEnabled: me.mailEnabled } : p));
+        }
+      }).catch(() => undefined);
     } catch (e: any) {
       setUserError(e.message);
       throw e;

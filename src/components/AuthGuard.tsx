@@ -6,7 +6,11 @@ import { useAuth } from '@/db/provider';
 import { Loader2 } from 'lucide-react';
 import { UserRole } from '@/lib/types';
 
-const PUBLIC_PATHS = ['/', '/register'];
+// Seiten ohne Anmeldung. Wer angemeldet ist, wird von hier zur App weitergeleitet.
+const PUBLIC_PATHS = ['/', '/register', '/passwort-vergessen'];
+// Ziele der Links aus Konto-E-Mails: immer anzeigen, auch wenn jemand angemeldet ist
+// (z. B. Bestätigungslink aus der laufenden Sitzung, Einladung auf einem Firmen-PC).
+const LINK_PATHS = ['/passwort-zuruecksetzen', '/einladung', '/email-bestaetigen'];
 const AUTH_TIMEOUT_MS = 8000;
 
 const ROUTE_ROLE_ACCESS: Record<string, UserRole[]> = {
@@ -23,6 +27,7 @@ const ROUTE_ROLE_ACCESS: Record<string, UserRole[]> = {
   '/payroll':    ['SUPER_ADMIN', 'ADMIN', 'MANAGER', 'ACCOUNTANT'],
   '/settings':   ['SUPER_ADMIN', 'ADMIN'],
   '/kunden':     ['SUPER_ADMIN', 'ADMIN', 'MANAGER'],
+  '/import':     ['SUPER_ADMIN', 'ADMIN', 'MANAGER'],
   '/portal':     ['CLIENT'],
 };
 
@@ -40,6 +45,7 @@ export function AuthGuard({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
 
   const isPublicPath = PUBLIC_PATHS.includes(pathname);
+  const isLinkPath = LINK_PATHS.includes(pathname);
   const userRole     = userProfile?.role as UserRole | null ?? null;
 
   const allowedRoles = Object.entries(ROUTE_ROLE_ACCESS)
@@ -54,12 +60,13 @@ export function AuthGuard({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     if (!isUserLoading) { setTimedOut(false); return; }
-    if (isPublicPath) return;
+    if (isPublicPath || isLinkPath) return;
     const id = setTimeout(() => setTimedOut(true), AUTH_TIMEOUT_MS);
     return () => clearTimeout(id);
-  }, [isUserLoading, isPublicPath]);
+  }, [isUserLoading, isPublicPath, isLinkPath]);
 
   useEffect(() => {
+    if (isLinkPath) return;
     if (timedOut && !isPublicPath) { router.replace('/'); return; }
     if (!isUserLoading && !userProfile && !isPublicPath) { router.replace('/'); return; }
     if (!isUserLoading && userProfile && !isPublicPath && !isRoleAllowed) {
@@ -68,8 +75,9 @@ export function AuthGuard({ children }: { children: React.ReactNode }) {
     if (!isUserLoading && userProfile && isPublicPath) {
       router.replace(getDefaultRouteForRole(userRole));
     }
-  }, [userProfile, userRole, isRoleAllowed, isUserLoading, isPublicPath, router, timedOut]);
+  }, [userProfile, userRole, isRoleAllowed, isUserLoading, isPublicPath, isLinkPath, router, timedOut]);
 
+  if (isLinkPath) return <>{children}</>;
   if (isPublicPath) {
     if (!isUserLoading && userProfile) return <LoadingScreen message="Weiterleitung..." />;
     return <>{children}</>;

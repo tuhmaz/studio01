@@ -18,6 +18,7 @@ import {
 } from 'lucide-react';
 import { Shell } from '@/components/layout/Shell';
 import { Badge } from '@/components/ui/badge';
+import { Checkbox } from '@/components/ui/checkbox';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -35,6 +36,8 @@ interface ImportResult {
   created: number;
   credentials?: Array<{ name: string; email: string; role: string; password: string }>;
   createdSiteIds?: string[];
+  invited?: number;
+  inviteFailed?: string[];
 }
 
 interface Sheet { name: string; headers: string[]; rows: unknown[][] }
@@ -88,6 +91,8 @@ function ImportPageInner() {
   const [done, setDone] = useState<ImportResult | null>(null);
   const [busy, setBusy] = useState<'check' | 'import' | null>(null);
   const [geo, setGeo] = useState<{ done: number; total: number } | null>(null);
+  const [sendInvites, setSendInvites] = useState(true);
+  const invites = type === 'users' && !!userProfile?.mailEnabled && sendInvites;
 
   const canSites = hasPermission({ role } as Parameters<typeof hasPermission>[0], 'job_sites.manage');
   const canUsers = hasPermission({ role } as Parameters<typeof hasPermission>[0], 'users.create');
@@ -149,7 +154,7 @@ function ImportPageInner() {
     const res = await fetch('/api/import', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ type, rows, dryRun }),
+      body: JSON.stringify({ type, rows, dryRun, ...(!dryRun && invites ? { sendInvites: true } : {}) }),
     });
     const json = await res.json().catch(() => ({}));
     if (!res.ok) {
@@ -353,6 +358,15 @@ function ImportPageInner() {
                   {check.counts.error > 0 && (
                     <p className="text-sm text-muted-foreground">Fehlerhafte Zeilen in der Datei korrigieren und neu laden – oder ohne sie importieren.</p>
                   )}
+                  {type === 'users' && userProfile?.mailEnabled && (
+                    <label className="flex items-start gap-3 rounded-xl border bg-muted/30 p-4 cursor-pointer max-w-2xl">
+                      <Checkbox checked={sendInvites} onCheckedChange={v => setSendInvites(v === true)} className="mt-0.5" />
+                      <span className="text-sm">
+                        <span className="font-bold block">Einladungen per E-Mail senden</span>
+                        <span className="text-muted-foreground">Jeder Mitarbeiter legt sein Passwort über einen Link selbst fest (7 Tage gültig). Ohne Haken: Startpasswörter als Liste zum Herunterladen.</span>
+                      </span>
+                    </label>
+                  )}
                   <Button className="h-11 rounded-xl font-black gap-2" onClick={runImport} disabled={busy !== null || check.counts.new === 0}>
                     {busy === 'import' ? <Loader2 className="w-4 h-4 animate-spin" /> : <Upload className="w-4 h-4" />}
                     {check.counts.new.toLocaleString('de-DE')} {type === 'sites' ? 'Objekte' : 'Mitarbeiter'} importieren
@@ -421,6 +435,15 @@ function DoneView({ type, result, geo, onCredentials, onAgain, onOpen }: {
               ? `Koordinaten und Fahrzeiten werden ermittelt … ${geo.done} / ${geo.total} (Seite bitte offen lassen)`
               : 'Koordinaten und Fahrzeiten ermittelt.'}
           </p>
+        )}
+
+        {type === 'users' && result.invited !== undefined && (
+          <div className={`rounded-xl border p-4 text-sm ${result.inviteFailed?.length ? 'border-amber-300 bg-amber-50 text-amber-900' : 'border-emerald-200 bg-emerald-50 text-emerald-900'}`}>
+            <p className="font-bold">{result.invited} Einladungen per E-Mail gesendet.</p>
+            {!!result.inviteFailed?.length && (
+              <p className="mt-1">Nicht gesendet an: {result.inviteFailed.join(', ')} – bitte auf der Team-Seite über „Zugangslink senden“ erneut versuchen.</p>
+            )}
+          </div>
         )}
 
         {type === 'users' && !!result.credentials?.length && (

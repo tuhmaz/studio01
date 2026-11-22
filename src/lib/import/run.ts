@@ -27,6 +27,8 @@ import {
   type ImportRow,
 } from '@/lib/import/fields';
 import { serviceLabel } from '@/lib/services';
+import { mailEnabled } from '@/lib/mail';
+import { sendInvite } from '@/lib/account-mail';
 
 export interface RowResult {
   /** Zeilennummer in der Datei (Kopfzeile = 1). */
@@ -42,6 +44,9 @@ export interface ImportResult {
   created: number;
   /** Nur beim echten Mitarbeiter-Import. */
   credentials?: Array<{ name: string; email: string; role: string; password: string }>;
+  /** Mitarbeiter-Import mit Einladungen: Anzahl versandt / Adressen, bei denen es nicht klappte. */
+  invited?: number;
+  inviteFailed?: string[];
   createdSiteIds?: string[];
 }
 
@@ -245,7 +250,12 @@ async function planUsers(session: SessionPayload, rows: ImportRow[]): Promise<Us
   });
 }
 
-export async function importUsers(session: SessionPayload, rows: ImportRow[], { dryRun }: { dryRun: boolean }): Promise<ImportResult> {
+export async function importUsers(
+  session: SessionPayload,
+  rows: ImportRow[],
+  { dryRun, sendInvites = false }: { dryRun: boolean; sendInvites?: boolean },
+): Promise<ImportResult> {
+  if (sendInvites && !mailEnabled()) throw new ImportError('E-Mail-Versand ist auf diesem Server nicht eingerichtet.');
   checkSize(rows, MAX_IMPORT_ROWS.users);
   const plans = await planUsers(session, rows);
   const todo = plans.filter(p => p.result.status === 'new' && p.data);
@@ -253,20 +263,38 @@ export async function importUsers(session: SessionPayload, rows: ImportRow[], { 
 
   // Passwörter vor der Transaktion hashen (bcrypt ist langsam).
   const prepared = await Promise.all(todo.map(async p => {
-    const password = generatePassword();
+    // Mit Einladung legt jeder sein Passwort selbst fest; das zufällige bleibt unbekannt.
+    const password = generatePassword(sendInvites ? 24 : 14);
     return { ...p.data!, password, hash: await bcrypt.hash(password, 11) };
   }));
 
-  await withTenant(session.companyId, async db => {
+  const ids = await withTenant(session.companyId, async db => {
+    const created: string[] = [];
     for (const u of prepared) {
-      await db`
+      const [row] = await db`
         INSERT INTO users (company_id, name, email, password_hash, role, contract_type, hourly_rate,
                            monthly_target_hours, tax_class, sv_nr, steuer_id)
         VALUES (${session.companyId}, ${u.name}, ${u.email}, ${u.hash}, ${u.role}, ${u.contractType}, ${u.hourlyRate},
                 ${u.monthlyTargetHours}, ${u.taxClass}, ${u.svNr}, ${u.steuerId})
+        RETURNING id::text AS id
       `;
+      created.push(row.id as string);
     }
+    return created;
   });
+
+  if (sendInvites) {
+    const failed: string[] = [];
+    for (const [i, id] of ids.entries()) {
+      try {
+        await sendInvite(id, { userId: session.userId, name: session.name });
+      } catch (error) {
+        console.error('[import] invite', error);
+        failed.push(prepared[i].email);
+      }
+    }
+    return { ...summarize(plans.map(p => p.result), prepared.length), invited: ids.length - failed.length, inviteFailed: failed };
+  }
 
   return {
     ...summarize(plans.map(p => p.result), prepared.length),

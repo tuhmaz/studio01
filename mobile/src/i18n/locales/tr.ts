@@ -299,4 +299,5 @@ export const tr: Dict = {
   "notif.offline": "Bildirimler için internet gerekir.",
   "notif.permissionOff": "Anlık bildirimler kapalı. Yeni görevleri hemen görmek için telefon ayarlarından açın.",
   "notif.openSettings": "Ayarları aç",
+  "login.forgot": "Şifremi unuttum?",
 };

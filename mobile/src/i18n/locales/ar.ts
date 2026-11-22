@@ -299,4 +299,5 @@ export const ar: Dict = {
   "notif.offline": "الإشعارات تحتاج إلى إنترنت.",
   "notif.permissionOff": "إشعارات الدفع متوقفة. فعّلها من إعدادات الهاتف لترى المهام الجديدة فوراً.",
   "notif.openSettings": "فتح الإعدادات",
+  "login.forgot": "نسيت كلمة المرور؟",
 };

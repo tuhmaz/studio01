@@ -7,6 +7,7 @@ import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { Checkbox } from '@/components/ui/checkbox';
 import { Badge } from '@/components/ui/badge';
 import {
   UserPlus,
@@ -19,7 +20,8 @@ import {
   Users,
   Loader2,
   Lock,
-  FileSpreadsheet
+  FileSpreadsheet,
+  Send
 } from 'lucide-react';
 import { User as UserType, ContractType, UserRole } from '@/lib/types';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -74,6 +76,27 @@ export default function TeamPage() {
   const [isSaving, setIsSaving] = useState(false);
   const { toast } = useToast();
   const { userProfile, isUserLoading } = useAuth();
+  const mailEnabled = !!userProfile?.mailEnabled;
+  // Neue Mitarbeiter standardmäßig per E-Mail einladen, wenn der Server senden kann.
+  const [inviteByMail, setInviteByMail] = useState(true);
+  const [invitingId, setInvitingId] = useState<string | null>(null);
+  const useInvite = mailEnabled && inviteByMail;
+
+  const sendAccessLink = async (member: { id: string; name: string; email: string }) => {
+    setInvitingId(member.id);
+    try {
+      const res = await fetch('/api/users/invite', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ userId: member.id }),
+      });
+      const json = await res.json().catch(() => null);
+      if (!res.ok) throw new Error(json?.error ?? 'Senden fehlgeschlagen');
+      toast({ title: 'Zugangslink gesendet', description: `${member.name} legt über den Link an ${member.email} ein Passwort fest (7 Tage gültig).` });
+    } catch (e: any) {
+      toast({ variant: 'destructive', title: 'Nicht gesendet', description: e?.message });
+    } finally {
+      setInvitingId(null);
+    }
+  };
 
   const companyId = userProfile?.companyId ?? '';
   const hasContext = !!userProfile && !!companyId;
@@ -154,7 +177,7 @@ export default function TeamPage() {
       return;
     }
 
-    if (!editingUser) {
+    if (!editingUser && !useInvite) {
       if (!formData.password || formData.password.length < MIN_PASSWORD_LENGTH) {
         toast({
           variant: "destructive",
@@ -202,7 +225,7 @@ export default function TeamPage() {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             email: normalizedEmail,
-            password: formData.password,
+            ...(useInvite ? { sendInvite: true } : { password: formData.password }),
             name: trimmedName,
             role: requestedRole,
             hourlyRate: formData.hourlyRate ?? 15,
@@ -217,18 +240,24 @@ export default function TeamPage() {
             kvZusatzRate: formData.kvZusatzRate ?? 1.7,
           }),
         });
+        const payload = await response.json().catch(() => null);
         if (!response.ok) {
-          const payload = await response.json().catch(() => null);
           throw new Error(
             payload?.error
               ?? `Benutzerkonto konnte nicht erstellt werden (HTTP ${response.status}).`,
           );
         }
 
-        toast({
-          title: "Hinzugefügt",
-          description: "Mitarbeiterkonto inklusive E-Mail-Login wurde erfolgreich erstellt.",
-        });
+        if (payload?.inviteError) {
+          toast({ variant: "destructive", title: "Konto angelegt – Einladung nicht gesendet", description: payload.inviteError });
+        } else {
+          toast({
+            title: "Hinzugefügt",
+            description: payload?.invited
+              ? `Einladung an ${normalizedEmail} gesendet. Der Mitarbeiter legt sein Passwort selbst fest.`
+              : "Mitarbeiterkonto inklusive E-Mail-Login wurde erfolgreich erstellt.",
+          });
+        }
         refreshTeam();
       } else {
         // Update existing user in users table
@@ -393,6 +422,16 @@ export default function TeamPage() {
                   </Select>
                 </div>
 
+                {!editingUser && mailEnabled && (
+                  <label className="md:col-span-2 flex items-start gap-3 rounded-xl border bg-muted/30 p-4 cursor-pointer">
+                    <Checkbox checked={inviteByMail} onCheckedChange={v => setInviteByMail(v === true)} className="mt-0.5" />
+                    <span className="text-sm">
+                      <span className="font-bold block">Per E-Mail einladen</span>
+                      <span className="text-muted-foreground">Der Mitarbeiter bekommt einen Link und legt sein Passwort selbst fest. Kein Passwort weitergeben nötig.</span>
+                    </span>
+                  </label>
+                )}
+                {!(useInvite && !editingUser) && (<>
                 <div className="space-y-2">
                   <Label>{editingUser ? (canManageUsers ? 'Neues Passwort' : 'Login-Status') : 'Temporäres Passwort'}</Label>
                   <div className="relative">
@@ -428,6 +467,7 @@ export default function TeamPage() {
                     />
                   )}
                 </div>
+                </>)}
 
                 <div className="md:col-span-2 border-t pt-4 mt-2">
                   <h3 className="font-black text-primary uppercase text-sm tracking-widest flex items-center gap-2"><Euro className="w-4 h-4"/> Vertrag & Lohn</h3>
@@ -564,6 +604,14 @@ export default function TeamPage() {
                     </div>
                   </div>
                   <div className="flex flex-col gap-1">
+                    {mailEnabled && canManageUsers && (
+                      <Button variant="ghost" size="icon" className="h-8 w-8 rounded-full hover:bg-primary/5 text-primary"
+                        title="Zugangslink per E-Mail senden (Passwort selbst festlegen)"
+                        disabled={invitingId === member.id}
+                        onClick={() => sendAccessLink(member)}>
+                        {invitingId === member.id ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
+                      </Button>
+                    )}
                     <Button variant="ghost" size="icon" className="h-8 w-8 rounded-full hover:bg-primary/5 text-primary" onClick={() => handleEdit(member)}><Edit className="w-4 h-4"/></Button>
                     {canManageUsers && (
                       <Button variant="ghost" size="icon" className="h-8 w-8 rounded-full hover:bg-destructive/5 text-destructive" onClick={() => handleDelete(member.id)}><Trash2 className="w-4 h-4"/></Button>
