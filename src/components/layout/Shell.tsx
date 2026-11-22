@@ -32,6 +32,9 @@ interface ShellProps {
   userName: string;
 }
 
+/** Seiten ohne eigenen Menüeintrag. */
+const EXTRA_TITLES: Record<string, string> = { '/import': 'Import aus Excel' };
+
 export function Shell({ children, userRole, userName }: ShellProps) {
   const { branding, productName, companyName } = useCompanyBranding();
   const pathname = usePathname();
@@ -169,7 +172,7 @@ export function Shell({ children, userRole, userName }: ShellProps) {
             <SidebarTrigger />
             <div className="h-6 w-[1px] bg-border hidden md:block" />
             <h2 className="text-lg font-bold text-primary capitalize hidden md:block">
-              {navItems.find(item => pathname.startsWith(item.href))?.label ?? 'Übersicht'}
+              {navItems.find(item => pathname.startsWith(item.href))?.label ?? EXTRA_TITLES[pathname] ?? 'Übersicht'}
             </h2>
           </div>
           <div className="flex items-center gap-3">

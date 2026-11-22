@@ -1,4 +1,5 @@
 "use client";
+import Link from 'next/link';
 
 import React, { useState } from 'react';
 import { Shell } from '@/components/layout/Shell';
@@ -17,7 +18,8 @@ import {
   Shield,
   Users,
   Loader2,
-  Lock
+  Lock,
+  FileSpreadsheet
 } from 'lucide-react';
 import { User as UserType, ContractType, UserRole } from '@/lib/types';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -351,6 +353,12 @@ export default function TeamPage() {
             <h1 className="text-4xl font-black tracking-tight text-primary uppercase">Teamverwaltung</h1>
             <p className="text-muted-foreground font-medium">Löhne, Rollen & Steuerdaten für Sachsen-Anhalt</p>
           </div>
+          <div className="flex gap-3">
+          {canManageUsers && (
+            <Button variant="outline" className="font-bold h-12 px-5" asChild>
+              <Link href="/import?type=users"><FileSpreadsheet className="mr-2 h-5 w-5" />Excel-Import</Link>
+            </Button>
+          )}
           <Dialog open={isDialogOpen} onOpenChange={(open) => { setIsDialogOpen(open); if (!open) resetForm(); }}>
             <DialogTrigger asChild>
               <Button className="font-bold h-12 px-6 shadow-lg"><UserPlus className="mr-2 h-5 w-5" />Neuer Mitarbeiter</Button>
@@ -520,6 +528,7 @@ export default function TeamPage() {
               </DialogFooter>
             </DialogContent>
           </Dialog>
+          </div>
         </div>
 
         <div className="relative">
